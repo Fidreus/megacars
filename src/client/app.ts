@@ -376,6 +376,21 @@ export class App {
       if (e.pointerType === 'touch') this.goFullscreen();
     });
     window.addEventListener('touchend', unlock);
+    // Leaving the page (another app, the tab closed, the phone locked): pause
+    // an offline race and silence everything. Back again: the pause menu
+    // waits for RESUME; sound comes back now, or on the first tap (iPhone).
+    const away = () => {
+      if (this.mode === 'race' && !this.paused && !this.showingResults && !this.netRace) {
+        this.paused = true;
+        this.pauseMenu.index = 0;
+      }
+      void this.audio.ctx?.suspend().catch(() => {});
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) away();
+      else if (!this.params.mute) void this.audio.ctx?.resume().catch(() => {});
+    });
+    window.addEventListener('pagehide', away);
     // Drop module files anywhere to add them to the shuffle list.
     window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', (e) => {

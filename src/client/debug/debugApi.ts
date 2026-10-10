@@ -192,6 +192,10 @@ export function installDebugApi(app: App): void {
     controls() {
       return JSON.parse(JSON.stringify(app.controls)) as unknown;
     },
+    /** 'running', 'suspended' (page hidden), 'interrupted' (iPhone) or 'none'. */
+    audioState() {
+      return app.audio.ctx?.state ?? 'none';
+    },
     /** Peak sample of the whole mix before the limiter (over 1 = would clip). */
     peak() {
       return +app.audio.peak().toFixed(3);

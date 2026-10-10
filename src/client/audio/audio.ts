@@ -48,7 +48,8 @@ export class AudioSystem {
       this.master = master;
       this.reverb = send;
     }
-    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    // 'suspended' after the page was hidden, 'interrupted' on iPhones after a call or app switch.
+    if (this.ctx.state !== 'running') void this.ctx.resume().catch(() => {});
   }
 
   get ready(): boolean {
