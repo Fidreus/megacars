@@ -4,6 +4,7 @@ export interface Params {
   /** 'title' (default), 'quick' (straight into a race) or 'practice'. */
   mode: string;
   debug: boolean;
+  /** Track id from ?track= (empty = keep the saved choice). */
   track: string;
   /** Number of computer opponents (only applied when `aiSet`). */
   ai: number;
@@ -33,7 +34,7 @@ export function readParams(search: string = location.search): Params {
   return {
     mode: q.get('mode') ?? 'title',
     debug: flag('debug'),
-    track: q.get('track') ?? 'greenvalley',
+    track: q.get('track') ?? '',
     ai: Math.max(0, Math.min(7, num('ai') ?? 7)),
     aiSet: q.has('ai'),
     p2: flag('p2'),
