@@ -86,6 +86,13 @@ export function installDebugApi(app: App): void {
     reset() {
       app.resetCar(app.session.playerCars[0]);
     },
+    /** Music: what is playing and how loud it is right now. */
+    playSong(key: string) {
+      app.music.playSong(key);
+    },
+    music() {
+      return { playing: app.music.nowPlaying, mode: app.music.mode, level: +app.music.level().toFixed(4), own: app.music.own.size };
+    },
     /** Online status: screen, room, connection and prediction health. */
     online() {
       const o = app.online;

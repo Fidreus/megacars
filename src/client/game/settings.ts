@@ -15,6 +15,11 @@ export interface RaceSettings {
   practice: boolean;
   /** Missiles, mines, turbo and damage. */
   weapons: boolean;
+  /** 0 a song per track, 1 shuffle, 2 off. */
+  musicMode: number;
+  /** 0..10 */
+  musicVolume: number;
+  soundVolume: number;
 }
 
 export const DEFAULT_SETTINGS: RaceSettings = {
@@ -26,6 +31,9 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   mood: 'day',
   practice: false,
   weapons: true,
+  musicMode: 0,
+  musicVolume: 6,
+  soundVolume: 7,
 };
 
 const KEY = 'megacars.settings.v1';
@@ -44,6 +52,9 @@ export function loadSettings(): RaceSettings {
   s.laps = Math.max(1, Math.min(9, Math.round(s.laps)));
   s.difficulty = Math.max(0, Math.min(2, Math.round(s.difficulty)));
   s.weapons = s.weapons !== false;
+  s.musicMode = [0, 1, 2].includes(s.musicMode) ? s.musicMode : 0;
+  s.musicVolume = Math.max(0, Math.min(10, Math.round(s.musicVolume)));
+  s.soundVolume = Math.max(0, Math.min(10, Math.round(s.soundVolume)));
   return s;
 }
 

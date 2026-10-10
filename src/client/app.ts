@@ -36,6 +36,8 @@ import { buildProps } from './render/props.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
 import { buildTown } from './render/town.ts';
+import { Music, MUSIC_MODES, type MusicMode, type MusicScene } from './audio/music.ts';
+import { drawCredits } from './ui/screens/credits.ts';
 import { buildIndustry, type SteamSource } from './render/industry.ts';
 import { themeOf } from './render/theme.ts';
 import { buildTrackView } from './render/trackMesh.ts';
@@ -61,7 +63,7 @@ const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
 const VIEW_HEIGHT = 51.3;
 
 /** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
-type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd';
+type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'credits';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -111,6 +113,9 @@ export class App {
   /** Career in progress (its current season is `cup`). */
   private career: Career | null = null;
   private readonly careerMenu: Menu;
+  private readonly optionsMenu: Menu;
+  readonly music: Music;
+  private songToast = 0;
   private cupRace = false;
   private readonly camTargets = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly camInit = [false, false];
@@ -216,6 +221,12 @@ export class App {
       },
       { label: () => 'BACK', select: () => this.toTitle() },
     ], { onMove: beep });
+    this.music = new Music(this.audio);
+    this.music.mode = this.settings.musicMode as MusicMode;
+    this.music.volume = this.settings.musicVolume / 10;
+    this.audio.volume = (this.settings.soundVolume / 10) * 0.9;
+    this.music.onSong = () => (this.songToast = 4);
+    this.optionsMenu = new Menu(this.buildOptionItems(), { onMove: beep, onChange: beep });
     this.careerMenu = new Menu([
       {
         label: () => {
@@ -264,10 +275,30 @@ export class App {
       if (!this.skidSound && this.audio.ctx) {
         this.engines = [new EngineSound(this.audio), new EngineSound(this.audio)];
         this.skidSound = new SkidSound(this.audio);
+        this.music.play(this.musicScene(), true);
       }
     };
     window.addEventListener('keydown', unlock);
     window.addEventListener('pointerdown', unlock);
+    // Drop module files anywhere to add them to the shuffle list.
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      unlock();
+      const files = e.dataTransfer?.files;
+      if (!files?.length) return;
+      void this.music.addFiles(files).then((n) => {
+        if (n === 0) {
+          this.flashMessage('ONLY MOD/XM/S3M/IT FILES', 2.5);
+          return;
+        }
+        this.flashMessage(`ADDED ${n} SONG${n > 1 ? 'S' : ''} - SHUFFLE ON`, 2.5);
+        this.settings.musicMode = 1;
+        saveSettings(this.settings);
+        this.music.setMode(1);
+        this.music.next();
+      });
+    });
     canvas.focus();
   }
 
@@ -306,15 +337,7 @@ export class App {
       },
       { label: () => `DIFFICULTY: ${DIFFICULTIES[s.difficulty]}`, change: (d: number) => { s.difficulty = cycle(s.difficulty, 3, d); changed(); } },
       { label: () => `WEAPONS: ${s.weapons ? 'ON' : 'OFF'}`, change: () => { s.weapons = !s.weapons; changed(); } },
-      {
-        label: () => `TIME: ${moodById(s.mood).name}`,
-        change: (d: number) => {
-          const i = MOODS.findIndex((m) => m.id === s.mood);
-          s.mood = MOODS[cycle(i, MOODS.length, d)].id;
-          this.setMood(moodById(s.mood));
-          changed();
-        },
-      },
+      { label: () => 'OPTIONS', select: () => { this.mode = 'options'; this.optionsMenu.index = 0; } },
       { label: () => 'FREE PRACTICE', select: () => this.startRace({ ...s, practice: true, players: 1, opponents: 0 }) },
     ];
   }
@@ -439,6 +462,65 @@ export class App {
     this.paused = false;
     this.lastLights = 0;
     this.setSession(s);
+  }
+
+  private buildOptionItems() {
+    const s = this.settings;
+    const changed = () => saveSettings(s);
+    const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
+    const clamp10 = (v: number) => Math.max(0, Math.min(10, v));
+    const bar = (v: number) => '■'.repeat(v) + '□'.repeat(10 - v);
+    return [
+      {
+        label: () => `MUSIC: ${MUSIC_MODES[s.musicMode]}`,
+        change: (d: number) => {
+          s.musicMode = cycle(s.musicMode, 3, d);
+          this.music.setMode(s.musicMode as MusicMode);
+          changed();
+        },
+      },
+      {
+        label: () => `MUSIC VOLUME ${bar(s.musicVolume)}`,
+        change: (d: number) => {
+          s.musicVolume = clamp10(s.musicVolume + d);
+          this.music.setVolume(s.musicVolume / 10);
+          changed();
+        },
+      },
+      {
+        label: () => `SOUND VOLUME ${bar(s.soundVolume)}`,
+        change: (d: number) => {
+          s.soundVolume = clamp10(s.soundVolume + d);
+          this.audio.setVolume((s.soundVolume / 10) * 0.9);
+          changed();
+        },
+      },
+      { label: () => 'NEXT SONG  (N)', select: () => this.music.next() },
+      {
+        label: () => `TIME: ${moodById(s.mood).name}`,
+        change: (d: number) => {
+          const i = MOODS.findIndex((m) => m.id === s.mood);
+          s.mood = MOODS[cycle(i, MOODS.length, d)].id;
+          this.setMood(moodById(s.mood));
+          changed();
+        },
+      },
+      {
+        label: () => (this.music.own.size ? `MY MUSIC: ${this.music.own.size} FILES - CLEAR` : 'MY MUSIC: DROP .MOD/.XM FILES ON THE GAME'),
+        disabled: () => this.music.own.size === 0,
+        select: () => void this.music.clearOwn().then(() => this.flashMessage('MY MUSIC CLEARED')),
+      },
+      { label: () => 'MUSIC CREDITS', select: () => (this.mode = 'credits') },
+      { label: () => 'BACK', select: () => this.toTitle() },
+    ];
+  }
+
+  /** What the music should be doing for the current screen. */
+  private musicScene(): MusicScene {
+    if (this.mode === 'title' || this.mode === 'options' || this.mode === 'credits') return { kind: 'title' };
+    if (this.mode === 'seasonEnd' || this.mode === 'standings' || this.showingResults) return { kind: 'results' };
+    if (this.mode === 'race') return { kind: 'race', track: this.session.track.def.id };
+    return { kind: 'menu' };
   }
 
   /** Back to the title screen with an all-AI race running behind the menu. */
@@ -656,6 +738,7 @@ export class App {
       if (steps === 6) this.acc = 0;
       alpha = this.acc / DT;
     }
+    if (this.audio.ctx) this.music.play(this.musicScene());
     this.renderFrame(alpha, dt);
     this.input.keyboard.endFrame();
     this.fpsFrames++;
@@ -686,6 +769,7 @@ export class App {
     if (this.mode === 'online') return this.onlineMenu;
     if (this.mode === 'lobby') return this.lobbyMenu;
     if (this.mode === 'cup') return this.cupMenu;
+    if (this.mode === 'options') return this.optionsMenu;
     if (this.mode === 'career') return this.careerMenu;
     if (this.mode === 'shop') return this.shop?.menu ?? null;
     return this.paused ? this.pauseMenu : null;
@@ -715,6 +799,7 @@ export class App {
       this.flashMessage(this.mood.name);
     }
     if (kb.wasPressed('Digit0')) void this.openTuning();
+    if (kb.wasPressed('KeyN')) this.music.next();
     const pad = this.input.firstActivePad();
     if (pad >= 0) this.padIndex = pad;
 
@@ -744,6 +829,15 @@ export class App {
     if (this.mode === 'shop') {
       if (nav.back && this.netRace === null && this.online.room && !this.cup) this.toLobby();
       else this.shop?.handle(nav);
+      return;
+    }
+    if (this.mode === 'options') {
+      if (nav.back) this.toTitle();
+      else this.optionsMenu.handle(nav);
+      return;
+    }
+    if (this.mode === 'credits') {
+      if (nav.back || nav.confirm || nav.click) this.mode = 'options';
       return;
     }
     if (this.mode === 'career') {
@@ -1053,6 +1147,15 @@ export class App {
       drawText(ctx, 'NEW CHAMPIONSHIPS USE THE SETTINGS FROM THE MAIN MENU', W / 2, H - 11, { color: '#8090a8', align: 'center' });
     } else if (this.mode === 'career') {
       this.drawCareer(ctx, W, H, dt);
+    } else if (this.mode === 'options') {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, 0, W, H);
+      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
+      drawText(ctx, 'OPTIONS', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
+      this.optionsMenu.draw(ctx, W / 2, top + 30, fitScale(this.optionsMenu, top + 30, H - 30), dt);
+      drawText(ctx, 'TIP: DRAG YOUR OWN .MOD / .XM FILES ONTO THE GAME TO ADD THEM - THEY STAY ON YOUR COMPUTER', W / 2, H - 11, { color: '#8090a8', align: 'center' });
+    } else if (this.mode === 'credits') {
+      drawCredits(ctx, W, H, this.time);
     } else if (this.mode === 'seasonEnd' && this.career?.last) {
       drawSeasonEnd(ctx, W, H, this.career, this.time);
       if (Math.random() < dt * 4 && (this.career.last.outcome === 'champion' || this.career.last.outcome === 'defended' || this.career.last.outcome === 'promoted')) {
@@ -1079,6 +1182,10 @@ export class App {
       drawText(ctx, hint, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
     } else if (this.mode === 'race') {
       this.drawRaceUi(ctx, W, H);
+    }
+    if (this.songToast > 0 && this.music.nowPlaying) {
+      this.songToast -= dt;
+      drawText(ctx, `♪ ${this.music.nowPlaying}`, W - 6, H - 22, { color: '#9fd8ff', align: 'right' });
     }
     if (this.flashTime > 0) {
       this.flashTime -= dt;

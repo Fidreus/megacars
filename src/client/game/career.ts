@@ -48,6 +48,9 @@ function seasonSettings(division: number): RaceSettings {
     mood: 'day',
     practice: false,
     weapons: true,
+    musicMode: 0,
+    musicVolume: 0,
+    soundVolume: 0,
   };
 }
 

@@ -116,6 +116,19 @@ spak styr, RT/A gas, LT/B broms, LB drift, X/RB missil, Y/↓ mina, ↑/L3
 turbo, Start paus;
 handkontroll 1 = P1, handkontroll 2 = P2.
 
+## Musik
+
+Trackermusik (MOD/XM) spelas med libopenmpt (chiptune3, i en AudioWorklet).
+Varje bana har sin låt, menyerna och resultaten sina; låtarna tonas mellan
+skärmarna. **OPTIONS** i titelmenyn: musik TRACKS / SHUFFLE / OFF,
+musik- och ljudvolym, nästa låt (även **N**), tid på dygnet och credits.
+Dra egna .mod/.xm/.s3m/.it-filer till spelfönstret så hamnar de i
+shuffle-listan – de sparas bara i din webbläsare och laddas aldrig upp.
+
+Alla medföljande låtar kommer från The Mod Archive och har licenser som
+tillåter att de följer med spelet (10 public domain, *Imagine* av Andreas
+Viklund under CC BY 4.0). Se `public/music/CREDITS.md`.
+
 ## Spela online
 
 Välj **PLAY ONLINE** i titelmenyn, skriv ditt namn och välj **CREATE ROOM**.
