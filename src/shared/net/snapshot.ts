@@ -6,6 +6,7 @@ import { createCar, type CarState } from '../sim/car.ts';
 import { copyInput, neutralInput, type CarInput } from '../sim/input.ts';
 import type { World } from '../sim/world.ts';
 import { MsgType } from './protocol.ts';
+import { makeShot, ShotKind } from '../sim/weapons.ts';
 
 type CarKey = keyof CarState;
 
@@ -20,14 +21,17 @@ const I32: readonly CarKey[] = [
   'sliding', 'modeTicks', 'spinTicks', 'spinCool', 'airborne', 'prevButtons', 'brakeTicks', 'liftTicks',
   'driftArm', 'aiDriven', 'aiMode', 'aiReverseTicks', 'human', 'trackIdx', 'lap', 'nextCp', 'lapStartTick',
   'lastLapTicks', 'bestLapTicks', 'wrongWayTicks', 'finished', 'finishTick', 'place', 'stuckTicks', 'ghostTicks',
-  'respawns', 'surfFront', 'surfRear',
+  'respawns', 'surfFront', 'surfRear', 'missiles', 'mines', 'turbos', 'turboTicks', 'fireCool', 'mineCool',
+  'wreckTicks',
 ];
 
 /** Every CarState key except `id` must be listed above (checked by tests). */
 export const SNAPSHOT_CAR_KEYS: readonly CarKey[] = [...F64, ...I32];
 
-const HEADER = 1 + 4 + 2 + 4 + 1 + 1 + 1 + 4 + 4 + 4 + 4 + 1;
+const HEADER = 1 + 4 + 2 + 4 + 1 + 1 + 1 + 4 + 4 + 4 + 4 + 1 + 1;
 const PER_CAR = F64.length * 8 + I32.length * 4 + 4;
+/** slot, kind, owner, age, x, z, vx, vz, heading */
+const PER_SHOT = 1 + 1 + 1 + 4 + 5 * 8;
 
 export interface SnapshotMeta {
   /** How many ticks early this client's inputs arrive (minimum over the last half second). */
@@ -36,8 +40,8 @@ export interface SnapshotMeta {
   lastInputTick: number;
 }
 
-export function snapshotSize(cars: number): number {
-  return HEADER + cars * (PER_CAR + 1);
+export function snapshotSize(cars: number, shots = 0): number {
+  return HEADER + cars * (PER_CAR + 1) + 1 + shots * PER_SHOT;
 }
 
 /**
@@ -46,7 +50,9 @@ export function snapshotSize(cars: number): number {
  */
 export function encodeSnapshot(w: World, lastInputs: readonly CarInput[], meta: SnapshotMeta): Uint8Array {
   const n = w.cars.length;
-  const buf = new ArrayBuffer(snapshotSize(n));
+  let live = 0;
+  for (const sh of w.shots) if (sh.kind !== ShotKind.None) live++;
+  const buf = new ArrayBuffer(snapshotSize(n, live));
   const v = new DataView(buf);
   let o = 0;
   v.setUint8(o, MsgType.Snapshot); o += 1;
@@ -61,6 +67,7 @@ export function encodeSnapshot(w: World, lastInputs: readonly CarInput[], meta: 
   v.setUint32(o, w.race.endTick, true); o += 4;
   v.setInt32(o, w.rng, true); o += 4;
   v.setUint8(o, w.race.finishOrder.length); o += 1;
+  v.setUint8(o, w.race.weapons); o += 1;
   // finishOrder lives after the cars (fixed-size area of one byte per car).
   for (const car of w.cars) {
     for (const k of F64) { v.setFloat64(o, car[k], true); o += 8; }
@@ -72,6 +79,16 @@ export function encodeSnapshot(w: World, lastInputs: readonly CarInput[], meta: 
     v.setUint8(o, (inp?.buttons ?? 0) & 0xff); o += 1;
   }
   for (let i = 0; i < n; i++) v.setUint8(o + i, w.race.finishOrder[i] ?? 0xff);
+  o += n;
+  v.setUint8(o, live); o += 1;
+  w.shots.forEach((sh, slot) => {
+    if (sh.kind === ShotKind.None) return;
+    v.setUint8(o, slot); o += 1;
+    v.setUint8(o, sh.kind); o += 1;
+    v.setUint8(o, sh.owner); o += 1;
+    v.setInt32(o, sh.age, true); o += 4;
+    for (const x of [sh.x, sh.z, sh.vx, sh.vz, sh.heading]) { v.setFloat64(o, x, true); o += 8; }
+  });
   return new Uint8Array(buf);
 }
 
@@ -86,7 +103,9 @@ export function peekSnapshot(data: Uint8Array): DecodedSnapshot | null {
   if (data.byteLength < HEADER || data[0] !== MsgType.Snapshot) return null;
   const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const carCount = v.getUint8(11);
-  if (data.byteLength !== snapshotSize(carCount)) return null;
+  const shotsAt = snapshotSize(carCount) - 1;
+  if (data.byteLength <= shotsAt) return null;
+  if (data.byteLength !== snapshotSize(carCount, v.getUint8(shotsAt))) return null;
   return { tick: v.getUint32(1, true), meta: { lead: v.getInt16(5, true), lastInputTick: v.getUint32(7, true) }, carCount };
 }
 
@@ -108,6 +127,7 @@ export function applySnapshot(data: Uint8Array, w: World, lastInputs: CarInput[]
   w.race.endTick = v.getUint32(o, true); o += 4;
   w.rng = v.getInt32(o, true); o += 4;
   const finished = v.getUint8(o); o += 1;
+  w.race.weapons = v.getUint8(o); o += 1;
   for (const car of w.cars) {
     const c = car as unknown as Record<CarKey, number>;
     for (const k of F64) { c[k] = v.getFloat64(o, true); o += 8; }
@@ -120,6 +140,23 @@ export function applySnapshot(data: Uint8Array, w: World, lastInputs: CarInput[]
   }
   w.race.finishOrder.length = 0;
   for (let i = 0; i < finished; i++) w.race.finishOrder.push(v.getUint8(o + i));
+  o += w.cars.length;
+  // Shots go back into the same slots: their order decides who a mine hits first.
+  for (const sh of w.shots) sh.kind = ShotKind.None;
+  const live = v.getUint8(o); o += 1;
+  for (let k = 0; k < live; k++) {
+    const slot = v.getUint8(o); o += 1;
+    while (w.shots.length <= slot) w.shots.push(makeShot());
+    const sh = w.shots[slot];
+    sh.kind = v.getUint8(o); o += 1;
+    sh.owner = v.getUint8(o); o += 1;
+    sh.age = v.getInt32(o, true); o += 4;
+    sh.x = v.getFloat64(o, true); o += 8;
+    sh.z = v.getFloat64(o, true); o += 8;
+    sh.vx = v.getFloat64(o, true); o += 8;
+    sh.vz = v.getFloat64(o, true); o += 8;
+    sh.heading = v.getFloat64(o, true); o += 8;
+  }
   w.events.count = 0;
   return head.tick;
 }
@@ -134,6 +171,11 @@ export function copyWorld(dst: World, src: World): void {
     Object.assign(dst.cars[i], src.cars[i]);
   }
   dst.cars.length = src.cars.length;
+  for (let i = 0; i < src.shots.length; i++) {
+    if (!dst.shots[i]) dst.shots[i] = makeShot();
+    Object.assign(dst.shots[i], src.shots[i]);
+  }
+  dst.shots.length = src.shots.length;
 }
 
 export function cloneInputs(src: readonly CarInput[]): CarInput[] {

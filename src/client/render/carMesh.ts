@@ -195,12 +195,15 @@ export class CarView {
   private roll = 0;
   private pitch = 0;
   private spin = 0;
+  private wrecked = false;
+  private readonly paints: { mat: THREE.MeshPhongMaterial; color: THREE.Color }[] = [];
 
   constructor(color: string, number: number, style = number % STYLES.length) {
     const st = STYLES[style];
     const paint = new THREE.MeshPhongMaterial({ color, specular: '#5a5a5a', shininess: 45 });
     const stripeHex = stripeColor(color);
     const stripe = new THREE.MeshPhongMaterial({ color: stripeHex, specular: '#5a5a5a', shininess: 45 });
+    for (const mat of [paint, stripe]) this.paints.push({ mat, color: mat.color.clone() });
     const add = (geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D = this.body) => {
       const m = new THREE.Mesh(geo, mat);
       m.castShadow = true;
@@ -322,6 +325,17 @@ export class CarView {
     this.cone.visible = on && strength > 0;
     (this.cone.material as THREE.MeshBasicMaterial).color.setRGB(0.85 * strength, 0.77 * strength, 0.57 * strength);
     this.headMat.color.setRGB(on ? 4 : 1.6, on ? 3.7 : 1.5, on ? 2.8 : 1.25);
+  }
+
+  /** A burnt-out shell while wrecked. */
+  setWreck(on: boolean): void {
+    if (on === this.wrecked) return;
+    this.wrecked = on;
+    for (const p of this.paints) {
+      if (on) p.mat.color.copy(p.color).multiplyScalar(0.18);
+      else p.mat.color.copy(p.color);
+      p.mat.specular.setScalar(on ? 0.05 : 0.35);
+    }
   }
 
   /** Place the car; accelerations drive the body roll and pitch. */

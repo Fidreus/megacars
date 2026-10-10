@@ -19,13 +19,16 @@ export interface SimRaceResult {
   respawns: number;
   wallHits: number;
   carHits: number;
+  shots: number;
+  hits: number;
+  wrecks: number;
   order: number[];
 }
 
-export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number; laps?: number; tuning?: CarTuning } = {}): SimRaceResult {
+export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number; laps?: number; tuning?: CarTuning; weapons?: boolean } = {}): SimRaceResult {
   const track = getTrack(def);
   const carCount = opts.cars ?? 8;
-  const world: World = createWorld(track, carCount, seed, { laps: opts.laps ?? 3, countdownTicks: 1 });
+  const world: World = createWorld(track, carCount, seed, { laps: opts.laps ?? 3, countdownTicks: 1, weapons: opts.weapons });
   const rnd = makeRng(seed * 7 + 1);
   for (const c of world.cars) {
     c.aiDriven = 1;
@@ -34,6 +37,9 @@ export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number;
   const tunings = [opts.tuning ?? DEFAULT_TUNING];
   let wallHits = 0;
   let carHits = 0;
+  let shots = 0;
+  let hits = 0;
+  let wrecks = 0;
   const maxTicks = 60 * 60 * 8;
   while (world.race.phase !== RacePhase.Finished && world.tick < maxTicks) {
     stepWorld(world, track, [], tunings);
@@ -41,6 +47,9 @@ export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number;
       const e = world.events.list[k];
       if (e.kind === Ev.WallHit) wallHits++;
       else if (e.kind === Ev.CarHit) carHits++;
+      else if (e.kind === Ev.Fire) shots++;
+      else if (e.kind === Ev.Explosion && e.value !== 3) hits++;
+      else if (e.kind === Ev.Wreck) wrecks++;
     }
   }
   const best = Math.min(...world.cars.map((c) => c.bestLapTicks || Infinity));
@@ -55,6 +64,9 @@ export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number;
     respawns: world.cars.reduce((a, c) => a + c.respawns, 0),
     wallHits,
     carHits,
+    shots,
+    hits,
+    wrecks,
     order: standings(world),
   };
 }

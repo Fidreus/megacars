@@ -56,6 +56,8 @@ export interface RoomConfig {
   /** Computer cars added to the people. */
   ai: number;
   difficulty: number;
+  /** Missiles, mines, turbo and damage. */
+  weapons: boolean;
 }
 
 export interface PlayerInfo {
@@ -93,6 +95,7 @@ export interface RaceSpec {
   laps: number;
   seed: number;
   countdownTicks: number;
+  weapons: boolean;
   entrants: Entrant[];
 }
 

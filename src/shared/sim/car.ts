@@ -32,8 +32,18 @@ export interface CarState {
   spinTicks: number;
   spinCool: number;
   airborne: number;
-  // Condition
+  // Condition and weapons
+  /** 0 = like new, 1 = wrecked. */
   damage: number;
+  missiles: number;
+  mines: number;
+  turbos: number;
+  /** Ticks left of a turbo boost. */
+  turboTicks: number;
+  fireCool: number;
+  mineCool: number;
+  /** Ticks left as a smoking wreck before coming back. */
+  wreckTicks: number;
   // Control
   prevButtons: number;
   /** Ticks the brake has been held (drift tap detection). */
@@ -80,7 +90,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
   return {
     id, x, z, y: 0, vx: 0, vz: 0, vy: 0, heading, angVel: 0, steer: 0,
     sliding: 0, modeTicks: 0, spinTicks: 0, spinCool: 0, airborne: 0,
-    damage: 0,
+    damage: 0, missiles: 0, mines: 0, turbos: 0, turboTicks: 0, fireCool: 0, mineCool: 0, wreckTicks: 0,
     prevButtons: 0, brakeTicks: 0, liftTicks: 60, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1, aiReverseTicks: 0, human: 0,
     trackIdx: 0, trackS: 0, raceDist: 0, lap: 0, nextCp: 0,
     lapStartTick: 0, lastLapTicks: 0, bestLapTicks: 0, wrongWayTicks: 0, finished: 0,
@@ -95,7 +105,7 @@ export function carSpeed(c: CarState): number {
 
 /** Engine and top-speed multiplier from accumulated damage (0..1). */
 export function damagePerformance(damage: number): number {
-  return damage <= 0.4 ? 1 : 1 - 0.3 * Math.min(1, (damage - 0.4) / 0.6);
+  return damage <= 0.4 ? 1 : 1 - 0.15 * Math.min(1, (damage - 0.4) / 0.6);
 }
 
 export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf: SurfaceMix, dt: number): void {

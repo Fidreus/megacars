@@ -72,7 +72,7 @@ export class Room {
   readonly code: string;
   readonly members: Member[] = [];
   hostId = -1;
-  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1 };
+  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true };
   race: RaceRun | null = null;
   /** Ticks of the latest race simulated (diagnostics). */
   simTicks = 0;
@@ -210,6 +210,7 @@ export class Room {
     if (typeof c.track === 'string' && TRACKS[c.track]) cfg.track = c.track;
     if (Number.isFinite(c.laps)) cfg.laps = Math.max(1, Math.min(9, Math.round(c.laps!)));
     if (Number.isFinite(c.ai)) cfg.ai = Math.max(0, Math.min(MAX_PLAYERS - 1, Math.round(c.ai!)));
+    if (typeof c.weapons === 'boolean') cfg.weapons = c.weapons;
     if (Number.isFinite(c.difficulty)) cfg.difficulty = Math.max(0, Math.min(2, Math.round(c.difficulty!)));
     this.broadcastRoom();
     return null;
@@ -264,6 +265,7 @@ export class Room {
       laps: this.config.laps,
       seed: seed & 0x7fffffff,
       countdownTicks: COUNTDOWN_TICKS,
+      weapons: this.config.weapons,
       entrants,
     };
     const { world, track } = createRaceWorld(spec);

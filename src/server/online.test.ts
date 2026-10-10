@@ -197,7 +197,7 @@ describe('snapshots', () => {
 
   it('restore a world exactly, so it steps on identically', () => {
     const spec = {
-      id: 1, track: 'greenvalley', laps: 2, seed: 99, countdownTicks: 10,
+      id: 1, track: 'greenvalley', laps: 2, seed: 99, countdownTicks: 10, weapons: true,
       entrants: Array.from({ length: 6 }, (_, i) => ({ name: `C${i}`, color: '#fff', playerId: -1, skill: 0.9 + i * 0.02 })),
     };
     const a = createRaceWorld(spec);
@@ -205,6 +205,7 @@ describe('snapshots', () => {
     const inputs = a.world.cars.map(() => neutralInput());
     const data = encodeSnapshot(a.world, inputs, { lead: 3, lastInputTick: 5 });
     const b = createRaceWorld(spec);
+    expect(a.world.shots.some((s) => s.kind !== 0), 'some missiles or mines in flight').toBe(true);
     expect(applySnapshot(data, b.world, [])).toBe(900);
     for (let i = 0; i < 600; i++) {
       stepWorld(a.world, a.track, [], [DEFAULT_TUNING]);
@@ -213,6 +214,7 @@ describe('snapshots', () => {
     expect(b.world.cars).toEqual(a.world.cars);
     expect(b.world.race).toEqual(a.world.race);
     expect(b.world.rng).toBe(a.world.rng);
+    expect(b.world.shots.filter((s) => s.kind)).toEqual(a.world.shots.filter((s) => s.kind));
   });
 });
 

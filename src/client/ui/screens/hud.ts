@@ -55,6 +55,13 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   if (car.bestLapTicks) drawText(ctx, `BEST ${formatTime(car.bestLapTicks * DT)}`, x, y, { color: '#9cff9c' });
   if (label) drawText(ctx, label, r.x + r.w - 6, 6, { scale: 2, color: label === 'P1' ? '#ff6b5e' : '#6fa0ff', align: 'right' });
 
+  if (race.weapons) drawArsenal(ctx, x, r.h - 44, car);
+  const grace = race.startTick + 180 - world.tick;
+  if (race.weapons && race.phase === RacePhase.Racing && grace > -90 && !practice) {
+    const text = grace > 0 ? `WEAPONS IN ${Math.ceil(grace / 60)}` : 'WEAPONS FREE!';
+    drawText(ctx, text, r.x + r.w / 2, r.h * 0.22, { scale: 2, color: grace > 0 ? '#c8d0dc' : '#ff6b5e', align: 'center' });
+  }
+
   const kmh = Math.round(Math.hypot(car.vx, car.vz) * 3.6);
   drawText(ctx, `${kmh}`, x, r.h - 22, { scale: 2 });
   drawText(ctx, 'KM/H', x + 4 + String(kmh).length * 12, r.h - 15, { color: '#c0c0c0' });
@@ -65,6 +72,44 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   } else if (car.wrongWayTicks > 90 && race.phase === RacePhase.Racing) {
     if (Math.floor(world.tick / 15) % 2 === 0) drawText(ctx, 'WRONG WAY!', cx, r.h * 0.3, { scale: 3, color: '#ff4a3a', align: 'center' });
   }
+}
+
+/** Missiles, mines and turbos left, and a damage bar. */
+function drawArsenal(ctx: CanvasRenderingContext2D, x: number, y: number, car: World['cars'][number]): void {
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(x - 3, y - 13, 112, 24);
+  // Damage bar.
+  const d = Math.min(1, car.damage);
+  drawText(ctx, 'DMG', x, y - 10, { color: '#9aa4b8' });
+  ctx.fillStyle = '#222';
+  ctx.fillRect(x + 22, y - 10, 82, 6);
+  ctx.fillStyle = car.wreckTicks > 0 ? '#ff2b1c' : d < 0.4 ? '#9cff9c' : d < 0.7 ? '#ffd84a' : '#ff6b5e';
+  ctx.fillRect(x + 22, y - 10, Math.round(82 * d), 6);
+  // Ammo: missile, mine, turbo icons with counts.
+  const icon = (ix: number, kind: number, n: number) => {
+    const dim = n === 0;
+    if (kind === 0) {
+      ctx.fillStyle = dim ? '#555' : '#e8e6e0';
+      ctx.fillRect(ix, y + 2, 10, 3);
+      ctx.fillStyle = dim ? '#444' : '#d42a24';
+      ctx.fillRect(ix + 10, y + 2, 2, 3);
+      ctx.fillRect(ix, y + 1, 2, 5);
+    } else if (kind === 1) {
+      ctx.fillStyle = dim ? '#444' : '#2a2c30';
+      ctx.fillRect(ix + 1, y + 1, 8, 6);
+      ctx.fillStyle = dim ? '#555' : '#ff2b1c';
+      ctx.fillRect(ix + 4, y + 2, 2, 2);
+    } else {
+      ctx.fillStyle = dim ? '#555' : '#6fd0ff';
+      ctx.fillRect(ix, y + 2, 8, 3);
+      ctx.fillStyle = dim ? '#444' : '#ffffff';
+      ctx.fillRect(ix + 8, y + 1, 3, 5);
+    }
+    drawText(ctx, String(n), ix + 14, y + 1, { color: dim ? '#6a7488' : '#ffffff' });
+  };
+  icon(x, 0, car.missiles);
+  icon(x + 38, 1, car.mines);
+  icon(x + 74, 2, car.turbos);
 }
 
 /** Start lights and "GO!" at the top centre of the screen. */

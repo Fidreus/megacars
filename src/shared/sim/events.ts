@@ -10,6 +10,12 @@ export const Ev = {
   Finish: 6,
   RaceStart: 7,
   RaceEnd: 8,
+  /** A weapon was used: `other` = ShotKind. */
+  Fire: 9,
+  Turbo: 10,
+  /** `value`: 1 missile hit, 2 mine, 3 missile on a wall; `other` = owner. */
+  Explosion: 11,
+  Wreck: 12,
 } as const;
 
 export interface SimEvent {

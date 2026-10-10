@@ -13,6 +13,8 @@ export interface RaceSettings {
   mood: string;
   /** Free practice: no laps to finish, no countdown. */
   practice: boolean;
+  /** Missiles, mines, turbo and damage. */
+  weapons: boolean;
 }
 
 export const DEFAULT_SETTINGS: RaceSettings = {
@@ -23,6 +25,7 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   difficulty: 1,
   mood: 'day',
   practice: false,
+  weapons: true,
 };
 
 const KEY = 'megacars.settings.v1';
@@ -40,6 +43,7 @@ export function loadSettings(): RaceSettings {
   s.opponents = Math.max(0, Math.min(8 - s.players, Math.round(s.opponents)));
   s.laps = Math.max(1, Math.min(9, Math.round(s.laps)));
   s.difficulty = Math.max(0, Math.min(2, Math.round(s.difficulty)));
+  s.weapons = s.weapons !== false;
   return s;
 }
 

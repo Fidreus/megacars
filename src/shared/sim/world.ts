@@ -6,6 +6,7 @@ import type { Track } from '../track/types.ts';
 import { createCar, type CarState } from './car.ts';
 import { makeEventBuffer, type EventBuffer } from './events.ts';
 import { resetProgress } from './race.ts';
+import { giveStartAmmo, type Shot } from './weapons.ts';
 
 export const RacePhase = { Countdown: 0, Racing: 1, Finished: 2 } as const;
 
@@ -21,6 +22,8 @@ export interface RaceState {
   endTick: number;
   /** Car ids in finishing order. */
   finishOrder: number[];
+  /** 1 = weapons and damage on. */
+  weapons: number;
 }
 
 export interface World {
@@ -28,6 +31,8 @@ export interface World {
   rng: number;
   cars: CarState[];
   race: RaceState;
+  /** Missiles and mines (slots with kind 0 are free). */
+  shots: Shot[];
   events: EventBuffer;
 }
 
@@ -35,6 +40,8 @@ export interface WorldOptions {
   laps?: number;
   /** Ticks of countdown before the start (0 = start immediately). */
   countdownTicks?: number;
+  /** Weapons and damage. */
+  weapons?: boolean;
 }
 
 /** Ticks from the start lights going out to the end of a 3-light countdown. */
@@ -46,6 +53,7 @@ export function createWorld(track: Track, carCount: number, seed: number, opts: 
     const slot = track.grid[i % track.grid.length];
     const car = createCar(i, slot.x, slot.z, slot.heading);
     resetProgress(car, track);
+    giveStartAmmo(car, !!opts.weapons);
     cars.push(car);
   }
   const countdown = opts.countdownTicks ?? 0;
@@ -60,7 +68,9 @@ export function createWorld(track: Track, carCount: number, seed: number, opts: 
       firstFinishTick: 0,
       endTick: 0,
       finishOrder: [],
+      weapons: opts.weapons ? 1 : 0,
     },
+    shots: [],
     events: makeEventBuffer(),
   };
 }
@@ -90,6 +100,9 @@ export function respawnCar(car: CarState, track: Track, s: number): void {
   car.z = track.pz[i];
   car.y = 0;
   car.vx = car.vz = car.vy = 0;
+  car.airborne = 0;
+  car.turboTicks = 0;
+  car.wreckTicks = 0;
   car.heading = Math.atan2(track.tx[i], -track.tz[i]);
   car.angVel = 0;
   car.steer = 0;

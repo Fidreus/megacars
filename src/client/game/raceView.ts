@@ -10,6 +10,7 @@ import { RacePhase } from '../../shared/sim/world.ts';
 import { CarView } from '../render/carMesh.ts';
 import { Effects } from '../render/effects.ts';
 import { Particles } from '../render/particles.ts';
+import { ShotView } from '../render/shotView.ts';
 import { SkidMarks } from '../render/skidmarks.ts';
 import type { GameSession } from './session.ts';
 
@@ -27,6 +28,7 @@ export class RaceView {
   readonly cars: CarView[] = [];
   readonly particles = new Particles();
   private readonly skid = new SkidMarks();
+  private readonly shots = new ShotView();
   private readonly effects: Effects;
   private readonly prev: Pose[] = [];
   /** Visual offset left over from network corrections; decays to zero. */
@@ -47,7 +49,7 @@ export class RaceView {
       this.prev.push({ x: car.x, z: car.z, y: car.y, heading: car.heading });
       this.offset.push({ x: 0, z: 0, y: 0, heading: 0 });
     }
-    this.group.add(this.skid.mesh, this.particles.points);
+    this.group.add(this.skid.mesh, this.particles.points, this.shots.group);
     scene.add(this.group);
     const gantry = scene.getObjectByName('gantry');
     for (let k = 0; k < 5; k++) {
@@ -142,9 +144,11 @@ export class RaceView {
         speed,
         dt,
       );
+      this.cars[i].setWreck(c.wreckTicks > 0);
       // Ghosts (just respawned) blink.
       this.cars[i].root.visible = c.ghostTicks === 0 || c.finished === 1 || Math.floor(world.tick / 6) % 2 === 0;
     }
+    this.shots.update(world.shots, alpha, world.tick);
     this.particles.time.value = (world.tick + alpha) * DT;
     this.particles.pxScale.value = pxScale;
     this.particles.dither.value = particleDither ? 1 : 0;

@@ -31,6 +31,7 @@ export class RaceSession {
     this.world = createWorld(this.track, count, seed, {
       laps: settings.practice ? 0 : settings.laps,
       countdownTicks: settings.practice ? 0 : COUNTDOWN_TICKS,
+      weapons: settings.weapons,
     });
     // One shared tuning object so live tuning affects everybody (upgrades come later).
     this.tunings = [baseTuning];

@@ -14,6 +14,7 @@ export function createRaceWorld(spec: RaceSpec): { track: Track; world: World } 
   const world = createWorld(track, spec.entrants.length, spec.seed, {
     laps: spec.laps,
     countdownTicks: spec.countdownTicks,
+    weapons: spec.weapons,
   });
   spec.entrants.forEach((e, i) => {
     const car = world.cars[i];

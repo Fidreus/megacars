@@ -13,7 +13,10 @@ import { resetProgress } from '../shared/sim/race.ts';
 import { RacePhase, respawnCar, standings } from '../shared/sim/world.ts';
 import { AudioSystem } from './audio/audio.ts';
 import { EngineSound } from './audio/engine.ts';
-import { playFanfare, playImpact, playTone, SkidSound } from './audio/sfx.ts';
+import {
+  playExplosion, playFanfare, playImpact, playLaunch, playMineDrop, playTone, playTurbo, SkidSound,
+} from './audio/sfx.ts';
+import { ShotKind } from '../shared/sim/weapons.ts';
 import { installDebugApi } from './debug/debugApi.ts';
 import { buildTrackDebugView } from './debug/trackDebugView.ts';
 import { loadSavedTuning, openTuningPanel } from './debug/tuningPanel.ts';
@@ -33,7 +36,7 @@ import { buildProps } from './render/props.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
 import { buildTrackView } from './render/trackMesh.ts';
-import { drawText } from './ui/font.ts';
+import { drawText, LINE_H } from './ui/font.ts';
 import { Menu } from './ui/menu.ts';
 import { drawCountdown, drawPlayerHud, Minimap } from './ui/screens/hud.ts';
 import { drawResults } from './ui/screens/results.ts';
@@ -226,6 +229,7 @@ export class App {
         change: (d: number) => { s.opponents = cycle(s.opponents, 9 - s.players, d); changed(); },
       },
       { label: () => `DIFFICULTY: ${DIFFICULTIES[s.difficulty]}`, change: (d: number) => { s.difficulty = cycle(s.difficulty, 3, d); changed(); } },
+      { label: () => `WEAPONS: ${s.weapons ? 'ON' : 'OFF'}`, change: () => { s.weapons = !s.weapons; changed(); } },
       {
         label: () => `TIME: ${moodById(s.mood).name}`,
         change: (d: number) => {
@@ -297,6 +301,7 @@ export class App {
         disabled: notHost,
         change: (d: number) => o().configure({ difficulty: cycle(cfg()?.difficulty ?? 1, 3, d) }),
       },
+      { label: () => `WEAPONS: ${cfg()?.weapons === false ? 'OFF' : 'ON'}`, disabled: notHost, change: () => o().configure({ weapons: cfg()?.weapons === false }) },
       { label: () => 'COPY INVITE LINK', select: () => this.copyInvite() },
       { label: () => 'LEAVE ROOM', select: () => this.leaveRoom() },
     ];
@@ -611,6 +616,8 @@ export class App {
         const dx = e.x - me.x;
         const dist = Math.hypot(dx, e.z - me.z);
         if (dist < 60) playImpact(this.audio, e.value * (1 - dist / 60), dx / 30);
+      } else if (e.kind === Ev.Fire || e.kind === Ev.Explosion || e.kind === Ev.Wreck || e.kind === Ev.Turbo) {
+        this.weaponEvent(e.kind, e.car, e.other, e.value, e.x, e.z);
       } else if (e.kind === Ev.Respawn) {
         this.view.snap(e.car);
         if (e.value === 1 && players.includes(e.car)) this.flashMessage('RESET');
@@ -633,6 +640,32 @@ export class App {
       if (lit > this.lastLights) playTone(this.audio, 440, 0.12, 'square', 0.12);
       this.lastLights = lit;
     }
+  }
+
+  /** Sounds and messages for weapons, louder close to the (first) player. */
+  private weaponEvent(kind: number, car: number, other: number, value: number, x: number, z: number): void {
+    const me = this.player;
+    const players = this.session.playerCars;
+    const dx = x - me.x;
+    const dist = Math.hypot(dx, z - me.z);
+    const vol = Math.max(0, 1 - dist / 90);
+    const pan = dx / 40;
+    const mine = players.includes(car);
+    if (this.audio.ready && vol > 0) {
+      if (kind === Ev.Fire) {
+        if (other === ShotKind.Missile) playLaunch(this.audio, vol, pan);
+        else playMineDrop(this.audio, vol);
+      } else if (kind === Ev.Explosion) {
+        playExplosion(this.audio, vol, pan, value === 3 ? 0.6 : 1);
+      } else if (kind === Ev.Wreck) {
+        playExplosion(this.audio, vol, pan, 1.6);
+      } else if (kind === Ev.Turbo && mine) {
+        playTurbo(this.audio, 1);
+      }
+    }
+    if (this.mode !== 'race') return;
+    if (kind === Ev.Wreck && mine) this.flashMessage('WRECKED!', 2);
+    else if (kind === Ev.Explosion && value !== 3 && players.includes(other) && !mine) this.flashMessage(value === 2 ? 'MINED!' : 'DIRECT HIT!', 1.2);
   }
 
   // ------------------------------------------------------------- rendering
@@ -741,10 +774,10 @@ export class App {
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(0, 0, W, H);
       const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
-      this.titleMenu.draw(ctx, W / 2, top + 14, H >= 330 ? 2 : 1, dt);
+      this.titleMenu.draw(ctx, W / 2, top + 14, fitScale(this.titleMenu, top + 14, H - 30), dt);
       const help = this.settings.players === 2
         ? 'P1: WASD + G/F/H   P2: ARROWS + . , -   OR GAMEPADS'
-        : 'ARROWS/WASD DRIVE   LIFT OFF + GAS AGAIN WHILE TURNING = DRIFT';
+        : 'ARROWS/WASD DRIVE   SPACE MISSILE   X MINE   C TURBO   R RESET';
       drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
       drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
     } else if (this.mode === 'online') {
@@ -752,7 +785,7 @@ export class App {
       ctx.fillRect(0, 0, W, H);
       const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
       drawText(ctx, 'PLAY ONLINE', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
-      this.onlineMenu.draw(ctx, W / 2, top + 30, H >= 330 ? 2 : 1, dt);
+      this.onlineMenu.draw(ctx, W / 2, top + 30, fitScale(this.onlineMenu, top + 30, H - 40), dt);
       const st = connText(this.online.state, this.online.conn.rtt);
       drawText(ctx, st.text, W / 2, H - 34, { align: 'center', color: st.color });
       drawText(ctx, 'CREATE A ROOM AND SEND THE CODE TO YOUR FRIENDS, OR TYPE THEIR CODE', W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
@@ -761,7 +794,7 @@ export class App {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
       const top = drawLobby(ctx, W, H, this.online.room, this.online.me, this.time);
-      this.lobbyMenu.draw(ctx, W / 2, top, H >= 330 && top < H * 0.5 ? 2 : 1, dt);
+      this.lobbyMenu.draw(ctx, W / 2, top, fitScale(this.lobbyMenu, top, H - 26), dt);
       const st = connText(this.online.state, this.online.conn.rtt);
       drawText(ctx, st.text, 6, H - 11, { color: st.color });
       const hint = this.online.isHost ? 'YOU ARE THE HOST: PICK THE RACE AND START WHEN EVERYONE IS READY' : 'MARK YOURSELF READY - THE HOST STARTS THE RACE';
@@ -806,6 +839,10 @@ export class App {
     if (this.firstRace && w.tick < w.race.startTick + 60 * 15) {
       const hintY = split ? my - 14 : H - 36;
       drawText(ctx, 'DRIFT: LET GO OF GAS + PRESS AGAIN WHILE TURNING', W / 2, hintY, { color: '#ffd84a', align: 'center' });
+      if (w.race.weapons) {
+        const keys = split ? 'P1 G/F/H   P2 . , -' : 'SPACE MISSILE   X MINE   C TURBO';
+        drawText(ctx, `WEAPONS: ${keys}`, W / 2, hintY - 11, { color: '#ffd84a', align: 'center' });
+      }
     }
     if (this.showTelemetry && s.playerCars.length) this.drawTelemetry(ctx, 8, 92);
     if (this.netRace) this.drawOnlineRaceUi(ctx, W, H);
@@ -970,3 +1007,7 @@ export class App {
   }
 }
 
+/** Largest text scale (2 or 1) at which the menu fits between top and bottom. */
+function fitScale(menu: Menu, top: number, bottom: number): number {
+  return top + menu.items.length * (LINE_H * 2 + 4) <= bottom ? 2 : 1;
+}
