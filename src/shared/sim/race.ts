@@ -14,7 +14,9 @@ export function resetProgress(car: CarState, track: Track): void {
   for (let i = 0; i < track.n; i++) {
     const dx = car.x - track.px[i];
     const dz = car.z - track.pz[i];
-    const d = dx * dx + dz * dz;
+    // Where the track crosses itself, the level the car is on decides.
+    const dy = car.y - track.elev[i];
+    const d = dx * dx + dz * dz + dy * dy * 16;
     if (d < bestD) {
       bestD = d;
       best = i;

@@ -6,7 +6,7 @@ import { Surface, type SurfaceId } from '../config/surfaces.ts';
 import { headingOf, wrapAngle } from '../math/angle.ts';
 import { SegmentGrid } from '../math/spatialHash.ts';
 import { computeRacingLine } from '../ai/racingLine.ts';
-import type { GridSlot, SurfaceGrid, Track, TrackDef, Walls } from './types.ts';
+import type { Bridge, GridSlot, SurfaceGrid, Track, TrackDef, Walls } from './types.ts';
 
 /** Target spacing between centreline samples, metres. */
 const SAMPLE_DS = 1;
@@ -14,6 +14,15 @@ const SAMPLE_DS = 1;
 const SURFACE_CELL = 0.5;
 /** Corners tighter than this radius get curbs. */
 const CURB_RADIUS = 140;
+/** Barriers stop cars up to this far above the road (bridges). */
+const WALL_TOP = 2.5;
+/** A bridge deck's thickness: cars below this pass under it. */
+export const DECK_THICK = 1.4;
+const WALL_ALL = 1e6;
+/** Lower road within this distance of a crossing counts as under the bridge. */
+const UNDER_ZONE = 30;
+/** How much lower the far side of a broken bridge starts. */
+export const GAP_LANDING = 0.7;
 
 interface Prim {
   arc: boolean;
@@ -103,15 +112,20 @@ export function buildTrack(def: TrackDef): Track {
 
   const track: Track = {
     def, n, length, px, pz, tx, tz, nx, nz, s, curv, hw,
-    walls: buildWalls(px, pz, nx, nz, hw, def.runoff),
+    walls: null as unknown as Walls,
     surface: null as unknown as SurfaceGrid,
     checkpoints: new Float64Array(0),
     grid: [],
     ramps: [],
+    bridges: [],
+    elev: new Float64Array(n),
+    deck: new Uint8Array(n),
     line: null as unknown as Track['line'],
     bounds: { minX, minZ, maxX, maxZ },
     errors,
   };
+  buildBridges(track);
+  track.walls = buildWalls(track);
   track.surface = buildSurfaceGrid(track);
   const ncp = Math.max(6, Math.round(length / 120));
   track.checkpoints = new Float64Array(ncp);
@@ -203,11 +217,18 @@ function buildPrims(def: TrackDef, errors: string[]): Prim[] {
   return prims;
 }
 
-function buildWalls(
-  px: Float64Array, pz: Float64Array, nx: Float64Array, nz: Float64Array, hw: Float64Array, runoff: number,
-): Walls {
+/** Wall height class per sample: walls only merge within one class. */
+function wallClass(track: Track, i: number): number {
+  const d = track.deck[i];
+  // Elevated walls follow the slope in short pieces so their heights stay tight.
+  return d === 0 ? 0 : d * 1000 + Math.floor(track.s[i] / 6);
+}
+
+function buildWalls(track: Track): Walls {
+  const { px, pz, nx, nz, hw, deck, elev } = track;
+  const runoff = track.def.runoff;
   const n = px.length;
-  const segs: number[] = []; // ax, az, bx, bz, nx, nz
+  const segs: number[] = []; // ax, az, bx, bz, nx, nz, lo, hi
   const outlines: Float64Array[] = [];
   for (const side of [1, -1]) {
     const ox = new Float64Array(n);
@@ -234,7 +255,20 @@ function buildWalls(
       // Right of travel is (-dz, dx); the road is to the left of a right-side wall.
       const wnx = side > 0 ? dz : -dz;
       const wnz = side > 0 ? -dx : dx;
-      segs.push(x0, z0, x1, z1, wnx, wnz);
+      // Heights it stops cars between: barriers on the ground stop everything,
+      // except next to a bridge, where cars up on the deck pass over them.
+      let lo = WALL_ALL;
+      let hi = -WALL_ALL;
+      for (let k = i0; ; k = (k + 1) % n) {
+        const d = deck[k];
+        if (d === 3) return; // the gap: nothing to hit
+        if (d === 0) hi = WALL_ALL;
+        else if (d === 4) hi = Math.max(hi, WALL_TOP);
+        else hi = Math.max(hi, elev[k] + WALL_TOP);
+        lo = Math.min(lo, d === 2 ? elev[k] - DECK_THICK : -WALL_ALL);
+        if (k === i1) break;
+      }
+      segs.push(x0, z0, x1, z1, wnx, wnz, lo, hi);
     };
     for (let i = 1; i <= n; i++) {
       const cur = i % n;
@@ -242,29 +276,153 @@ function buildWalls(
       const h1 = Math.atan2(oz[cur] - oz[start], ox[cur] - ox[start]);
       const h2 = Math.atan2(oz[next] - oz[cur], ox[next] - ox[cur]);
       const runLen = Math.hypot(ox[cur] - ox[start], oz[cur] - oz[start]);
-      if (i === n || Math.abs(wrapAngle(h2 - h1)) > 0.004 || runLen > 40) {
+      if (i === n || Math.abs(wrapAngle(h2 - h1)) > 0.004 || runLen > 40 || wallClass(track, cur) !== wallClass(track, start)) {
         emit(start, cur);
         start = cur;
       }
     }
   }
-  const count = segs.length / 6;
+  const count = segs.length / 8;
   const w: Omit<Walls, 'grid'> = {
     count,
     ax: new Float64Array(count), az: new Float64Array(count),
     bx: new Float64Array(count), bz: new Float64Array(count),
     nx: new Float64Array(count), nz: new Float64Array(count),
+    lo: new Float64Array(count), hi: new Float64Array(count),
     outlines,
   };
   for (let i = 0; i < count; i++) {
-    w.ax[i] = segs[i * 6];
-    w.az[i] = segs[i * 6 + 1];
-    w.bx[i] = segs[i * 6 + 2];
-    w.bz[i] = segs[i * 6 + 3];
-    w.nx[i] = segs[i * 6 + 4];
-    w.nz[i] = segs[i * 6 + 5];
+    w.ax[i] = segs[i * 8];
+    w.az[i] = segs[i * 8 + 1];
+    w.bx[i] = segs[i * 8 + 2];
+    w.bz[i] = segs[i * 8 + 3];
+    w.nx[i] = segs[i * 8 + 4];
+    w.nz[i] = segs[i * 8 + 5];
+    w.lo[i] = segs[i * 8 + 6];
+    w.hi[i] = segs[i * 8 + 7];
   }
   return { ...w, grid: new SegmentGrid(w.ax, w.az, w.bx, w.bz, count, 8) };
+}
+
+/** Signed distance from `from` to `to` along a closed loop of length L. */
+function loopDelta(to: number, from: number, L: number): number {
+  let d = to - from;
+  if (d > L / 2) d -= L;
+  else if (d < -L / 2) d += L;
+  return d;
+}
+
+/**
+ * Road height of a bridge at distance `s` along the track (0 away from it),
+ * its slope, and whether `s` is over the hole of a broken bridge.
+ */
+export function bridgeProfile(b: Bridge, s: number, L: number, out: { h: number; slope: number; gap: number }): void {
+  const u = loopDelta(s, b.s, L);
+  const H = b.height;
+  out.h = 0;
+  out.slope = 0;
+  out.gap = 0;
+  if (!b.gap) {
+    const a = Math.abs(u);
+    if (a <= b.span) out.h = H;
+    else if (a < b.span + b.ramp) {
+      const v = (a - b.span) / b.ramp;
+      out.h = (H * (1 + Math.cos(Math.PI * v))) / 2;
+      out.slope = ((-H * Math.PI) / (2 * b.ramp)) * Math.sin(Math.PI * v) * Math.sign(u);
+    }
+    return;
+  }
+  if (u < -b.span) {
+    // The ski jump: steepest at the edge.
+    const a = -b.span - u;
+    if (a < b.ramp) {
+      const v = 1 - a / b.ramp;
+      out.h = H * (1 - Math.cos((v * Math.PI) / 2));
+      out.slope = ((H * Math.PI) / (2 * b.ramp)) * Math.sin((v * Math.PI) / 2);
+    }
+  } else if (u <= b.span) {
+    out.gap = 1;
+  } else {
+    const a = u - b.span;
+    if (a < b.ramp) {
+      const L0 = H * GAP_LANDING;
+      const v = a / b.ramp;
+      out.h = (L0 * (1 + Math.cos(Math.PI * v))) / 2;
+      out.slope = ((-L0 * Math.PI) / (2 * b.ramp)) * Math.sin(Math.PI * v);
+    }
+  }
+}
+
+const prof = { h: 0, slope: 0, gap: 0 };
+
+/** Road height (bridges only), slope and gap flag at distance `s`. */
+export function elevationAt(track: Track, s: number, out: { h: number; slope: number; gap: number }): void {
+  out.h = 0;
+  out.slope = 0;
+  out.gap = 0;
+  for (const b of track.bridges) {
+    bridgeProfile(b, s, track.length, prof);
+    if (prof.h > 0 || prof.gap) {
+      out.h = prof.h;
+      out.slope = prof.slope;
+      out.gap = prof.gap;
+      return;
+    }
+  }
+}
+
+/** Finds both passes through each bridge's crossing and raises the upper one. */
+function buildBridges(track: Track): void {
+  const { n, px, pz, s, def, errors } = track;
+  for (const bd of def.bridges ?? []) {
+    // Runs of samples close to the crossing point: one per pass.
+    const near = (i: number) => (px[i] - bd.x) ** 2 + (pz[i] - bd.z) ** 2 < 36;
+    let first = 0;
+    while (first < n && near(first)) first++;
+    const passes: number[] = [];
+    let best = -1;
+    let bestD = Infinity;
+    for (let k = 1; k <= n; k++) {
+      const i = (first + k) % n;
+      if (near(i)) {
+        const d = (px[i] - bd.x) ** 2 + (pz[i] - bd.z) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      } else if (best >= 0) {
+        passes.push(best);
+        best = -1;
+        bestD = Infinity;
+      }
+    }
+    passes.sort((a, b) => a - b);
+    if (passes.length !== 2) {
+      errors.push(`bridge at (${bd.x}, ${bd.z}): the track passes ${passes.length} times, need 2`);
+      continue;
+    }
+    const iu = passes[bd.upper];
+    const il = passes[1 - bd.upper];
+    // Refine to the exact crossing along each pass.
+    const project = (i: number) => s[i] + (bd.x - px[i]) * track.tx[i] + (bd.z - pz[i]) * track.tz[i];
+    const b: Bridge = { s: project(iu), sLower: project(il), height: bd.height, span: bd.span, ramp: bd.ramp, gap: !!bd.gap };
+    const reach = b.span + b.ramp + 2;
+    if (b.s - reach < 0 || b.s + reach > track.length) errors.push(`bridge at (${bd.x}, ${bd.z}) crosses the start line`);
+    track.bridges.push(b);
+  }
+  const L = track.length;
+  for (let i = 0; i < n; i++) {
+    for (const b of track.bridges) {
+      bridgeProfile(b, s[i], L, prof);
+      const u = loopDelta(s[i], b.s, L);
+      if (Math.abs(u) < b.span + b.ramp) {
+        track.deck[i] = prof.gap ? 3 : !b.gap && Math.abs(u) <= b.span ? 2 : 1;
+        track.elev[i] = prof.gap ? b.height : prof.h;
+      } else if (track.deck[i] === 0 && Math.abs(loopDelta(s[i], b.sLower, L)) < UNDER_ZONE) {
+        track.deck[i] = 4;
+      }
+    }
+  }
 }
 
 function buildSurfaceGrid(track: Track): SurfaceGrid {

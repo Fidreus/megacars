@@ -36,6 +36,40 @@ export interface Ramp {
   height: number;
 }
 
+/**
+ * A bridge where the track crosses itself. (x, z) is the crossing point; the
+ * pass that goes over is `upper` (0 = the first time the lap goes through
+ * the crossing, counted from the start line, 1 = the second).
+ */
+export interface BridgeDef {
+  x: number;
+  z: number;
+  upper: 0 | 1;
+  /** Deck height, metres. */
+  height: number;
+  /** Half length of the flat deck along the upper road (must clear the lower road). */
+  span: number;
+  /** Length of each approach slope. */
+  ramp: number;
+  /**
+   * Broken bridge: no deck over the lower road. The approach rises like a
+   * ski jump to the edge, and the far side starts lower and slopes down.
+   * Too slow and you drop into the hole.
+   */
+  gap?: boolean;
+}
+
+/** A built bridge, along the upper pass's centreline distance. */
+export interface Bridge {
+  /** Where the upper pass crosses (s), and where the lower pass does. */
+  s: number;
+  sLower: number;
+  height: number;
+  span: number;
+  ramp: number;
+  gap: boolean;
+}
+
 export interface TrackDef {
   id: string;
   name: string;
@@ -51,6 +85,7 @@ export interface TrackDef {
   startAt: number;
   patches?: readonly SurfacePatch[];
   ramps?: readonly RampDef[];
+  bridges?: readonly BridgeDef[];
   laps?: number;
   seed?: number;
 }
@@ -64,6 +99,9 @@ export interface Walls {
   /** Unit normal pointing toward the road. */
   nx: Float64Array;
   nz: Float64Array;
+  /** Heights the wall stops cars between (bridges: a car passes over or under it). */
+  lo: Float64Array;
+  hi: Float64Array;
   grid: SegmentGrid;
   /** Smooth barrier polylines for rendering (closed loops), x/z interleaved. */
   outlines: Float64Array[];
@@ -118,6 +156,11 @@ export interface Track {
   checkpoints: Float64Array;
   grid: GridSlot[];
   ramps: Ramp[];
+  bridges: Bridge[];
+  /** Road height per sample (bridges; 0 elsewhere). Nominal deck height over a gap. */
+  elev: Float64Array;
+  /** Per sample: 0 = road on the ground, 1 = embankment, 2 = deck open underneath, 3 = gap (no road). */
+  deck: Uint8Array;
   line: RacingLine;
   bounds: { minX: number; minZ: number; maxX: number; maxZ: number };
   /** Problems found while building (empty when the track is valid). */

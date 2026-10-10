@@ -31,7 +31,7 @@ export const SNAPSHOT_CAR_KEYS: readonly CarKey[] = [...F64, ...I32];
 const HEADER = 1 + 4 + 2 + 4 + 1 + 1 + 1 + 4 + 4 + 4 + 4 + 1 + 1;
 const PER_CAR = F64.length * 8 + I32.length * 4 + 4;
 /** slot, kind, owner, age, x, z, vx, vz, heading */
-const PER_SHOT = 1 + 1 + 1 + 4 + 5 * 8;
+const PER_SHOT = 1 + 1 + 1 + 4 + 6 * 8;
 
 export interface SnapshotMeta {
   /** How many ticks early this client's inputs arrive (minimum over the last half second). */
@@ -87,7 +87,7 @@ export function encodeSnapshot(w: World, lastInputs: readonly CarInput[], meta: 
     v.setUint8(o, sh.kind); o += 1;
     v.setUint8(o, sh.owner); o += 1;
     v.setInt32(o, sh.age, true); o += 4;
-    for (const x of [sh.x, sh.z, sh.vx, sh.vz, sh.heading]) { v.setFloat64(o, x, true); o += 8; }
+    for (const x of [sh.x, sh.z, sh.y, sh.vx, sh.vz, sh.heading]) { v.setFloat64(o, x, true); o += 8; }
   });
   return new Uint8Array(buf);
 }
@@ -153,6 +153,7 @@ export function applySnapshot(data: Uint8Array, w: World, lastInputs: CarInput[]
     sh.age = v.getInt32(o, true); o += 4;
     sh.x = v.getFloat64(o, true); o += 8;
     sh.z = v.getFloat64(o, true); o += 8;
+    sh.y = v.getFloat64(o, true); o += 8;
     sh.vx = v.getFloat64(o, true); o += 8;
     sh.vz = v.getFloat64(o, true); o += 8;
     sh.heading = v.getFloat64(o, true); o += 8;

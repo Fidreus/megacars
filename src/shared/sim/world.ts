@@ -1,7 +1,7 @@
 // The complete simulation state. Everything that affects the future lives
 // here, so a world can be copied, sent over the network and re-simulated.
 
-import { sampleIndexAt } from '../track/builder.ts';
+import { elevationAt, sampleIndexAt } from '../track/builder.ts';
 import type { Track } from '../track/types.ts';
 import { createCar, type CarState } from './car.ts';
 import { makeEventBuffer, type EventBuffer } from './events.ts';
@@ -88,6 +88,8 @@ export function standings(w: World): number[] {
   return order;
 }
 
+const elev = { h: 0, slope: 0, gap: 0 };
+
 /** Put a car back on the centreline near its current progress, stopped. */
 export function respawnCar(car: CarState, track: Track, s: number): void {
   const i = sampleIndexAt(track, s);
@@ -98,7 +100,8 @@ export function respawnCar(car: CarState, track: Track, s: number): void {
   car.raceDist += ds;
   car.x = track.px[i];
   car.z = track.pz[i];
-  car.y = 0;
+  elevationAt(track, track.s[i], elev);
+  car.y = elev.h;
   car.vx = car.vz = car.vy = 0;
   car.airborne = 0;
   car.turboTicks = 0;

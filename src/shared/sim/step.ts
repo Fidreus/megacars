@@ -15,13 +15,14 @@ import { Ev, pushEvent } from './events.ts';
 import { Btn, NEUTRAL_INPUT, neutralInput, type CarInput } from './input.ts';
 import { resetProgress, updateProgress } from './race.ts';
 import { RacePhase, respawnCar, standings, type World } from './world.ts';
-import { safeRespawnS, stepRamps } from './ramps.ts';
+import { fellOff, groundUnder, makeGround, safeRespawnS, stepRamps } from './ramps.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
 
 const aiInput = neutralInput();
 const surfMix = makeSurfaceMix();
+const ground = makeGround();
 
 /** Stopped this long while trying to move: put the car back on the track. */
 const STUCK_RESPAWN_TICKS = 240;
@@ -68,7 +69,10 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     if (car.wreckTicks > 0) {
       stepWreck(car, DT);
       // A car wrecked in mid-air still falls.
-      if (car.airborne) stepBoostAndAir(car, t, DT, w.events, false);
+      if (car.airborne) {
+        groundUnder(car, track, ground);
+        stepBoostAndAir(car, t, DT, w.events, false, ground.gap ? 0 : ground.h);
+      }
       if (--car.wreckTicks === 0) {
         // Towed back onto the track, patched up.
         respawnCar(car, track, safeRespawnS(track, car.trackS - 4));
@@ -101,8 +105,18 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     } else {
       stepCarDynamics(car, inp, t, surfMix, DT);
     }
-    stepBoostAndAir(car, t, DT, w.events, race.weapons === 1);
-    stepRamps(car, track);
+    groundUnder(car, track, ground);
+    if (fellOff(car, ground)) {
+      // Into the hole of a broken bridge: back to the run-up.
+      respawnCar(car, track, safeRespawnS(track, car.trackS));
+      car.respawns++;
+      pushEvent(w.events, Ev.Respawn, car.id, -1, 3, car.x, car.z);
+    } else {
+      const i = car.trackIdx;
+      const along = car.vx * track.tx[i] + car.vz * track.tz[i];
+      stepBoostAndAir(car, t, DT, w.events, race.weapons === 1, ground.gap ? -1e9 : ground.h, along * ground.slope);
+      stepRamps(car, track, ground);
+    }
     car.prevButtons = inp.buttons;
 
     // Stuck: nearly stopped while trying to drive.

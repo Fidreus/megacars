@@ -25,7 +25,7 @@ export function aiWeapons(car: CarState, cars: readonly CarState[], track: Track
 
   if (car.missiles > 0 && car.fireCool === 0 && car.spinTicks === 0) {
     for (const o of cars) {
-      if (o === car || o.ghostTicks > 0 || o.wreckTicks > 0 || o.finished) continue;
+      if (o === car || o.ghostTicks > 0 || o.wreckTicks > 0 || o.finished || Math.abs(o.y - car.y) > 1.5) continue;
       const dx = o.x - car.x;
       const dz = o.z - car.z;
       const ahead = dx * fx + dz * fz;
@@ -37,7 +37,7 @@ export function aiWeapons(car: CarState, cars: readonly CarState[], track: Track
   }
   if (car.mines > 0 && car.mineCool === 0) {
     for (const o of cars) {
-      if (o === car || o.ghostTicks > 0 || o.wreckTicks > 0 || o.finished) continue;
+      if (o === car || o.ghostTicks > 0 || o.wreckTicks > 0 || o.finished || Math.abs(o.y - car.y) > 1.5) continue;
       const dx = o.x - car.x;
       const dz = o.z - car.z;
       const behind = -(dx * fx + dz * fz);

@@ -49,6 +49,8 @@ export interface Shot {
   owner: number;
   x: number;
   z: number;
+  /** Height it flies (or lies) at: bridges keep levels apart. */
+  y: number;
   vx: number;
   vz: number;
   heading: number;
@@ -56,7 +58,7 @@ export interface Shot {
 }
 
 export function makeShot(): Shot {
-  return { kind: 0, owner: 0, x: 0, z: 0, vx: 0, vz: 0, heading: 0, age: 0 };
+  return { kind: 0, owner: 0, x: 0, z: 0, y: 0, vx: 0, vz: 0, heading: 0, age: 0 };
 }
 
 const closest: Closest = { x: 0, z: 0, t: 0, d2: 0 };
@@ -103,6 +105,7 @@ export function useWeapons(car: CarState, inp: CarInput, shots: Shot[], ev: Even
     s.owner = car.id;
     s.x = car.x + fx * 2.7;
     s.z = car.z + fz * 2.7;
+    s.y = car.y;
     s.vx = fx * (WEAPON.missileSpeed + fwd);
     s.vz = fz * (WEAPON.missileSpeed + fwd);
     s.heading = car.heading;
@@ -117,6 +120,7 @@ export function useWeapons(car: CarState, inp: CarInput, shots: Shot[], ev: Even
     s.owner = car.id;
     s.x = car.x - fx * 3.5;
     s.z = car.z - fz * 3.5;
+    s.y = car.y;
     s.vx = s.vz = 0;
     s.heading = car.heading;
     s.age = 0;
@@ -130,7 +134,9 @@ export function useWeapons(car: CarState, inp: CarInput, shots: Shot[], ev: Even
 }
 
 /** Turbo thrust and flight after a mine blast. Called after the car's dynamics. */
-export function stepBoostAndAir(car: CarState, t: CarTuning, dt: number, ev: EventBuffer, damage: boolean): void {
+export function stepBoostAndAir(
+  car: CarState, t: CarTuning, dt: number, ev: EventBuffer, damage: boolean, ground = 0, groundVy = 0,
+): void {
   if (car.turboTicks > 0) {
     car.turboTicks--;
     if (car.spinTicks === 0 && car.wreckTicks === 0) {
@@ -148,10 +154,11 @@ export function stepBoostAndAir(car: CarState, t: CarTuning, dt: number, ev: Eve
   if (car.airborne) {
     car.vy -= t.gravity * dt;
     car.y += car.vy * dt;
-    if (car.y <= 0) {
-      const impact = -car.vy;
-      car.y = 0;
-      car.vy = 0;
+    if (car.y <= ground) {
+      // Landing on a slope going down is softer.
+      const impact = groundVy - car.vy;
+      car.y = ground;
+      car.vy = groundVy;
       car.airborne = 0;
       // Hard landings hurt a little and cost some speed.
       if (impact > 4) {
@@ -185,13 +192,14 @@ function hitCar(
   pushEvent(ev, Ev.Explosion, car.id, owner, kind, car.x, car.z);
 }
 
-function wallBetween(walls: Walls, ax: number, az: number, bx: number, bz: number): boolean {
+function wallBetween(walls: Walls, ax: number, az: number, bx: number, bz: number, y: number): boolean {
   const mx = (ax + bx) / 2;
   const mz = (az + bz) / 2;
   const r = Math.hypot(bx - ax, bz - az) / 2 + 0.6;
   const n = walls.grid.query(mx, mz, r, queryBuf);
   for (let q = 0; q < n; q++) {
     const i = queryBuf[q];
+    if (y < walls.lo[i] - 0.3 || y > walls.hi[i]) continue;
     if (segmentsIntersect(ax, az, bx, bz, walls.ax[i], walls.az[i], walls.bx[i], walls.bz[i])) return true;
     closestOnSegment(bx, bz, walls.ax[i], walls.az[i], walls.bx[i], walls.bz[i], closest);
     if (closest.d2 < 0.16) return true;
@@ -207,7 +215,7 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
     if (s.kind === ShotKind.Missile) {
       const nx = s.x + s.vx * dt;
       const nz = s.z + s.vz * dt;
-      if (s.age > WEAPON.missileLife || wallBetween(track.walls, s.x, s.z, nx, nz)) {
+      if (s.age > WEAPON.missileLife || wallBetween(track.walls, s.x, s.z, nx, nz, s.y)) {
         pushEvent(ev, Ev.Explosion, -1, s.owner, 3, nx, nz);
         s.kind = ShotKind.None;
         continue;
@@ -215,7 +223,7 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
       // Swept test against both circles of every car along this tick's path.
       let hit = -1;
       for (const c of cars) {
-        if ((c.id === s.owner && s.age < 20) || c.ghostTicks > 0 || c.wreckTicks > 0 || c.finished || c.y > 1.2) continue;
+        if ((c.id === s.owner && s.age < 20) || c.ghostTicks > 0 || c.wreckTicks > 0 || c.finished || Math.abs(c.y - s.y) > 1.2) continue;
         const t = tunings[c.id] ?? tunings[0];
         const fx = Math.sin(c.heading);
         const fz = -Math.cos(c.heading);
@@ -241,7 +249,7 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
       }
       if (s.age < WEAPON.mineArm) continue;
       for (const c of cars) {
-        if (c.ghostTicks > 0 || c.wreckTicks > 0 || c.finished || c.y > 0.5) continue;
+        if (c.ghostTicks > 0 || c.wreckTicks > 0 || c.finished || Math.abs(c.y - s.y) > 0.5) continue;
         const t = tunings[c.id] ?? tunings[0];
         const fx = Math.sin(c.heading);
         const fz = -Math.cos(c.heading);
@@ -255,7 +263,7 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
         if (!near) continue;
         hitCar(c, cars, t, WEAPON.mineDamage, 0, 0, ev, 2, s.owner);
         c.vy = WEAPON.mineLaunch;
-        c.y = 0.01;
+        c.y += 0.01;
         c.airborne = 1;
         s.kind = ShotKind.None;
         break;

@@ -181,7 +181,7 @@ export class RaceView {
       const x = car.x + rx * side + fx * along;
       const z = car.z + rz * side + fz * along;
       const on = car.airborne === 0 && (sliding || hardBrake) && (rear || slipDeg > 14 || hardBrake) && PAVED.has(surfaceAt(this.session.track, x, z));
-      this.skid.mark(car.id * 4 + w, x, z, on);
+      this.skid.mark(car.id * 4 + w, x, z, on, car.y);
     }
   }
 }

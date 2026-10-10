@@ -37,6 +37,8 @@ export function collideCarWithWalls(car: CarState, t: CarTuning, walls: Walls, e
       let bnz = 0;
       for (let q = 0; q < n; q++) {
         const i = queryBuf[q];
+        // Bridges: cars on the deck pass over the road below, and under the deck.
+        if (car.y < walls.lo[i] - 0.3 || car.y > walls.hi[i]) continue;
         closestOnSegment(cx, cz, walls.ax[i], walls.az[i], walls.bx[i], walls.bz[i], closest);
         const dx = cx - closest.x;
         const dz = cz - closest.z;

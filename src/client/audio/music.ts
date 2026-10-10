@@ -40,6 +40,9 @@ export const SONGS: Record<string, Song> = {
   shanty: { file: 'shanty_c64', title: 'SHANTY (C64 SID)', artist: 'SKRJABLIN', licence: 'CC0', audio: true, source: 'OPENGAMEART' },
 };
 
+/** Tracks without a song of their own borrow one. */
+const TRACK_SONG: Record<string, string> = { twinbridges: 'powertrack' };
+
 /** Songs used for races in shuffle mode. */
 const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine', 'uptempo', 'powertrack', 'freddie', 'shanty'];
 
@@ -175,7 +178,8 @@ export class Music {
         const pool = this.pool();
         return pool[Math.floor(Math.random() * pool.length)];
       }
-      return SONGS[scene.track] ? scene.track : 'greenvalley';
+      const song = TRACK_SONG[scene.track] ?? scene.track;
+      return SONGS[song] ? song : 'greenvalley';
     }
     return scene.kind;
   }

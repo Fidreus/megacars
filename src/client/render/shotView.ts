@@ -54,10 +54,10 @@ export class ShotView {
       if (kind === ShotKind.Missile) {
         // The simulation position is one tick ahead of what we draw.
         const back = (1 - alpha) * DT;
-        m.missile.position.set(s.x - s.vx * back, 0.75, s.z - s.vz * back);
+        m.missile.position.set(s.x - s.vx * back, s.y + 0.75, s.z - s.vz * back);
         m.missile.rotation.y = -s.heading;
       } else if (kind === ShotKind.Mine) {
-        m.mine.position.set(s.x, 0, s.z);
+        m.mine.position.set(s.x, s.y, s.z);
         m.mine.rotation.y = s.heading;
         const armed = s.age >= WEAPON.mineArm;
         const blink = armed ? Math.floor((tick + i * 7) / 20) % 2 === 0 : false;

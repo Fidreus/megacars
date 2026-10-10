@@ -1278,6 +1278,7 @@ export class App {
         this.view.snap(e.car);
         if (players.includes(e.car) && this.mode === 'race') {
           if (e.value === 1) this.flashMessage('RESET');
+          else if (e.value === 3) this.flashMessage('TOO SLOW - INTO THE HOLE!', 2);
           playZap(this.audio);
         }
       } else if (e.kind === Ev.Lap && players.includes(e.car) && this.mode === 'race') {
@@ -1437,12 +1438,14 @@ export class App {
     const tz = view.z + lz;
     const target = this.camTargets[v];
     if (!this.camInit[v]) {
-      target.set(tx, 0, tz);
+      target.set(tx, view.y, tz);
       this.camInit[v] = true;
     } else {
       const k = 1 - Math.exp(-(this.mode === 'title' ? 3 : 7) * dt);
       target.x += (tx - target.x) * k;
       target.z += (tz - target.z) * k;
+      // Up on a bridge: rise with the car (gently, so jumps don't bob the view).
+      target.y += (view.y - target.y) * (1 - Math.exp(-2.5 * dt));
     }
     // Explosions and hard landings shake the view (a few pixels, decaying).
     let sx = 0;
@@ -1452,7 +1455,7 @@ export class App {
       sx = Math.sin(this.time * 61) * a;
       sz = Math.cos(this.time * 47) * a;
     }
-    cam.update(target.x + sx, 0, target.z + sz, vp.w, vp.h);
+    cam.update(target.x + sx, target.y, target.z + sz, vp.w, vp.h);
   }
 
   /** Keep the shadow map centred on the view, snapped to whole shadow texels. */

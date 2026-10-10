@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { Surface } from '../../shared/config/surfaces.ts';
 import type { Track } from '../../shared/track/types.ts';
 import { buildRamps } from './rampMesh.ts';
+import { buildBridges } from './bridgeMesh.ts';
 import { themeOf } from './theme.ts';
 import { toon } from './materials.ts';
 
@@ -57,6 +58,8 @@ export function buildTrackView(track: Track): THREE.Group {
   group.add(buildStartGantry(track));
   group.add(buildGridMarks(track));
   group.add(buildRamps(track));
+  const bridges = buildBridges(track);
+  if (bridges) group.add(bridges);
   return group;
 }
 
@@ -104,7 +107,7 @@ function buildRoad(track: Track): THREE.Mesh {
       const sgn = side === 0 ? -1 : 1;
       const v = k * 2 + side;
       pos[v * 3] = px[i] + nx[i] * reach * sgn;
-      pos[v * 3 + 1] = 0;
+      pos[v * 3 + 1] = track.elev[i];
       pos[v * 3 + 2] = pz[i] + nz[i] * reach * sgn;
       nrm[v * 3 + 1] = 1;
       road[v * 4] = reach * sgn;
@@ -115,6 +118,8 @@ function buildRoad(track: Track): THREE.Mesh {
   }
   const idx: number[] = [];
   for (let k = 0; k < n; k++) {
+    // No road over the hole of a broken bridge.
+    if (track.deck[k] === 3 || track.deck[(k + 1) % n] === 3) continue;
     const a = k * 2, b = a + 1, c = a + 2, d = a + 3;
     idx.push(a, b, c, b, d, c);
   }
@@ -246,14 +251,21 @@ function buildWalls(track: Track): THREE.Mesh {
       const x0 = outline[i * 2], z0 = outline[i * 2 + 1];
       const x1 = outline[j * 2], z1 = outline[j * 2 + 1];
       const seg = Math.hypot(x1 - x0, z1 - z0);
+      if (track.deck[i] === 3 || track.deck[j] === 3) {
+        along += seg;
+        continue;
+      }
+      // Up on a bridge the barrier rides on the deck.
+      const y0 = track.elev[i];
+      const y1 = track.elev[j];
       const ox0 = track.nx[i] * sgn * T, oz0 = track.nz[i] * sgn * T;
       const ox1 = track.nx[j] * sgn * T, oz1 = track.nz[j] * sgn * T;
       const stripe = Math.floor((along + seg / 2) / 3) % 2 === 0 ? red : white;
       along += seg;
       // Inner face (toward the road), top, outer face.
-      quad(x0, 0, z0, x1, 0, z1, x1, H, z1, x0, H, z0, concrete);
-      quad(x0, H, z0, x1, H, z1, x1 + ox1, H, z1 + oz1, x0 + ox0, H, z0 + oz0, stripe);
-      quad(x0 + ox0, H, z0 + oz0, x1 + ox1, H, z1 + oz1, x1 + ox1, 0, z1 + oz1, x0 + ox0, 0, z0 + oz0, dark);
+      quad(x0, y0, z0, x1, y1, z1, x1, y1 + H, z1, x0, y0 + H, z0, concrete);
+      quad(x0, y0 + H, z0, x1, y1 + H, z1, x1 + ox1, y1 + H, z1 + oz1, x0 + ox0, y0 + H, z0 + oz0, stripe);
+      quad(x0 + ox0, y0 + H, z0 + oz0, x1 + ox1, y1 + H, z1 + oz1, x1 + ox1, y1, z1 + oz1, x0 + ox0, y0, z0 + oz0, dark);
     }
   }
   const geo = new THREE.BufferGeometry();

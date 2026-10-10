@@ -133,6 +133,8 @@ export function buildProps(track: Track): Props {
       if (!facesCamera(-sgn * track.nx[r.i0], -sgn * track.nz[r.i0])) continue;
       for (let a = 22; a < r.length - 18; a += 44) {
         const f = frame(track, r.i0, a, sgn * (wallOff + 2.2));
+        // Not under or beside a bridge, and never on another stretch of road.
+        if (track.deck[(r.i0 + Math.round(a)) % track.n] !== 0 || distanceToCentreline(track, f.x, f.z) < wallOff + 1.5) continue;
         const g = new THREE.Group();
         const board = new THREE.Mesh(boardGeo, boardMats[sponsor++ % boardMats.length]);
         board.position.set(0, 1.0, 0.5);
@@ -198,6 +200,7 @@ export function buildProps(track: Track): Props {
     const off = sgn * (wallOff + 1.2);
     const x = track.px[i] + track.nx[i] * off;
     const z = track.pz[i] + track.nz[i] * off;
+    if (track.deck[i] !== 0 || distanceToCentreline(track, x, z) < wallOff + 0.8) continue;
     const lamp = new THREE.Group();
     for (const [geo, mat] of [[poleGeo, poleMat], [armGeo, poleMat], [headGeo, bulbs]] as const) {
       const m = new THREE.Mesh(geo, mat);

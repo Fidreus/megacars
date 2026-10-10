@@ -93,7 +93,7 @@ export function aiDrive(
   let vTraffic = Infinity;
   if (car.ghostTicks === 0) {
     for (const o of cars) {
-      if (o === car || o.ghostTicks > 0) continue;
+      if (o === car || o.ghostTicks > 0 || Math.abs(o.y - car.y) > 1.5) continue;
       const dx = o.x - car.x;
       const dz = o.z - car.z;
       const ahead = dx * fx + dz * fz;
