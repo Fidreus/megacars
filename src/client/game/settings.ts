@@ -22,8 +22,10 @@ export interface RaceSettings {
   soundVolume: number;
   /** 0 automatic, 1 high, 2 medium, 3 low. */
   graphics: number;
-  /** Touch controls: accelerate unless braking. */
-  touchAutoGas: boolean;
+  /** Touch gas: while the steering thumb is down, always, or a gas button. */
+  touchGas: 'thumb' | 'always' | 'button';
+  /** Older saves: automatic gas on/off. */
+  touchAutoGas?: boolean;
   /** Touch steering: drag the left thumb, or two arrow buttons. */
   touchSteer: 'slide' | 'buttons';
   /** Bumped when the default volumes change, so saved settings pick them up once. */
@@ -46,7 +48,7 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   musicVolume: 1,
   soundVolume: 7,
   graphics: 0,
-  touchAutoGas: true,
+  touchGas: 'thumb',
   touchSteer: 'slide',
   audioRev: AUDIO_REV,
 };
@@ -75,7 +77,8 @@ export function loadSettings(): RaceSettings {
   s.musicVolume = Math.max(0, Math.min(10, Math.round(s.musicVolume)));
   s.soundVolume = Math.max(0, Math.min(10, Math.round(s.soundVolume)));
   s.graphics = [0, 1, 2, 3].includes(s.graphics) ? s.graphics : 0;
-  s.touchAutoGas = s.touchAutoGas !== false;
+  if (!['thumb', 'always', 'button'].includes(s.touchGas)) s.touchGas = s.touchAutoGas === false ? 'button' : 'thumb';
+  delete s.touchAutoGas;
   s.touchSteer = s.touchSteer === 'buttons' ? 'buttons' : 'slide';
   return s;
 }

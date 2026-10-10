@@ -128,8 +128,11 @@ där den landar (analogt, med en bred neutral mitt och mjuk kurva), eller med
 två pilknappar (OPTIONS → TOUCH STEERING). Höger tumme har DRIFT (störst),
 BRAKE, MISSILE, MINE och TURBO (ammunitionen syns på knapparna), RESET och
 paus uppe till höger.
-**AUTO GAS** (på som standard, OPTIONS → TOUCH) gasar själv så att höger
-tumme är fri; broms/back avbryter. Menyerna styrs genom att trycka, långa
+**TOUCH GAS** (OPTIONS): standard är att bilen gasar medan vänster tumme
+ligger på skärmen – lyft tummen för att släppa gasen; i en oönskad sladd
+lättar gasen automatiskt (halkskydd, ej på snö/is). Andra lägen: alltid gas,
+eller en egen gasknapp. Med automatisk gas är höger tumme fri för vapen;
+broms/back avbryter gasen. Menyerna styrs genom att trycka, långa
 menyer scrollar med pilarna, och en BACK-knapp finns uppe till vänster.
 Namn och rumskod öppnar telefonens tangentbord. Gränssnittet ritas med
 större pixlar på pekskärmar så att texten går att läsa och träffa. Första

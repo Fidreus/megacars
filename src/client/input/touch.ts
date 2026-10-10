@@ -9,7 +9,13 @@ import { Surface } from '../../shared/config/surfaces.ts';
 import { Btn } from '../../shared/sim/input.ts';
 import { drawText } from '../ui/font.ts';
 
-type Role = 'gas' | 'brake' | 'drift' | 'missile' | 'mine' | 'turbo' | 'reset' | 'pause' | 'left' | 'right';
+type Role = 'gas' | 'brake' | 'drift' | 'missile' | 'mine' | 'turbo' | 'reset' | 'pause' | 'left' | 'right' | 'hold';
+
+/**
+ * 'thumb': gas while the left (steering) thumb is on the screen, lift it to
+ * ease off; 'always': gas all the time; 'button': a gas button.
+ */
+export type GasMode = 'thumb' | 'always' | 'button';
 
 interface Button {
   role: Role;
@@ -43,8 +49,7 @@ const DEAD_ZONE = 0.16;
 export class TouchControls {
   /** A touch screen has been used: show the controls. */
   enabled = false;
-  /** Accelerate unless braking. */
-  autoGas = true;
+  gasMode: GasMode = 'thumb';
   /** 'slide': drag the left thumb (analog); 'buttons': two arrow buttons (like keys). */
   steerMode: 'slide' | 'buttons' = 'slide';
   /** Controls are drawn and react (racing, not paused or on the results). */
@@ -78,8 +83,9 @@ export class TouchControls {
         this.pauseTapped = true;
         return;
       }
-      // Anything on the left side that isn't a button is the steering thumb.
-      const role = hit ?? (x < this.W * 0.45 && this.steerMode === 'slide' ? 'steer' : null);
+      // Anything on the left side that isn't a button is the steering thumb
+      // (with arrow buttons: a thumb resting between them, which still gasses).
+      const role = hit ?? this.leftThumb(x);
       this.touches.set(e.pointerId, { role, x, y, ax: x });
       this.update();
     };
@@ -94,7 +100,7 @@ export class TouchControls {
         if (t.ax - t.x > STEER_RANGE) t.ax = t.x + STEER_RANGE;
       } else {
         const hit = this.hit(t.x, t.y);
-        t.role = hit === 'pause' ? null : hit;
+        t.role = hit === 'pause' ? null : (hit ?? (t.role === 'left' || t.role === 'right' || t.role === 'hold' ? this.leftThumb(t.x) : null));
       }
       this.update();
     };
@@ -107,6 +113,17 @@ export class TouchControls {
     canvas.addEventListener('pointercancel', up);
     // No long-press menus or selection on the game.
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  /** Accelerates by itself (no gas button). */
+  get autoGas(): boolean {
+    return this.gasMode !== 'button';
+  }
+
+  /** What a touch on the left side that misses the buttons is. */
+  private leftThumb(x: number): Role | 'steer' | null {
+    if (x >= this.W * 0.45) return null;
+    return this.steerMode === 'slide' ? 'steer' : 'hold';
   }
 
   /** Hide or show (and drop held touches when hidden). */
@@ -137,9 +154,11 @@ export class TouchControls {
     let steer = 0;
     let digital = 0;
     let gas = false;
+    let thumb = false;
     let brake = false;
     let buttons = 0;
     for (const t of this.touches.values()) {
+      if (t.role === 'steer' || t.role === 'left' || t.role === 'right' || t.role === 'hold') thumb = true;
       if (t.role === 'steer') steer = Math.max(-1, Math.min(1, (t.x - t.ax) / STEER_RANGE));
       else if (t.role === 'gas') gas = true;
       else if (t.role === 'brake') brake = true;
@@ -160,7 +179,8 @@ export class TouchControls {
       this.target = Math.sign(steer) * Math.pow(a, 1.7);
     }
     this.brake = brake ? 1 : 0;
-    this.throttle = gas || (this.autoGas && !brake) ? 1 : 0;
+    const auto = this.gasMode === 'always' || (this.gasMode === 'thumb' && thumb);
+    this.throttle = gas || (auto && !brake) ? 1 : 0;
     this.buttons = buttons;
   }
 
@@ -285,6 +305,6 @@ export class TouchControls {
     ctx.arc(kx, cy, 15, 0, Math.PI * 2);
     ctx.fillStyle = steer ? 'rgba(255,216,74,0.6)' : 'rgba(255,255,255,0.25)';
     ctx.fill();
-    if (!steer) drawText(ctx, '←  STEER  →', cx, cy - 26, { color: 'rgba(255,255,255,0.7)', align: 'center' });
+    if (!steer) drawText(ctx, this.gasMode === 'thumb' ? '←  STEER + GAS  →' : '←  STEER  →', cx, cy - 26, { color: 'rgba(255,255,255,0.7)', align: 'center' });
   }
 }

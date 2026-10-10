@@ -221,7 +221,7 @@ export class App {
     };
     this.touch = new TouchControls(canvas, this.nav.toUi);
     this.renderer.setUiBoost(this.touch.enabled);
-    this.touch.autoGas = this.settings.touchAutoGas;
+    this.touch.gasMode = this.settings.touchGas;
     this.touch.steerMode = this.settings.touchSteer;
     this.input.touch = this.touch;
     this.input.touchCar = () => {
@@ -693,10 +693,11 @@ export class App {
         },
       },
       {
-        label: () => `TOUCH: AUTO GAS ${s.touchAutoGas ? 'ON' : 'OFF'}`,
-        change: () => {
-          s.touchAutoGas = !s.touchAutoGas;
-          this.touch.autoGas = s.touchAutoGas;
+        label: () => `TOUCH GAS: ${{ thumb: 'AUTO WHILE THUMB IS DOWN', always: 'AUTO ALWAYS', button: 'GAS BUTTON' }[s.touchGas]}`,
+        change: (d: number) => {
+          const modes = ['thumb', 'always', 'button'] as const;
+          s.touchGas = modes[cycle(modes.indexOf(s.touchGas), 3, d)];
+          this.touch.gasMode = s.touchGas;
           this.touch.relayout();
           changed();
         },
@@ -1672,7 +1673,7 @@ export class App {
       this.touch.arrange(W, H);
       if (this.touch.visible) this.touch.draw(ctx, { missiles: me.missiles, mines: me.mines, turbos: me.turbos }, !!w.race.weapons);
       if (this.firstRace && w.tick < w.race.startTick + 60 * 12) {
-        const gas = this.touch.autoGas ? 'THE CAR ACCELERATES BY ITSELF' : 'HOLD GAS';
+        const gas = { thumb: 'IT GASSES WHILE YOUR THUMB IS DOWN', always: 'THE CAR ACCELERATES BY ITSELF', button: 'HOLD GAS' }[this.touch.gasMode];
         const how = this.touch.steerMode === 'buttons' ? 'STEER WITH THE ARROWS' : 'DRAG YOUR LEFT THUMB TO STEER';
         drawText(ctx, `${how} - ${gas}`, W / 2, Math.round(H * 0.62), { color: '#ffd84a', align: 'center' });
         drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, Math.round(H * 0.62) + 11, { color: '#ffd84a', align: 'center' });

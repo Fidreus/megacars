@@ -52,7 +52,7 @@ function seasonSettings(division: number): RaceSettings {
     musicVolume: 0,
     soundVolume: 0,
     graphics: 0,
-    touchAutoGas: true,
+    touchGas: 'thumb',
     touchSteer: 'slide',
   };
 }

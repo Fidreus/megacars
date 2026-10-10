@@ -81,7 +81,8 @@ export class InputManager {
         else buttons &= ~Btn.Analog;
       }
       buttons |= t.buttons;
-      const car = t.autoGas && t.brake === 0 ? this.touchCar?.() : null;
+      // (No gas at all while the thumb is lifted in 'thumb' mode: t.throttle is 0.)
+      const car = t.autoGas && t.brake === 0 && t.throttle > 0 ? this.touchCar?.() : null;
       // AUTO GAS eases off in a slide you didn't ask for (traction control).
       throttle = Math.max(throttle, car ? t.autoGasFor(car, !!(buttons & Btn.Drift)) : t.throttle);
       brake = Math.max(brake, t.brake);
