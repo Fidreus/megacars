@@ -5,6 +5,7 @@
 // the right thumb free for the weapons. Sliding a finger from one button to
 // another switches buttons. Drawn on the low-res UI canvas.
 
+import { Surface } from '../../shared/config/surfaces.ts';
 import { Btn } from '../../shared/sim/input.ts';
 import { drawText } from '../ui/font.ts';
 
@@ -34,6 +35,8 @@ export interface TouchAmmo {
 
 /** Steering thumb travel (UI pixels) for full lock. */
 const STEER_RANGE = 46;
+/** A lift by the traction control lasts at least this long (> the sim's liftTapTicks). */
+const LIFT_HOLD_TICKS = 24;
 /** Share of the travel around the middle that counts as straight ahead. */
 const DEAD_ZONE = 0.16;
 
@@ -159,6 +162,36 @@ export class TouchControls {
     this.brake = brake ? 1 : 0;
     this.throttle = gas || (this.autoGas && !brake) ? 1 : 0;
     this.buttons = buttons;
+  }
+
+  /** Ticks the traction control has kept the gas low (see autoGasFor). */
+  private lowTicks = 0;
+
+  /**
+   * AUTO GAS with traction control: full gas, eased off while the car slides
+   * without the drift button held, so a slide you didn't want dies out
+   * sooner and you hit fewer walls. Once it dips to a lift (<= 0.5) it stays
+   * there for a little while: a short lift and back on the gas would
+   * otherwise kick off the lift-off drift. Not on snow and ice, where
+   * lifting makes it worse (tested on all tracks). Call once per tick.
+   */
+  autoGasFor(car: { slip: number; sliding: number; surfRear: number }, driftHeld: boolean): number {
+    if (car.surfRear === Surface.Snow || car.surfRear === Surface.Ice) {
+      this.lowTicks = 0;
+      return 1;
+    }
+    const slipDeg = Math.abs(car.slip) * (180 / Math.PI);
+    const t = Math.min(1, Math.max(0, (slipDeg - 6) / 19));
+    let gas = car.sliding && !driftHeld ? 1 - 0.7 * t * t * (3 - 2 * t) : 1;
+    if (gas <= 0.5) {
+      this.lowTicks++;
+    } else if (this.lowTicks > 0 && this.lowTicks <= LIFT_HOLD_TICKS) {
+      this.lowTicks++;
+      gas = 0.45;
+    } else {
+      this.lowTicks = 0;
+    }
+    return gas;
   }
 
   /** Steering follows the thumb smoothly (call once per frame). */

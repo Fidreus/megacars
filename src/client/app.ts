@@ -224,6 +224,10 @@ export class App {
     this.touch.autoGas = this.settings.touchAutoGas;
     this.touch.steerMode = this.settings.touchSteer;
     this.input.touch = this.touch;
+    this.input.touchCar = () => {
+      const id = this.session?.playerCars[0];
+      return id === undefined ? null : this.world.cars[id];
+    };
     this.textBridge = new TextBridge(canvas);
     this.textBridge.pick = (cx, cy) => {
       const menu = this.activeMenu;

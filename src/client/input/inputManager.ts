@@ -21,6 +21,8 @@ export class InputManager {
   overrideTicks = 0;
   /** On-screen touch controls (drive player 1 while they are shown). */
   touch: TouchControls | null = null;
+  /** Player 1's car, for the touch traction control. */
+  touchCar: (() => { slip: number; sliding: number; surfRear: number } | null) | null = null;
   /** Pads that were the most recently used device of their player. */
   private readonly padInUse = new Set<number>();
 
@@ -78,11 +80,13 @@ export class InputManager {
         if (t.analog) buttons |= Btn.Analog;
         else buttons &= ~Btn.Analog;
       }
-      throttle = Math.max(throttle, t.throttle);
+      buttons |= t.buttons;
+      const car = t.autoGas && t.brake === 0 ? this.touchCar?.() : null;
+      // AUTO GAS eases off in a slide you didn't ask for (traction control).
+      throttle = Math.max(throttle, car ? t.autoGasFor(car, !!(buttons & Btn.Drift)) : t.throttle);
       brake = Math.max(brake, t.brake);
       // Braking (reverse) cancels the automatic gas.
       if (t.brake > 0 && t.autoGas) throttle = 0;
-      buttons |= t.buttons;
     }
     out.steer = steer;
     out.throttle = throttle;
