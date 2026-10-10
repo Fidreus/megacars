@@ -174,7 +174,7 @@ export class Online {
   private onState(s: ConnState): void {
     if (s === 'open') this.flush();
     else if (s === 'retrying') this.events.notice('CONNECTION LOST - RECONNECTING');
-    else if (s === 'failed') this.events.notice('CANNOT REACH THE SERVER');
+    else if (s === 'failed') this.events.notice(this.conn.outdated ? 'A NEW VERSION IS OUT - RELOAD THE PAGE' : 'CANNOT REACH THE SERVER');
   }
 
   private onMessage(msg: ServerMsg): void {
@@ -205,7 +205,7 @@ export class Online {
         this.profile = msg.profile;
         break;
       case 'error':
-        this.events.notice(msg.msg.toUpperCase());
+        if (msg.code !== 'version') this.events.notice(msg.msg.toUpperCase());
         break;
     }
   }

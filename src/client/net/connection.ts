@@ -18,6 +18,8 @@ export class Connection {
   state: ConnState = 'idle';
   /** Smoothed round-trip time in ms (-1 until measured). */
   rtt = -1;
+  /** The server runs a newer game version: reload the page to play online. */
+  outdated = false;
   /** Our player id once the server has welcomed us. */
   id = -1;
   name: string;
@@ -32,6 +34,16 @@ export class Connection {
   constructor(name: string, events: ConnectionEvents) {
     this.name = name;
     this.events = events;
+    // Network back, or back in the tab/app (phones drop sockets in the
+    // background): try again right away instead of waiting out the back-off.
+    const retryNow = () => {
+      if (!this.wanted || this.ws || document.hidden) return;
+      clearTimeout(this.retryTimer);
+      this.attempts = Math.min(this.attempts, 1);
+      this.open();
+    };
+    window.addEventListener('online', retryNow);
+    document.addEventListener('visibilitychange', retryNow);
   }
 
   get online(): boolean {
@@ -108,7 +120,9 @@ export class Connection {
         }
         this.setState('open');
       } else if (msg.t === 'error' && msg.code === 'version') {
+        // A newer game is on the server: reconnecting won't help, reloading will.
         this.wanted = false;
+        this.outdated = true;
         this.setState('failed');
       }
       this.events.message(msg);
@@ -125,6 +139,7 @@ export class Connection {
       // Back off: 0.5 s, 1 s, 2 s ... up to 8 s; give up after about a minute.
       this.attempts++;
       if (this.attempts > 12) {
+        // Still wanted: the 'online' and visibility events can bring it back.
         this.setState('failed');
         return;
       }

@@ -1,5 +1,7 @@
 // Gamepad API polling with the "standard" mapping (Xbox/PlayStation pads).
 
+import { PAD_DEFAULT, type PadBinding } from './bindings.ts';
+
 export interface PadState {
   connected: boolean;
   steer: number;
@@ -9,19 +11,20 @@ export interface PadState {
   fireRear: boolean;
   turbo: boolean;
   drift: boolean;
+  reset: boolean;
   /** Any input this frame (used to pick keyboard vs pad). */
   active: boolean;
 }
 
 const DEADZONE = 0.12;
 
-export function readPad(index: number, out: PadState): PadState {
+export function readPad(index: number, out: PadState, bind: PadBinding = PAD_DEFAULT): PadState {
   const pads = navigator.getGamepads?.() ?? [];
   const gp = pads[index];
   out.connected = !!gp;
   out.active = false;
   out.steer = out.throttle = out.brake = 0;
-  out.fireFront = out.fireRear = out.turbo = out.drift = false;
+  out.fireFront = out.fireRear = out.turbo = out.drift = out.reset = false;
   if (!gp) return out;
   const b = (i: number) => gp.buttons[i];
   const val = (i: number) => (b(i) ? b(i).value : 0);
@@ -34,17 +37,35 @@ export function readPad(index: number, out: PadState): PadState {
   if (pressed(14)) x = -1;
   if (pressed(15)) x = 1;
   out.steer = x;
-  out.throttle = Math.max(val(7), pressed(0) ? 1 : 0);
-  out.brake = Math.max(val(6), pressed(1) ? 1 : 0);
-  out.fireFront = pressed(2) || pressed(5);
-  // A/RT gas, B/LT brake, X/RB missile, Y/d-pad down mine, d-pad up/L3 turbo, LB drift.
-  out.fireRear = pressed(3) || pressed(13);
-  out.turbo = pressed(12) || pressed(10);
-  out.drift = pressed(4);
-  out.active = x !== 0 || out.throttle > 0.05 || out.brake > 0.05 || out.fireFront || out.fireRear || out.turbo || out.drift;
+  const value = (bs: number[]) => bs.reduce((m, i) => Math.max(m, val(i), pressed(i) ? 1 : 0), 0);
+  const any = (bs: number[]) => bs.some(pressed);
+  out.throttle = value(bind.gas);
+  out.brake = value(bind.brake);
+  out.fireFront = any(bind.fireFront);
+  out.fireRear = any(bind.fireRear);
+  out.turbo = any(bind.turbo);
+  out.drift = any(bind.drift);
+  out.reset = any(bind.reset);
+  out.active = x !== 0 || out.throttle > 0.05 || out.brake > 0.05 || out.fireFront || out.fireRear || out.turbo || out.drift || out.reset;
   return out;
 }
 
 export function makePadState(): PadState {
-  return { connected: false, steer: 0, throttle: 0, brake: 0, fireFront: false, fireRear: false, turbo: false, drift: false, active: false };
+  return { connected: false, steer: 0, throttle: 0, brake: 0, fireFront: false, fireRear: false, turbo: false, drift: false, reset: false, active: false };
+}
+
+/** A button newly pressed on any pad this frame (for rebinding), or -1. */
+export function newPadButton(prev: boolean[][]): number {
+  const pads = navigator.getGamepads?.() ?? [];
+  let hit = -1;
+  pads.forEach((gp, p) => {
+    if (!gp) return;
+    const now = gp.buttons.map((b) => b.pressed);
+    const before = prev[p] ?? [];
+    now.forEach((down, i) => {
+      if (down && !before[i] && hit < 0) hit = i;
+    });
+    prev[p] = now;
+  });
+  return hit;
 }

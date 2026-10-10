@@ -10,12 +10,17 @@ export class Keyboard {
   private readonly pressed = new Set<string>();
   /** Printable characters typed this frame (for text fields). */
   typed = '';
+  /** Keys pressed this frame, in order (for rebinding). */
+  readonly presses: string[] = [];
 
   constructor(target: Window) {
     target.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (GAME_KEYS.has(e.code)) e.preventDefault();
-      if (!e.repeat) this.pressed.add(e.code);
+      if (!e.repeat) {
+        this.pressed.add(e.code);
+        this.presses.push(e.code);
+      }
       if (e.key.length === 1) this.typed += e.key;
       this.down.add(e.code);
     });
@@ -44,5 +49,6 @@ export class Keyboard {
   endFrame(): void {
     this.pressed.clear();
     this.typed = '';
+    this.presses.length = 0;
   }
 }

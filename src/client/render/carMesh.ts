@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import { toon } from './materials.ts';
+import { mergeByMaterial } from './batch.ts';
 import { drawText } from '../ui/font.ts';
 
 type Line = [number, number][];
@@ -290,6 +291,13 @@ export class CarView {
     }
     add(new THREE.BoxGeometry(BODY_W - 0.3, 0.07, 0.05), this.tailMat).position.set(0, st.top[st.top.length - 1][1] - 0.05, rear + 0.01);
     for (const x of [-0.35, 0.35]) add(exhaustGeo, pipe).position.set(x, BOTTOM + 0.14, rear + 0.05);
+    // Tiny parts don't need their own shadow (the body's covers them).
+    for (const o of this.body.children) {
+      const m = o as THREE.Mesh;
+      if (m.material === this.headMat || m.material === this.tailMat || m.material === pipe) m.castShadow = false;
+    }
+    // One mesh per material: far fewer draw calls for eight cars.
+    mergeByMaterial(this.body);
 
     // Wheels: fat tyres with bright rims; front ones steer, all of them spin.
     for (const [x, z, isFront] of [
@@ -300,7 +308,7 @@ export class CarView {
       const spinner = new THREE.Object3D();
       pivot.add(spinner);
       add(wheelGeo, tyre, spinner);
-      add(rimGeo, rimMat, spinner);
+      add(rimGeo, rimMat, spinner).castShadow = false;
       this.wheels.push(spinner);
       this.root.add(pivot);
       if (isFront) this.frontPivots.push(pivot);

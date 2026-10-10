@@ -1,9 +1,10 @@
 // Game server: serves the built client from dist/ and hosts the WebSocket
 // endpoint on /ws. In development Vite serves the client and proxies /ws here.
 
-import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
+import { brotliCompress, constants as zlibConstants, gzipSync } from 'node:zlib';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TICK_RATE } from '../shared/config/constants.ts';
 import { Client, GameServer } from './gameServer.ts';
@@ -27,7 +28,34 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
   '.wav': 'audio/wav',
   '.ogg': 'audio/ogg',
+  '.mp3': 'audio/mpeg',
+  '.md': 'text/markdown; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
 };
+
+/** Worth compressing (text and tracker modules; not Ogg/MP3/PNG). */
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.map', '.svg', '.md', '.webmanifest', '.xm', '.mod', '.s3m', '.it']);
+
+interface Packed {
+  tag: string;
+  gzip: Buffer;
+  br: Buffer | null;
+}
+
+/** Compressed copies of served files, made on first request (gzip now, brotli in the background). */
+const packed = new Map<string, Packed>();
+
+function pack(file: string, tag: string): Packed {
+  const hit = packed.get(file);
+  if (hit && hit.tag === tag) return hit;
+  const raw = readFileSync(file);
+  const p: Packed = { tag, gzip: gzipSync(raw, { level: 6 }), br: null };
+  packed.set(file, p);
+  brotliCompress(raw, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11, [zlibConstants.BROTLI_PARAM_SIZE_HINT]: raw.length } }, (err, out) => {
+    if (!err && packed.get(file) === p) p.br = out;
+  });
+  return p;
+}
 
 function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   const url = new URL(req.url ?? '/', 'http://localhost');
@@ -57,12 +85,42 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     file = join(DIST, path);
   }
   const ext = extname(file);
-  const immutable = path.startsWith('assets/');
-  res.writeHead(200, {
+  const st = statSync(file);
+  const tag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+  // Hashed build output never changes; music is never replaced under the
+  // same name; everything else is revalidated (a cheap 304 with the ETag).
+  const cache = path.startsWith('assets/')
+    ? 'public, max-age=31536000, immutable'
+    : path.startsWith('music/')
+      ? 'public, max-age=604800'
+      : 'no-cache';
+  const headers: Record<string, string> = {
     'content-type': MIME[ext] ?? 'application/octet-stream',
-    'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
-  });
-  createReadStream(file).pipe(res);
+    'cache-control': cache,
+    etag: tag,
+  };
+  if (req.headers['if-none-match'] === tag) {
+    res.writeHead(304, headers);
+    res.end();
+    return;
+  }
+  if (COMPRESSIBLE.has(ext) && st.size > 1024) {
+    headers.vary = 'accept-encoding';
+    const accept = String(req.headers['accept-encoding'] ?? '');
+    const p = pack(file, tag);
+    const body = p.br && /\bbr\b/.test(accept) ? p.br : /\bgzip\b/.test(accept) ? p.gzip : null;
+    if (body) {
+      headers['content-encoding'] = body === p.br ? 'br' : 'gzip';
+      headers['content-length'] = String(body.length);
+      res.writeHead(200, headers);
+      res.end(req.method === 'HEAD' ? undefined : body);
+      return;
+    }
+  }
+  headers['content-length'] = String(st.size);
+  res.writeHead(200, headers);
+  if (req.method === 'HEAD') res.end();
+  else createReadStream(file).pipe(res);
 }
 
 function saveScreenshot(req: IncomingMessage, res: ServerResponse, url: URL): void {

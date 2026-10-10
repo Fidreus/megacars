@@ -51,6 +51,7 @@ function seasonSettings(division: number): RaceSettings {
     musicMode: 0,
     musicVolume: 0,
     soundVolume: 0,
+    graphics: 0,
   };
 }
 

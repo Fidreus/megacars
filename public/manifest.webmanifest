@@ -1,0 +1,16 @@
+{
+  "name": "Megacars - Retro Combat Racing",
+  "short_name": "Megacars",
+  "description": "Top-down retro combat racing: race, blast the others and upgrade your car.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0a0c1a",
+  "theme_color": "#0a0c1a",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

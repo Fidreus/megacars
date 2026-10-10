@@ -4,9 +4,24 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MEGACARS</title>
+    <meta name="description" content="Top-down retro combat racing in the browser." />
+    <meta name="theme-color" content="#0a0c1a" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Megacars" />
     <style>
       html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
       #game { display: block; width: 100vw; height: 100vh; outline: none; cursor: none; }
+      #loading {
+        position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        color: #ffd84a; background: #0a0c1a; font: bold 28px/1.4 ui-monospace, Menlo, monospace; letter-spacing: 4px;
+      }
+      #loading small { color: #8090a8; font-size: 13px; letter-spacing: 2px; animation: blink 1s steps(2) infinite; }
+      @keyframes blink { 50% { opacity: 0; } }
       #fatal {
         position: fixed; inset: 0; display: none; padding: 24px; color: #ff6b5e;
         background: rgba(0, 0, 0, 0.85); font: 14px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap;
@@ -15,6 +30,7 @@
   </head>
   <body>
     <canvas id="game" tabindex="0"></canvas>
+    <div id="loading">MEGACARS<small>LOADING...</small></div>
     <div id="fatal"></div>
     <script type="module" src="/src/client/main.ts"></script>
   </body>

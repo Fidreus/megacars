@@ -113,8 +113,24 @@ köp. Värden kan starta en **NEW SEASON**.
 Delad skärm: **P1** WASD, drift Q, missil/mina/turbo G/F/H, **P2**
 piltangenter, drift L, missil/mina/turbo . , -. Handkontroller: vänster
 spak styr, RT/A gas, LT/B broms, LB drift, X/RB missil, Y/↓ mina, ↑/L3
-turbo, Start paus;
+turbo, Select återställ bil, Start paus;
 handkontroll 1 = P1, handkontroll 2 = P2.
+
+Alla tangenter och knappar kan bytas under **OPTIONS → CONTROLS** (en
+spelare, delad skärm vänster/höger och handkontroll, två platser per
+funktion). **HOW TO PLAY** i titelmenyn visar de nuvarande knapparna.
+
+## Grafik och prestanda
+
+**OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM eller LOW. AUTO börjar på HIGH och
+går ner ett steg om spelet ligger under ~45 fps i några sekunder under ett
+race (skuggkartan halveras, sedan stängs skuggor av; färre partiklar).
+Valet sparas. Statiska föremål slås ihop till några få stora meshar per
+område, och bilarnas delar per material, för färre draw calls.
+
+Servern komprimerar (brotli/gzip) och skickar ETag, så återbesök laddar
+nästan ingenting. Spelet kan installeras som app (PWA) och startar offline
+för spel mot datorn.
 
 ## Musik
 

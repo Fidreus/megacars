@@ -1,6 +1,7 @@
 // window.__megacars: hooks for automated testing and debugging from the
 // browser console (state inspection, scripted driving, tuning).
 
+import type * as THREE from 'three';
 import type { CarTuning } from '../../shared/config/tuning.ts';
 import { neutralInput } from '../../shared/sim/input.ts';
 import type { App } from '../app.ts';
@@ -59,6 +60,36 @@ export function installDebugApi(app: App): void {
       /** Average ms per simulated + rendered frame. */
       bench: (frames = 120) => app.bench(frames),
       split: () => app.toggleSplit(),
+      /** Visible meshes per top-level scene group (and how many cast shadows). */
+      meshes() {
+        const out: Record<string, { meshes: number; shadow: number; tris: number }> = {};
+        const groups: THREE.Object3D[] = [];
+        for (const top of app.scene.children) groups.push(...(top.type === 'Group' && !top.name ? top.children : [top]));
+        for (const top of groups) {
+          const key = top.name || top.type;
+          const e = (out[key] ??= { meshes: 0, shadow: 0, tris: 0 });
+          top.traverseVisible((o) => {
+            const m = o as THREE.Mesh;
+            if (!m.isMesh) return;
+            e.meshes++;
+            if (m.castShadow) e.shadow++;
+            const g = m.geometry;
+            const n = g.index ? g.index.count / 3 : (g.attributes.position?.count ?? 0) / 3;
+            e.tris += Math.round(n * ((m as THREE.InstancedMesh).count ?? 1));
+          });
+        }
+        return out;
+      },
+      /** Draw calls, triangles and GPU memory of the last frame's main scene render. */
+      stats() {
+        const gl = app.renderer.gl;
+        gl.info.autoReset = false;
+        gl.info.reset();
+        app.advance(0);
+        const r = { calls: gl.info.render.calls, triangles: gl.info.render.triangles, geometries: gl.info.memory.geometries, textures: gl.info.memory.textures, programs: gl.info.programs?.length ?? 0 };
+        gl.info.autoReset = true;
+        return r;
+      },
       /** Change the look: mood id, palette mode (0 full, 1 12-bit, 2 32 colours), CRT level, outlines. */
       look(o: { mood?: string; palette?: number; crt?: number; outlines?: boolean }) {
         if (o.mood) app.setMood(moodById(o.mood));
@@ -96,6 +127,13 @@ export function installDebugApi(app: App): void {
     /** Level of the sound effects (engines, tyres, bangs) right now. */
     sfx() {
       return +app.audio.level().toFixed(4);
+    },
+    /** Open the controls screen; read the current bindings. */
+    openControls() {
+      app.mode = 'controls';
+    },
+    controls() {
+      return JSON.parse(JSON.stringify(app.controls)) as unknown;
     },
     /** Peak sample of the whole mix before the limiter (over 1 = would clip). */
     peak() {

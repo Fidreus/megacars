@@ -1,7 +1,7 @@
 // Turns keyboard + gamepad state into a quantised CarInput per local player.
 
 import { Btn, quantizeInput, type CarInput } from '../../shared/sim/input.ts';
-import type { KeyBinding } from './bindings.ts';
+import { PAD_DEFAULT, type KeyBinding, type PadBinding } from './bindings.ts';
 import { makePadState, readPad } from './gamepad.ts';
 import { Keyboard } from './keyboard.ts';
 
@@ -9,6 +9,7 @@ export interface LocalPlayerInput {
   keys: KeyBinding | null;
   /** Gamepad index, or -1 for none. */
   pad: number;
+  padKeys?: PadBinding;
 }
 
 export class InputManager {
@@ -49,7 +50,7 @@ export class InputManager {
       if (kb.anyDown(k.drift)) buttons |= Btn.Drift;
     }
     if (player.pad >= 0) {
-      const p = readPad(player.pad, this.pad);
+      const p = readPad(player.pad, this.pad, player.padKeys ?? PAD_DEFAULT);
       if (p.connected) {
         if (p.active) this.padInUse.add(player.pad);
         if (this.padInUse.has(player.pad)) {
@@ -63,6 +64,7 @@ export class InputManager {
         if (p.fireRear) buttons |= Btn.FireRear;
         if (p.turbo) buttons |= Btn.Turbo;
         if (p.drift) buttons |= Btn.Drift;
+        if (p.reset) buttons |= Btn.Reset;
       }
     }
     out.steer = steer;

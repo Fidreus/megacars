@@ -27,7 +27,10 @@ import { attractSession, RaceSession } from './game/raceSession.ts';
 import type { GameSession } from './game/session.ts';
 import { lightsOn, RaceView } from './game/raceView.ts';
 import { DIFFICULTIES, loadSettings, saveSettings, type RaceSettings } from './game/settings.ts';
-import { P1_KEYS, P2_KEYS, SOLO_KEYS } from './input/bindings.ts';
+import { keysLabel, loadControls, type KeyBinding } from './input/bindings.ts';
+import { ControlsScreen } from './ui/screens/controls.ts';
+import { drawHelp } from './ui/screens/help.ts';
+import { VERSION } from './version.ts';
 import { InputManager, type LocalPlayerInput } from './input/inputManager.ts';
 import { Nav, type NavState } from './input/nav.ts';
 import type { Params } from './params.ts';
@@ -38,6 +41,7 @@ import { buildProps } from './render/props.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
 import { buildTown } from './render/town.ts';
+import { batchStatic } from './render/batch.ts';
 import { Music, MUSIC_MODES, type MusicMode, type MusicScene } from './audio/music.ts';
 import { drawCredits } from './ui/screens/credits.ts';
 import { buildIndustry, type SteamSource } from './render/industry.ts';
@@ -59,7 +63,13 @@ import { drawSeasonEnd } from './ui/screens/season.ts';
 import type { RaceSpec } from '../shared/net/protocol.ts';
 
 const SHADOW_HALF = 62;
-const SHADOW_MAP = 2048;
+/** Graphics levels: high, medium, low. Shadow map size 0 = no shadows. */
+const QUALITY_NAMES = ['HIGH', 'MEDIUM', 'LOW'];
+const QUALITY_SHADOW = [2048, 1024, 0];
+const QUALITY_PARTICLES = [1, 0.7, 0.45];
+const AUTO_QUALITY_KEY = 'megacars.autoQuality';
+/** Below this frame rate (over a few seconds of racing) AUTO steps down. */
+const AUTO_MIN_FPS = 45;
 /** Tyre sound family for each surface id. */
 const TYRE_SURFACE: number[] = [];
 TYRE_SURFACE[Surface.Asphalt] = TyreSurface.Paved;
@@ -80,7 +90,7 @@ const FAR_RANGE = 45;
 const VIEW_HEIGHT = 51.3;
 
 /** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
-type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'credits';
+type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'controls' | 'help' | 'credits';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -135,6 +145,9 @@ export class App {
   private career: Career | null = null;
   private readonly careerMenu: Menu;
   private readonly optionsMenu: Menu;
+  /** Key and gamepad bindings (saved in the browser). */
+  readonly controls = loadControls();
+  private readonly controlsScreen: ControlsScreen;
   readonly music: Music;
   private songToast = 0;
   private cupRace = false;
@@ -153,6 +166,10 @@ export class App {
   private time = 0;
   private fpsTime = 0;
   private fpsFrames = 0;
+  /** Graphics level in use (index into QUALITY_*), and what AUTO settled on. */
+  private quality = 0;
+  private autoQuality = 0;
+  private readonly qualityWatch = { time: 0, frames: 0, grace: 4 };
   private flash = '';
   private flashTime = 0;
   private showTelemetry = false;
@@ -184,7 +201,7 @@ export class App {
     this.scene.add(this.hemi);
     const sun = this.sun;
     sun.castShadow = true;
-    sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+    sun.shadow.mapSize.set(QUALITY_SHADOW[0], QUALITY_SHADOW[0]);
     const sc = sun.shadow.camera;
     sc.left = -SHADOW_HALF;
     sc.right = SHADOW_HALF;
@@ -249,6 +266,7 @@ export class App {
     this.audio.volume = (this.settings.soundVolume / 10) * 0.9;
     this.music.onSong = () => (this.songToast = 4);
     this.optionsMenu = new Menu(this.buildOptionItems(), { onMove: beep, onChange: change });
+    this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'options'), (k) => playUi(this.audio, k));
     // Music on/off, volumes and next song are also in the pause menu (Esc).
     this.pauseMenu.items.splice(2, 0, ...this.buildOptionItems().slice(0, 4));
     this.careerMenu = new Menu([
@@ -291,6 +309,12 @@ export class App {
       if (this.debugView) this.debugView.visible = true;
       void this.openTuning();
     }
+    try {
+      this.autoQuality = Math.max(0, Math.min(2, Number(localStorage.getItem(AUTO_QUALITY_KEY)) || 0));
+    } catch {
+      // No storage: start high.
+    }
+    this.applyQuality();
     installDebugApi(this);
 
     const unlock = () => {
@@ -365,6 +389,7 @@ export class App {
       { label: () => `DIFFICULTY: ${DIFFICULTIES[s.difficulty]}`, change: (d: number) => { s.difficulty = cycle(s.difficulty, 3, d); changed(); } },
       { label: () => `WEAPONS: ${s.weapons ? 'ON' : 'OFF'}`, change: () => { s.weapons = !s.weapons; changed(); } },
       { label: () => 'OPTIONS', select: () => { this.mode = 'options'; this.optionsMenu.index = 0; } },
+      { label: () => 'HOW TO PLAY', select: () => (this.mode = 'help') },
       { label: () => 'FREE PRACTICE', select: () => this.startRace({ ...s, practice: true, players: 1, opponents: 0 }) },
     ];
   }
@@ -533,9 +558,33 @@ export class App {
         },
       },
       {
+        label: () => (s.graphics === 0 ? `GRAPHICS: AUTO (${QUALITY_NAMES[this.autoQuality]})` : `GRAPHICS: ${QUALITY_NAMES[s.graphics - 1]}`),
+        change: (d: number) => {
+          s.graphics = cycle(s.graphics, 4, d);
+          // Choosing AUTO again starts from the top.
+          if (s.graphics === 0) {
+            this.autoQuality = 0;
+            try {
+              localStorage.removeItem(AUTO_QUALITY_KEY);
+            } catch {
+              // Fine.
+            }
+          }
+          this.applyQuality();
+          changed();
+        },
+      },
+      {
         label: () => (this.music.own.size ? `MY MUSIC: ${this.music.own.size} FILES - CLEAR` : 'MY MUSIC: DROP .MOD/.XM FILES ON THE GAME'),
         disabled: () => this.music.own.size === 0,
         select: () => void this.music.clearOwn().then(() => this.flashMessage('MY MUSIC CLEARED')),
+      },
+      {
+        label: () => 'CONTROLS (KEYS AND GAMEPAD)',
+        select: () => {
+          this.mode = 'controls';
+          this.controlsScreen.menu.index = 0;
+        },
       },
       { label: () => 'MUSIC CREDITS', select: () => (this.mode = 'credits') },
       { label: () => 'BACK', select: () => this.toTitle() },
@@ -544,7 +593,7 @@ export class App {
 
   /** What the music should be doing for the current screen. */
   private musicScene(): MusicScene {
-    if (this.mode === 'title' || this.mode === 'options' || this.mode === 'credits') return { kind: 'title' };
+    if (this.mode === 'title' || this.mode === 'options' || this.mode === 'controls' || this.mode === 'help' || this.mode === 'credits') return { kind: 'title' };
     if (this.mode === 'seasonEnd' || this.mode === 'standings' || this.showingResults) return { kind: 'results' };
     if (this.mode === 'race') return { kind: 'race', track: this.session.track.def.id };
     return { kind: 'menu' };
@@ -567,6 +616,7 @@ export class App {
     this.paused = false;
     this.lastLights = 0;
     this.cupRace = !!spec;
+    this.qualityWatch.grace = 4;
     this.setSession(new RaceSession({ ...settings }, this.tuning, spec?.seed, spec));
   }
 
@@ -641,6 +691,7 @@ export class App {
     if (this.track !== session.track) this.setTrack(session.track);
     this.session = session;
     this.view = new RaceView(this.scene, session, this.mood.lights, this.mood.headlight);
+    this.view.particles.density = QUALITY_PARTICLES[this.quality];
     this.view.effects.steam = this.steam;
     this.fireworks = 0;
     this.shake = 0;
@@ -673,6 +724,8 @@ export class App {
     keepOut.push(...town.keepOut);
     this.windowMats = town.windows;
     g.add(buildScenery(track, keepOut));
+    // Merge the many small static meshes into a few per area (draw calls).
+    batchStatic(g, new Set(town.windows), new Set(props.nightLights));
     this.debugView = buildTrackDebugView(track, this.tuning);
     g.add(this.debugView);
     this.nightLights = props.nightLights;
@@ -767,6 +820,7 @@ export class App {
     }
     if (this.audio.ctx) this.music.play(this.musicScene());
     this.renderFrame(alpha, dt);
+    this.watchQuality(dt);
     this.input.keyboard.endFrame();
     this.fpsFrames++;
     this.fpsTime += dt;
@@ -797,6 +851,7 @@ export class App {
     if (this.mode === 'lobby') return this.lobbyMenu;
     if (this.mode === 'cup') return this.cupMenu;
     if (this.mode === 'options') return this.optionsMenu;
+    if (this.mode === 'controls') return this.controlsScreen.menu;
     if (this.mode === 'career') return this.careerMenu;
     if (this.mode === 'shop') return this.shop?.menu ?? null;
     return this.paused ? this.pauseMenu : null;
@@ -806,7 +861,7 @@ export class App {
     const kb = this.input.keyboard;
     this.nav.textMode = this.activeMenu?.typing ?? false;
     const nav = this.nav.poll(dt);
-    if (this.nav.textMode) {
+    if (this.nav.textMode || (this.mode === 'controls' && this.controlsScreen.capturing)) {
       // Letters and digits go into the text field.
       this.handleMenus(nav);
       return;
@@ -861,6 +916,14 @@ export class App {
     if (this.mode === 'options') {
       if (nav.back) this.toTitle();
       else this.optionsMenu.handle(nav);
+      return;
+    }
+    if (this.mode === 'controls') {
+      this.controlsScreen.handle(nav);
+      return;
+    }
+    if (this.mode === 'help') {
+      if (nav.back || nav.confirm || nav.click || nav.left || nav.right) this.mode = 'title';
       return;
     }
     if (this.mode === 'credits') {
@@ -933,8 +996,9 @@ export class App {
 
   private playerInputs(): LocalPlayerInput[] {
     const n = this.session.playerCars.length;
-    if (n === 2) return [{ keys: P1_KEYS, pad: 0 }, { keys: P2_KEYS, pad: 1 }];
-    return [{ keys: SOLO_KEYS, pad: this.padIndex }];
+    const c = this.controls;
+    if (n === 2) return [{ keys: c.p1, pad: 0, padKeys: c.pad }, { keys: c.p2, pad: 1, padKeys: c.pad }];
+    return [{ keys: c.solo, pad: this.padIndex, padKeys: c.pad }];
   }
 
   private fixedStep(): void {
@@ -1113,7 +1177,7 @@ export class App {
 
   /** Keep the shadow map centred on the view, snapped to whole shadow texels. */
   private updateSun(target: THREE.Vector3): void {
-    const texel = (SHADOW_HALF * 2) / SHADOW_MAP;
+    const texel = (SHADOW_HALF * 2) / this.sun.shadow.mapSize.x;
     const r = Math.round(target.dot(this.sunRight) / texel) * texel;
     const u = Math.round(target.dot(this.sunUp) / texel) * texel;
     const f = target.dot(this.sunDir);
@@ -1206,11 +1270,13 @@ export class App {
       ctx.fillRect(0, 0, W, H);
       const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
       this.titleMenu.draw(ctx, W / 2, top + 14, fitScale(this.titleMenu, top + 14, H - 30), dt);
+      const c = this.controls;
       const help = this.settings.players === 2
-        ? 'P1: WASD + Q DRIFT + G/F/H   P2: ARROWS + L DRIFT + . , -   OR GAMEPADS'
-        : 'ARROWS/WASD DRIVE   Z DRIFT   SPACE MISSILE   X MINE   C TURBO   R RESET';
+        ? `P1: ${driveKeys(c.p1)} ${keysLabel(c.p1, 'drift')} DRIFT   P2: ${driveKeys(c.p2)} ${keysLabel(c.p2, 'drift')} DRIFT   OR GAMEPADS`
+        : `${driveKeys(c.solo)} DRIVE   ${keysLabel(c.solo, 'drift')} DRIFT   ${keysLabel(c.solo, 'fireFront')} MISSILE   ${keysLabel(c.solo, 'fireRear')} MINE   ${keysLabel(c.solo, 'turbo')} TURBO`;
       drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
       drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+      drawText(ctx, `V${VERSION}`, W - 4, H - 11, { align: 'right', color: '#5a6478' });
     } else if (this.mode === 'online') {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
@@ -1242,6 +1308,12 @@ export class App {
       drawText(ctx, 'OPTIONS', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
       this.optionsMenu.draw(ctx, W / 2, top + 30, fitScale(this.optionsMenu, top + 30, H - 30), dt);
       drawText(ctx, 'TIP: DRAG YOUR OWN .MOD / .XM FILES ONTO THE GAME TO ADD THEM - THEY STAY ON YOUR COMPUTER', W / 2, H - 11, { color: '#8090a8', align: 'center' });
+    } else if (this.mode === 'help') {
+      drawHelp(ctx, W, H, this.controls);
+    } else if (this.mode === 'controls') {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(0, 0, W, H);
+      this.controlsScreen.draw(ctx, W, H, Math.round(H * 0.06), dt);
     } else if (this.mode === 'credits') {
       drawCredits(ctx, W, H, this.time);
     } else if (this.mode === 'seasonEnd' && this.career?.last) {
@@ -1311,10 +1383,12 @@ export class App {
     drawCountdown(ctx, W, w);
     if (this.firstRace && w.tick < w.race.startTick + 60 * 15) {
       const hintY = split ? my - 14 : H - 36;
-      const drift = split ? 'P1 Q / P2 L' : 'Z';
+      const c = this.controls;
+      const drift = split ? `P1 ${keysLabel(c.p1, 'drift')} / P2 ${keysLabel(c.p2, 'drift')}` : keysLabel(c.solo, 'drift');
       drawText(ctx, `DRIFT: HOLD ${drift} WHILE TURNING (OR LIFT OFF + GAS AGAIN)`, W / 2, hintY, { color: '#ffd84a', align: 'center' });
       if (w.race.weapons) {
-        const keys = split ? 'P1 G/F/H   P2 . , -' : 'SPACE MISSILE   X MINE   C TURBO';
+        const weap = (b: KeyBinding) => `${keysLabel(b, 'fireFront')} MISSILE  ${keysLabel(b, 'fireRear')} MINE  ${keysLabel(b, 'turbo')} TURBO`;
+        const keys = split ? `P1 ${weap(c.p1)}   P2 ${weap(c.p2)}` : weap(c.solo);
         drawText(ctx, `WEAPONS: ${keys}`, W / 2, hintY - 11, { color: '#ffd84a', align: 'center' });
       }
     }
@@ -1479,6 +1553,50 @@ export class App {
     return result;
   }
 
+  /** Use the graphics level from the settings (or AUTO's current pick). */
+  applyQuality(): void {
+    const g = this.settings.graphics;
+    const level = g === 0 ? this.autoQuality : g - 1;
+    this.quality = level;
+    const size = QUALITY_SHADOW[level];
+    this.sun.castShadow = size > 0;
+    if (size > 0 && this.sun.shadow.mapSize.x !== size) {
+      this.sun.shadow.mapSize.set(size, size);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    if (this.view) this.view.particles.density = QUALITY_PARTICLES[level];
+  }
+
+  /** AUTO graphics: step down when racing stays below AUTO_MIN_FPS. */
+  private watchQuality(dt: number): void {
+    const w = this.qualityWatch;
+    const now = performance.now() / 1000;
+    if (this.settings.graphics !== 0 || this.mode !== 'race' || this.paused || document.hidden || dt > 0.2 || w.grace > 0) {
+      if (w.grace > 0 && this.mode === 'race' && !this.paused) w.grace -= dt;
+      w.time = now;
+      w.frames = 0;
+      return;
+    }
+    w.frames++;
+    // Wall-clock time: dt is capped, so on a very slow machine it undercounts.
+    const span = now - w.time;
+    if (span < 3) return;
+    const fps = w.frames / span;
+    w.time = now;
+    w.frames = 0;
+    if (fps >= AUTO_MIN_FPS || this.autoQuality >= QUALITY_NAMES.length - 1) return;
+    this.autoQuality++;
+    try {
+      localStorage.setItem(AUTO_QUALITY_KEY, String(this.autoQuality));
+    } catch {
+      // Not remembered.
+    }
+    this.applyQuality();
+    this.flashMessage(`GRAPHICS ${QUALITY_NAMES[this.autoQuality]} (AUTO)`, 2);
+    w.grace = 2;
+  }
+
   /** Average milliseconds to simulate + render a frame (synchronised with the GPU). */
   bench(frames = 120): { msPerFrame: number; lowRes: [number, number]; views: number } {
     const gl = this.renderer.gl;
@@ -1508,4 +1626,13 @@ export class App {
 /** Largest text scale (2 or 1) at which the menu fits between top and bottom. */
 function fitScale(menu: Menu, top: number, bottom: number): number {
   return top + menu.items.length * (LINE_H * 2 + 4) <= bottom ? 2 : 1;
+}
+
+/** "ARROWS" / "WASD" style summary of the four driving keys. */
+function driveKeys(b: KeyBinding): string {
+  const first = (a: 'gas' | 'left' | 'brake' | 'right') => b[a][0] ?? '';
+  const four = [first('gas'), first('left'), first('brake'), first('right')].join(',');
+  if (four === 'ArrowUp,ArrowLeft,ArrowDown,ArrowRight') return b.gas[1] === 'KeyW' ? 'ARROWS/WASD' : 'ARROWS';
+  if (four === 'KeyW,KeyA,KeyS,KeyD') return 'WASD';
+  return [keysLabel(b, 'gas'), keysLabel(b, 'left'), keysLabel(b, 'brake'), keysLabel(b, 'right')].join(' ');
 }

@@ -107,11 +107,15 @@ export class Particles {
     this.points.name = 'particles';
   }
 
+  /** Share of spawned particles kept (lower on slow machines). */
+  density = 1;
+
   spawn(
     x: number, y: number, z: number, vx: number, vy: number, vz: number,
     life: number, size0: number, size1: number, r: number, g: number, b: number,
     gravity = 0, drag = 0,
   ): void {
+    if (this.density < 1 && Math.random() > this.density) return;
     const i = this.next;
     this.next = (this.next + 1) % MAX;
     this.pos.set([x, y, z], i * 3);
