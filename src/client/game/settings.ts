@@ -26,6 +26,8 @@ export interface RaceSettings {
   touchGas: 'thumb' | 'always' | 'button';
   /** Older saves: automatic gas on/off. */
   touchAutoGas?: boolean;
+  /** Camera: north-up, or turning with the car (nose up the screen). */
+  camera: 'classic' | 'follow';
   /** Touch steering: drag the left thumb, or two arrow buttons. */
   touchSteer: 'slide' | 'buttons';
   /** Bumped when the default volumes change, so saved settings pick them up once. */
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   soundVolume: 7,
   graphics: 0,
   touchGas: 'thumb',
+  camera: 'classic',
   touchSteer: 'slide',
   audioRev: AUDIO_REV,
 };
@@ -80,6 +83,7 @@ export function loadSettings(): RaceSettings {
   if (!['thumb', 'always', 'button'].includes(s.touchGas)) s.touchGas = s.touchAutoGas === false ? 'button' : 'thumb';
   delete s.touchAutoGas;
   s.touchSteer = s.touchSteer === 'buttons' ? 'buttons' : 'slide';
+  s.camera = s.camera === 'follow' ? 'follow' : 'classic';
   return s;
 }
 

@@ -53,6 +53,7 @@ function seasonSettings(division: number): RaceSettings {
     soundVolume: 0,
     graphics: 0,
     touchGas: 'thumb',
+    camera: 'classic',
     touchSteer: 'slide',
   };
 }

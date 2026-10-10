@@ -177,6 +177,8 @@ export class App {
   readonly music: Music;
   private songToast = 0;
   private cupRace = false;
+  /** Follow camera heading per viewport. */
+  private readonly camYaw = [0, 0];
   private readonly camTargets = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly camInit = [false, false];
   private readonly tagPos = new THREE.Vector3();
@@ -314,7 +316,7 @@ export class App {
     this.recordsScreen = new RecordsScreen(() => this.toTitle(), () => playUi(this.audio, 'move'));
     this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'options'), (k) => playUi(this.audio, k));
     // Music on/off, volumes and next song are also in the pause menu (Esc).
-    this.pauseMenu.items.splice(2, 0, ...this.buildOptionItems().slice(0, 4));
+    this.pauseMenu.items.splice(2, 0, ...this.buildOptionItems().slice(0, 5));
     this.careerMenu = new Menu([
       {
         label: () => {
@@ -669,6 +671,7 @@ export class App {
         },
       },
       { label: () => 'NEXT SONG  (N)', select: () => this.music.next() },
+      this.cameraItem(),
       {
         label: () => `TIME: ${moodById(s.mood).name}`,
         change: (d: number) => {
@@ -729,6 +732,19 @@ export class App {
       { label: () => 'MUSIC CREDITS', select: () => (this.mode = 'credits') },
       { label: () => 'BACK', select: () => this.toTitle() },
     ];
+  }
+
+  /** CAMERA: north-up (classic) or following the car from behind. */
+  private cameraItem() {
+    const s = this.settings;
+    return {
+      label: () => `CAMERA: ${s.camera === 'follow' ? 'FOLLOW CAR (TURNS WITH IT)' : 'CLASSIC (NORTH UP)'}`,
+      change: () => {
+        s.camera = s.camera === 'follow' ? 'classic' : 'follow';
+        this.camInit[0] = this.camInit[1] = false;
+        saveSettings(s);
+      },
+    };
   }
 
   /** What the music should be doing for the current screen. */
@@ -1389,6 +1405,19 @@ export class App {
     const idx = Math.min(this.viewCar[v], this.world.cars.length - 1);
     const car = this.world.cars[idx];
     const view = this.view.cars[idx].root.position;
+    // Follow camera: turned with the player's car so its nose points up the
+    // screen; steeper, so buildings (placed for a north-facing view) hide
+    // less of the road.
+    const follow = this.settings.camera === 'follow' && this.mode === 'race' && this.session.playerCars.includes(idx);
+    cam.follow = follow;
+    cam.tilt = (follow ? 72 : 57) * (Math.PI / 180);
+    if (follow) {
+      if (!this.camInit[v]) this.camYaw[v] = car.heading;
+      let d = car.heading - this.camYaw[v];
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      this.camYaw[v] += d * (1 - Math.exp(-3.5 * dt));
+      cam.yaw = this.camYaw[v];
+    }
     const half = cam.footprint(vp.w, vp.h);
     const maxLead = Math.min(half.width, half.depth) * 0.3;
     let lx = car.vx * this.lookAhead.value;
@@ -1397,6 +1426,12 @@ export class App {
     if (ll > maxLead) {
       lx *= maxLead / ll;
       lz *= maxLead / ll;
+    }
+    if (follow) {
+      // The car sits low on the screen: more road ahead than behind.
+      const lead = half.depth * 0.22;
+      lx = Math.sin(cam.yaw) * lead;
+      lz = -Math.cos(cam.yaw) * lead;
     }
     const tx = view.x + lx;
     const tz = view.z + lz;

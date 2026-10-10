@@ -12,6 +12,12 @@ export class PixelCamera {
   /** Angle between the view direction and the ground. */
   tilt = 57 * DEG;
   /**
+   * Follow camera: turned to face `yaw` (radians, 0 = north, like car
+   * headings). It can't keep to the pixel grid while it turns.
+   */
+  follow = false;
+  yaw = 0;
+  /**
    * Visible height of the view in camera-plane metres. Framing is the same at
    * any resolution; metres per pixel follow from the viewport height.
    */
@@ -33,6 +39,18 @@ export class PixelCamera {
     const ct = Math.cos(this.tilt);
     const st = Math.sin(this.tilt);
     const d = this.distance;
+    if (this.follow) {
+      // Turned with the car: look at the target from behind, no snapping.
+      const fx = Math.sin(this.yaw);
+      const fz = -Math.cos(this.yaw);
+      this.camera.position.set(tx - fx * ct * d, ty + st * d, tz - fz * ct * d);
+      this.camera.up.set(0, 1, 0);
+      this.camera.lookAt(tx, ty, tz);
+      this.fracX = this.fracY = 0;
+      this.gridX = this.gridY = 0;
+      this.frame(w, h, p, d);
+      return;
+    }
     // Ideal position C = T - F·d with F = (0, -sin t, -cos t).
     const cxW = tx;
     const cyW = ty + st * d;
@@ -49,6 +67,10 @@ export class PixelCamera {
     const dy = (sy - cy) * p;
     this.camera.position.set(cxW + (sx - cx) * p, cyW + ct * dy, czW - st * dy);
     this.camera.rotation.set(-this.tilt, 0, 0);
+    this.frame(w, h, p, d);
+  }
+
+  private frame(w: number, h: number, p: number, d: number): void {
     const halfW = ((w + 2) * p) / 2;
     const halfH = ((h + 2) * p) / 2;
     this.camera.left = -halfW;
