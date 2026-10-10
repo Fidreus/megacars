@@ -111,6 +111,33 @@ describe('car dynamics', () => {
     }
   });
 
+  it('lifting off and back on the gas while steering starts a drift', () => {
+    const car = createCar(0, 0, 0, 0);
+    car.vz = -32;
+    const inp = neutralInput();
+    inp.steer = 1;
+    let started = -1;
+    for (let i = 0; i < 60; i++) {
+      inp.throttle = i >= 10 && i < 18 ? 0 : 1;
+      stepCarDynamics(car, inp, DEFAULT_TUNING, asphalt, DT);
+      if (car.sliding && started < 0) started = i;
+    }
+    expect(started).toBeGreaterThanOrEqual(18);
+    expect(started).toBeLessThan(26);
+  });
+
+  it('coasting for a while before getting back on the gas does not drift', () => {
+    const car = createCar(0, 0, 0, 0);
+    car.vz = -32;
+    const inp = neutralInput();
+    for (let i = 0; i < 90; i++) {
+      inp.throttle = i >= 10 && i < 40 ? 0 : 1;
+      inp.steer = i >= 30 ? 1 : 0;
+      stepCarDynamics(car, inp, DEFAULT_TUNING, asphalt, DT);
+      expect(car.sliding, `tick ${i}`).toBe(0);
+    }
+  });
+
   it('slides on its own on ice', () => {
     const ice = makeSurfaceMix();
     mixSurfaces(Surface.Ice, Surface.Ice, ice);

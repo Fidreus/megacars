@@ -381,7 +381,7 @@ export class App {
     if (car.wrongWayTicks > 90) drawText(ctx, 'WRONG WAY!', W / 2, H / 2 - 40, { scale: 2, color: '#ff4a3a', align: 'center' });
 
     if (this.world.tick < 60 * 20) {
-      drawText(ctx, 'TAP BRAKE WHILE STEERING TO DRIFT', W / 2, H - 34, { color: '#ffd84a', align: 'center' });
+      drawText(ctx, 'DRIFT: LET GO OF GAS + PRESS AGAIN WHILE TURNING', W / 2, H - 34, { color: '#ffd84a', align: 'center' });
     }
     if (this.flashTime > 0) {
       this.flashTime -= dt;

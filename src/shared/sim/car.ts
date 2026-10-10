@@ -38,6 +38,8 @@ export interface CarState {
   prevButtons: number;
   /** Ticks the brake has been held (drift tap detection). */
   brakeTicks: number;
+  /** Ticks the throttle has been released (lift-off flick detection); 0 while on the gas. */
+  liftTicks: number;
   /** Ticks left in which steering turns a brake tap into a drift. */
   driftArm: number;
   aiDriven: number;
@@ -67,7 +69,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
     id, x, z, y: 0, vx: 0, vz: 0, vy: 0, heading, angVel: 0, steer: 0,
     sliding: 0, modeTicks: 0, spinTicks: 0, spinCool: 0, airborne: 0,
     damage: 0,
-    prevButtons: 0, brakeTicks: 0, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1,
+    prevButtons: 0, brakeTicks: 0, liftTicks: 60, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1,
     trackIdx: 0, trackS: 0, raceDist: 0, lap: 0, nextCp: 0,
     lapStartTick: 0, lastLapTicks: 0, bestLapTicks: 0, wrongWayTicks: 0, finished: 0,
     slip: 0, latAccel: 0, longAccel: 0, surfFront: 0, surfRear: 0,
@@ -253,10 +255,11 @@ export function slideOmegaMax(t: CarTuning, s: number): number {
 }
 
 /**
- * A short brake tap arms the drift; steering at speed while armed (during the
- * tap or just after it) throws the car into a slide with a yaw flick. Holding
- * the brake only brakes. While already sliding, a tap can flick the car the
- * other way (S-bends).
+ * Two ways to arm a drift: a short brake tap, or lifting off the throttle
+ * briefly and getting back on it (lift-off flick). Steering at speed while
+ * armed throws the car into a slide with a yaw flick. Holding the brake or
+ * coasting for longer does nothing. While already sliding, a flick can swing
+ * the car the other way (S-bends).
  */
 function updateDriftTrigger(car: CarState, inp: CarInput, t: CarTuning, fwd: number): void {
   if (inp.brake > 0.5) {
@@ -264,6 +267,12 @@ function updateDriftTrigger(car: CarState, inp: CarInput, t: CarTuning, fwd: num
   } else {
     if (car.brakeTicks > 0 && car.brakeTicks <= t.driftTapTicks) car.driftArm = t.driftArmTicks;
     car.brakeTicks = 0;
+  }
+  if (inp.throttle > 0.5) {
+    if (car.liftTicks > 0 && car.liftTicks <= t.liftTapTicks) car.driftArm = t.driftArmTicks;
+    car.liftTicks = 0;
+  } else if (car.liftTicks < 255) {
+    car.liftTicks++;
   }
   if (car.driftArm <= 0) return;
   car.driftArm--;

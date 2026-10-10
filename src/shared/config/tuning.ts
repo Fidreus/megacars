@@ -31,7 +31,8 @@ export interface CarTuning {
   slipExitDeg: number;
   slipExitTicks: number;
   // Drift trigger: a short brake tap while steering
-  driftTapTicks: number; // longest press that counts as a tap
+  driftTapTicks: number; // longest brake press that counts as a tap
+  liftTapTicks: number; // longest throttle lift that counts as a lift-off flick
   driftArmTicks: number; // window after the tap in which steering starts the drift
   driftMinSpeed: number;
   driftMinSteer: number;
@@ -98,6 +99,7 @@ export const DEFAULT_TUNING: CarTuning = {
   slipExitTicks: 6,
 
   driftTapTicks: 15,
+  liftTapTicks: 18,
   driftArmTicks: 10,
   driftMinSpeed: 12,
   driftMinSteer: 0.45,

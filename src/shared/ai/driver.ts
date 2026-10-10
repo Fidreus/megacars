@@ -131,11 +131,14 @@ export function aiDrive(car: CarState, track: Track, t: CarTuning, surf: Surface
   const dirSign = fwd >= 0 ? 1 : -1;
   const steer = omegaMax > 1e-3 ? clamp(((omegaDes - extra) / omegaMax) * dirSign, -1, 1) : 0;
 
-  // A short brake pulse while steering would start a drift; when not
-  // drifting, keep the brake on past the tap window instead.
-  if (!drift && car.brakeTicks > 0 && car.brakeTicks <= t.driftTapTicks && brake <= 0.5 && Math.abs(steer) >= t.driftMinSteer) {
-    brake = 0.55;
-    throttle = 0;
+  // A short brake pulse or throttle lift while steering would start a drift;
+  // when not drifting, hold the pedal state past the flick window instead.
+  if (!drift && Math.abs(steer) >= t.driftMinSteer) {
+    if (car.brakeTicks > 0 && car.brakeTicks <= t.driftTapTicks && brake <= 0.5) {
+      brake = 0.55;
+      throttle = 0;
+    }
+    if (car.liftTicks > 0 && car.liftTicks <= t.liftTapTicks && throttle > 0.5) throttle = 0.5;
   }
 
   // Drift entry: when the corner needs more grip than the tyres have, tap the
