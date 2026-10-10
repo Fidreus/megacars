@@ -1,8 +1,10 @@
-// Tall, colourful buildings around every track, in the style of its theme:
-// pastel apartment blocks in the countryside, a casino hotel and water tower
-// in the desert, painted wooden houses, an alpine hotel and a ski jump in
-// the snow, glass offices at the power plant. Windows light up at night.
+// The towns around the tracks, in the style of each theme: apartment blocks
+// with shops and balconies, houses with gardens, farms with fields and car
+// parks in the countryside; adobe houses, a gas station, a casino and water
+// towers in the desert; chalets, an alpine hotel and a ski jump in the snow;
+// offices and warehouses at the power plant. Windows light up at night.
 // Tall things only go where they can't hide the road from the tilted camera.
+// Fronts face south, toward the camera.
 
 import * as THREE from 'three';
 import { distanceToCentreline } from '../../shared/track/builder.ts';
@@ -10,6 +12,9 @@ import type { Track } from '../../shared/track/types.ts';
 import { makeRng } from '../../shared/math/rng.ts';
 import { toon } from './materials.ts';
 import type { KeepOut } from './props.ts';
+import {
+  adobe, apartment, carPark, chalet, decal, farm, field, garden, gasStation, house, shade, shopFront, warehouse, windowBox, type Kit,
+} from './buildings.ts';
 
 export interface Town {
   group: THREE.Group;
@@ -45,25 +50,6 @@ function windowTexture(lit: boolean): THREE.CanvasTexture {
 let wallTex: THREE.CanvasTexture | null = null;
 let litTex: THREE.CanvasTexture | null = null;
 
-/** A box whose side faces tile one window every `cell` metres; the roof is plain wall. */
-function windowBox(w: number, h: number, d: number, cell = 3.2): THREE.BufferGeometry {
-  const geo = new THREE.BoxGeometry(w, h, d);
-  const uv = geo.getAttribute('uv') as THREE.BufferAttribute;
-  for (let f = 0; f < 6; f++) {
-    for (let v = 0; v < 4; v++) {
-      const k = f * 4 + v;
-      if (f === 2 || f === 3) {
-        uv.setXY(k, 0.02, 0.02);
-      } else {
-        const across = f < 2 ? d : w;
-        uv.setXY(k, uv.getX(k) * Math.max(1, Math.round(across / cell)), uv.getY(k) * Math.max(1, Math.round(h / cell)));
-      }
-    }
-  }
-  geo.translate(0, h / 2, 0);
-  return geo;
-}
-
 export function buildTown(track: Track, theme: string, existing: readonly KeepOut[]): Town {
   const group = new THREE.Group();
   group.name = 'town';
@@ -87,7 +73,13 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
     }
     return m;
   };
-  const plain = (color: string) => toon(color);
+  const plainMats = new Map<string, THREE.MeshToonMaterial>();
+  const plain = (color: string) => {
+    let m = plainMats.get(color);
+    if (!m) plainMats.set(color, (m = toon(color)));
+    return m;
+  };
+  const kit: Kit = { rnd, wall, plain };
 
   const free = (x: number, z: number, r: number) =>
     ![...existing, ...keepOut].some((k) => (x - k.x) ** 2 + (z - k.z) ** 2 < (k.r + r) ** 2);
@@ -98,11 +90,20 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
     }
     return false;
   };
+  // distanceToCentreline only knows the strip near the road (1e9 beyond it),
+  // so farther out measure to the centreline samples directly.
+  const far = (x: number, z: number) => {
+    const near = distanceToCentreline(track, x, z);
+    if (near < 1e8) return near;
+    let best = Infinity;
+    for (let i = 0; i < track.n; i += 3) best = Math.min(best, (track.px[i] - x) ** 2 + (track.pz[i] - z) ** 2);
+    return Math.sqrt(best);
+  };
   const pick = (r: number, h: number, minGap: number, maxGap: number, tries = 300): [number, number] | null => {
     for (let t = 0; t < tries; t++) {
       const x = b.minX - pad + rnd() * (b.maxX - b.minX + pad * 2);
       const z = b.minZ - pad + rnd() * (b.maxZ - b.minZ + pad * 2);
-      const d = distanceToCentreline(track, x, z);
+      const d = far(x, z);
       if (d < clear + r + minGap || d > clear + r + maxGap) continue;
       if (!free(x, z, r) || hidesRoad(x, z, r, h)) continue;
       return [x, z];
@@ -111,10 +112,12 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
   };
   const add = (obj: THREE.Object3D, x: number, z: number, r: number, turn = true) => {
     obj.position.set(x, 0, z);
-    if (turn) obj.rotation.y = Math.floor(rnd() * 4) * (Math.PI / 2) + (rnd() - 0.5) * 0.2;
+    // Mostly facing the camera (south), a little askew.
+    if (turn) obj.rotation.y = (rnd() < 0.8 ? 0 : (rnd() < 0.5 ? -1 : 1) * (Math.PI / 2)) + (rnd() - 0.5) * 0.16;
     obj.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
-        o.castShadow = true;
+        // Ground patches take shadows but don't cast them.
+        o.castShadow = !o.userData.decal;
         o.receiveShadow = true;
       }
     });
@@ -130,16 +133,6 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
 
   // ------------------------------------------------------------ builders
 
-  /** Apartment block: windows all over, a coloured roof edge and rooftop clutter. */
-  const block = (w: number, d: number, h: number, color: string, trim: string) => {
-    const g = new THREE.Group();
-    g.add(mesh(windowBox(w, h, d), wall(color)));
-    g.add(mesh(new THREE.BoxGeometry(w + 0.4, 0.6, d + 0.4), plain(trim), 0, h + 0.3, 0));
-    if (rnd() < 0.6) g.add(mesh(new THREE.CylinderGeometry(1.1, 1.1, 2.2, 10), plain('#c8c4bc'), w * 0.25, h + 1.7, d * 0.2));
-    if (rnd() < 0.7) g.add(mesh(new THREE.BoxGeometry(2, 1.2, 1.4), plain('#9aa0a6'), -w * 0.25, h + 1.2, -d * 0.2));
-    return g;
-  };
-
   /** Desert casino hotel: a tall slab with a neon crown. */
   const casino = () => {
     const g = new THREE.Group();
@@ -151,6 +144,9 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
     g.add(mesh(new THREE.BoxGeometry(13, 0.6, 10), plain('#ffd84a'), 0, h - 0.4, 0));
     const star = new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.2, 0.8) });
     g.add(mesh(new THREE.OctahedronGeometry(2.2, 0), star, 0, h + 5, 0));
+    // A porte-cochère with lights in front.
+    g.add(mesh(new THREE.BoxGeometry(14, 0.8, 5), plain('#e8322a'), 0, 4.4, 9.5));
+    for (const x of [-6, 6]) g.add(mesh(new THREE.BoxGeometry(0.5, 4.4, 0.5), plain('#f2d7a0'), x, 2.2, 11.5));
     return g;
   };
 
@@ -162,25 +158,14 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
     return g;
   };
 
-  /** Painted wooden house with a steep roof (snow-capped in winter). */
-  const woodHouse = (color: string, snow: boolean) => {
-    const g = new THREE.Group();
-    const w = 7 + rnd() * 3;
-    const d = 6 + rnd() * 2;
-    const h = 6 + rnd() * 5;
-    g.add(mesh(windowBox(w, h, d, 2.6), wall(color)));
-    const roof = new THREE.CylinderGeometry(0.01, d * 0.78, 4.5, 4, 1).rotateY(Math.PI / 4);
-    roof.scale(w / d, 1, 1);
-    g.add(mesh(roof.toNonIndexed(), plain(snow ? '#f4f7fa' : '#3a3a40'), 0, h + 2.25, 0));
-    return g;
-  };
-
   const alpineHotel = () => {
     const g = new THREE.Group();
     g.add(mesh(windowBox(26, 18, 11), wall('#c84a32')));
     g.add(mesh(new THREE.BoxGeometry(27, 1.2, 12), plain('#f4f7fa'), 0, 18.6, 0));
     g.add(mesh(windowBox(10, 26, 10), wall('#e8d8b8'), 0, 0, -2));
     g.add(mesh(new THREE.ConeGeometry(8, 6, 4).rotateY(Math.PI / 4), plain('#f4f7fa'), 0, 29, -2));
+    // Wooden balconies along the south face.
+    for (let y = 4; y < 17; y += 3.4) g.add(mesh(new THREE.BoxGeometry(24, 0.9, 1.2), plain('#6a4a2e'), 0, y, 6.1));
     return g;
   };
 
@@ -200,44 +185,107 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
     g.add(mesh(windowBox(12, h, 12, 2.4), wall('#7fb8e0')));
     g.add(mesh(new THREE.BoxGeometry(12.6, 1, 12.6), plain('#e8322a'), 0, h + 0.5, 0));
     g.add(mesh(new THREE.CylinderGeometry(0.15, 0.15, 8, 4), plain('#dddddd'), 3, h + 4, 3));
+    g.add(mesh(new THREE.BoxGeometry(14, 4, 14), plain('#5a6a7a'), 0, 2, 0));
     return g;
+  };
+
+  /** A house on its plot: garden, then the house set back from the front. */
+  const homeLot = (wallColor: string, roof: string, snow: boolean, lawn: string, gw = 15 + rnd() * 3, gd = 15 + rnd() * 2) => {
+    const g = new THREE.Group();
+    g.add(garden(kit, gw, gd, { lawn, fence: snow ? '#6a4a2e' : choose(['#f4f0e6', '#f4f0e6', '#8a6a4a']), hedge: !snow && rnd() < 0.35, tree: snow ? '#24553a' : choose(['#3c7d34', '#4a8a3a', '#2f6b2e']) }));
+    const h = house(kit, { wall: wallColor, roof, snow, w: Math.min(10, gw - 5), d: Math.min(8, gd - 6) });
+    h.position.z = -1.5;
+    g.add(h);
+    return g;
+  };
+
+  /**
+   * A little residential street: a lane with a pavement, houses on both
+   * sides facing it, a street lamp or two. Returns the street and its radius.
+   */
+  const neighbourhood = (walls: readonly string[], roofs: readonly string[], snow: boolean, lawn: string) => {
+    const g = new THREE.Group();
+    const lots = 3 + Math.floor(rnd() * 3);
+    const lw = 12;
+    const len = lots * lw;
+    g.add(decal(kit, len + 8, 6, snow ? '#c8d0d8' : '#55585e', 0, 0, 0.014));
+    g.add(decal(kit, len + 8, 1.4, snow ? '#e8eef4' : '#b8b2a6', 0, -3.7, 0.016), decal(kit, len + 8, 1.4, snow ? '#e8eef4' : '#b8b2a6', 0, 3.7, 0.016));
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < lots; i++) {
+        if (rnd() < 0.12) continue;
+        const lot = homeLot(choose(walls), choose(roofs), snow, lawn, lw - 0.6, 13);
+        lot.position.set(-len / 2 + (i + 0.5) * lw, 0, side * (4.4 + 6.5));
+        // Front to the street: north-side houses face south, south-side ones north.
+        lot.rotation.y = side < 0 ? 0 : Math.PI;
+        g.add(lot);
+      }
+    }
+    return { g, r: Math.hypot(len / 2 + 4, 18) };
   };
 
   // ------------------------------------------------------------- layout
 
   const pastels = ['#f28aa0', '#5ac8c8', '#ffd84a', '#ff9a4a', '#9a7ae0', '#7ad08a', '#f0f0e8', '#6fa0ff'];
   const trims = ['#e8322a', '#2f6fe0', '#ffffff', '#2a2c30', '#f2c230'];
+  const signs = ['#e8322a', '#2f6fe0', '#2f8a4a', '#f2c230', '#9a7ae0'];
   const place = (count: number, r: number, h: number, minGap: number, maxGap: number, make: () => THREE.Object3D, turn = true) => {
     for (let k = 0; k < count; k++) {
       const p = pick(r, h, minGap, maxGap);
       if (p) add(make(), p[0], p[1], r, turn);
     }
   };
+  const block = (h: number, palette: readonly string[]) => apartment(kit, 10 + rnd() * 6, 9 + rnd() * 4, h, choose(palette), choose(trims));
 
   if (theme === 'countryside') {
-    // A small town of colourful blocks, some close enough to tower over the action.
-    place(10, 9, 30, 4, 60, () => block(10 + rnd() * 6, 9 + rnd() * 4, 12 + Math.floor(rnd() * 6) * 3.2, choose(pastels), choose(trims)));
-    place(14, 7, 16, 6, 110, () => block(8 + rnd() * 4, 7 + rnd() * 3, 6.4 + Math.floor(rnd() * 3) * 3.2, choose(pastels), choose(trims)));
+    // Town: apartment blocks with shops, a few car parks among them.
+    place(8, 9, 30, 4, 60, () => block(12 + Math.floor(rnd() * 6) * 3.2, pastels));
+    place(4, 11, 2, 4, 70, () => carPark(kit, 20 + Math.floor(rnd() * 3) * 2.8, 14));
+    // Suburbs: little streets of houses, and a few houses on their own.
+    const walls = ['#f0e6d2', '#e8d0b0', '#f2f0e8', '#c8d8e8', '#f0c8b8', '#e8e0a8', '#f8f0d8'];
+    const roofs = ['#c8502e', '#b8442a', '#d8683a', '#a83a2a', '#c86a3a', '#6a7078'];
+    for (let k = 0; k < 6; k++) {
+      const { g, r } = neighbourhood(walls, roofs, false, '#5a9a44');
+      const p = pick(r, 10, 10, 130);
+      if (p) add(g, p[0], p[1], r, false);
+    }
+    place(8, 10, 10, 8, 110, () => homeLot(choose(walls), choose(roofs), false, '#5a9a44'));
+    // Farms out in the fields.
+    for (let k = 0; k < 3; k++) {
+      const p = pick(16, 16, 40, 160);
+      if (!p) continue;
+      add(farm(kit), p[0], p[1], 16);
+      for (let f = 0; f < 3; f++) {
+        const fp = pick(14, 2, 30, 200);
+        if (fp) add(field(kit, 26 + rnd() * 10, 20 + rnd() * 8, choose([['#7a8a3a', '#9aa848'], ['#c8a850', '#d8bc68'], ['#5a7a32', '#6e9a3e'], ['#8a6a3a', '#a07a44']] as [string, string][])), fp[0], fp[1], 14, false);
+      }
+    }
   } else if (theme === 'desert') {
     place(1, 13, 40, 6, 70, casino);
     place(2, 5, 26, 5, 70, () => waterTower(choose(['#e8322a', '#5ac8c8', '#f0f0e8'])));
-    const adobe = ['#d8956a', '#e8b07a', '#c97a52', '#5ac8c8', '#f28aa0'];
-    place(12, 8, 18, 4, 90, () => block(9 + rnd() * 6, 8 + rnd() * 4, 6.4 + Math.floor(rnd() * 4) * 3.2, choose(adobe), choose(['#5ac8c8', '#f2c230', '#e8322a'])));
+    place(1, 12, 9, 6, 60, () => gasStation(kit));
+    place(2, 11, 2, 4, 70, () => carPark(kit, 22, 14));
+    const adobeColors = ['#d8956a', '#e8b07a', '#c97a52', '#e8c8a0', '#f28aa0', '#5ac8c8'];
+    place(20, 8, 9, 4, 110, () => adobe(kit, choose(adobeColors)));
+    place(5, 9, 22, 4, 80, () => block(9.6 + Math.floor(rnd() * 3) * 3.2, adobeColors));
   } else if (theme === 'winter') {
     place(1, 15, 30, 6, 70, alpineHotel);
     place(1, 6, 34, 10, 80, skiJump);
-    const woods = ['#c8322a', '#e8b030', '#2f6fe0', '#2f8a4a', '#e86a2a', '#f0f0e8'];
-    place(18, 6, 13, 3, 90, () => woodHouse(choose(woods), true));
+    place(2, 11, 2, 4, 70, () => carPark(kit, 20, 14));
+    const woods = ['#8a4a2a', '#9a3a2a', '#6a4a32', '#c8322a', '#2f6fe0', '#2f8a4a', '#e8b030'];
+    place(16, 8, 12, 3, 110, () => chalet(kit, choose(woods)));
+    for (let k = 0; k < 3; k++) {
+      const { g, r } = neighbourhood(woods, ['#5a5f66'], true, '#dfe8f0');
+      const p = pick(r, 10, 10, 130);
+      if (p) add(g, p[0], p[1], r, false);
+    }
   } else if (theme === 'nuclear') {
     place(4, 9, 38, 6, 80, officeTower);
-    place(6, 8, 20, 4, 90, () => block(10 + rnd() * 6, 9 + rnd() * 3, 9.6 + Math.floor(rnd() * 3) * 3.2, choose(['#c8ccd0', '#f2c230', '#5ac8c8', '#e8e8e0']), '#e8322a'));
+    place(5, 15, 12, 4, 110, () => warehouse(kit, choose(['#c8ccd0', '#d8d4c8', '#9fa6a8', '#5ac8c8'])));
+    place(4, 12, 2, 4, 80, () => carPark(kit, 24, 14));
+    place(4, 8, 20, 4, 90, () => block(9.6 + Math.floor(rnd() * 3) * 3.2, ['#c8ccd0', '#f2c230', '#5ac8c8', '#e8e8e0']));
   }
   // Street frontage: walk along the track and line it with buildings just
   // behind the barriers - as tall as the camera allows at each spot.
-  const street = (h: number, color: string): THREE.Object3D => {
-    if (theme === 'winter' && h < 14) return woodHouse(color, true);
-    return block(9 + rnd() * 5, 7 + rnd() * 3, h, color, choose(trims));
-  };
   const palette = theme === 'desert'
     ? ['#d8956a', '#e8b07a', '#c97a52', '#5ac8c8', '#f28aa0', '#ffd84a']
     : theme === 'winter'
@@ -245,6 +293,11 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
       : theme === 'nuclear'
         ? ['#c8ccd0', '#f2c230', '#5ac8c8', '#e8e8e0', '#9fa6a8']
         : pastels;
+  const street = (h: number, color: string): THREE.Object3D => {
+    if (theme === 'winter' && h < 14) return chalet(kit, color);
+    if (h < 10) return shopFront(kit, 9 + rnd() * 4, 8, theme === 'desert' ? color : shade(color, 1), choose(signs));
+    return block(h, [color]);
+  };
   const heights = theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
   for (let i = 0; i < track.n; i += 30) {
     for (const side of [-1, 1]) {
@@ -259,7 +312,10 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
       if (h === undefined) continue;
       const obj = street(h - (rnd() < 0.5 ? 3.2 : 0), choose(palette));
       add(obj, x, z, r, false);
-      obj.rotation.y = Math.atan2(-track.tz[i], track.tx[i]);
+      // Square to the track, front (shops, balconies) toward the track or
+      // away from it - whichever is more southerly, where the camera sees it.
+      const along = Math.atan2(-track.tz[i], track.tx[i]);
+      obj.rotation.y = Math.cos(along) >= 0 ? along : along + Math.PI;
     }
   }
   return { group, keepOut, windows };

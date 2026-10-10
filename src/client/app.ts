@@ -17,7 +17,7 @@ import {
   Crowd, playBackfire, playDebris, playExplosion, playFanfare, playImpact, playLanding, playLaunch, playMineDrop,
   playSplash, playStartBeep, playTurbo, playUi, playWhoosh, playZap, TyreSound, TyreSurface,
 } from './audio/sfx.ts';
-import { ShotKind } from '../shared/sim/weapons.ts';
+import { ShotKind, WEAPON } from '../shared/sim/weapons.ts';
 import type { CarState } from '../shared/sim/car.ts';
 import { installDebugApi } from './debug/debugApi.ts';
 import { buildTrackDebugView } from './debug/trackDebugView.ts';
@@ -1344,7 +1344,7 @@ export class App {
         playExplosion(this.audio, vol, pan, 1.6);
         playDebris(this.audio, vol, pan);
       } else if (kind === Ev.Turbo && mine) {
-        playTurbo(this.audio, 1);
+        playTurbo(this.audio, 1, WEAPON.turboTicks * DT);
       }
     }
     if (this.mode !== 'race') return;

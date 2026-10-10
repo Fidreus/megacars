@@ -1,4 +1,5 @@
-// Seeded scenery outside the barriers: trees, bushes, rocks and farmhouses,
+// Seeded scenery outside the barriers: trees, bushes and rocks (buildings
+// are in town.ts),
 // drawn with instancing so hundreds of props cost a handful of draw calls.
 
 import * as THREE from 'three';
@@ -36,11 +37,18 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
   // Trees: cone crowns on short trunks, a few rounder deciduous ones.
   const area = (b.maxX - b.minX + pad * 2) * (b.maxZ - b.minZ + pad * 2);
   const treeCount = Math.min(1400, Math.round((area / 260) * theme.treeDensity));
-  let crownGeo: THREE.BufferGeometry = new THREE.ConeGeometry(1.6, 4.2, 7).toNonIndexed();
-  crownGeo.translate(0, 3.6, 0);
-  crownGeo.computeVertexNormals();
-  let roundGeo: THREE.BufferGeometry = new THREE.IcosahedronGeometry(1.9, 0);
-  roundGeo.translate(0, 3.4, 0);
+  // Conifer: three stacked tiers. Leafy tree: three lumps. Both shaded darker
+  // at the bottom and lighter on top (vertex colours times the instance colour).
+  let crownGeo: THREE.BufferGeometry = shadeByHeight(merge([
+    new THREE.ConeGeometry(1.8, 2.6, 6).translate(0, 2.6, 0),
+    new THREE.ConeGeometry(1.4, 2.3, 6).translate(0, 3.8, 0),
+    new THREE.ConeGeometry(0.95, 2, 6).translate(0, 4.9, 0),
+  ]), 0.62, 1.12);
+  let roundGeo: THREE.BufferGeometry = shadeByHeight(merge([
+    new THREE.IcosahedronGeometry(1.7, 0).translate(0, 3.2, 0),
+    new THREE.IcosahedronGeometry(1.25, 0).translate(0.9, 3.9, 0.3),
+    new THREE.IcosahedronGeometry(1.15, 0).translate(-0.8, 4.1, -0.4),
+  ]), 0.7, 1.15);
   if (theme.trees === 'cactus') {
     // Saguaros: a column with two raised arms (and a stubbier variant).
     crownGeo = merge([
@@ -55,16 +63,22 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
       new THREE.SphereGeometry(0.4, 7, 4).translate(0, 2.6, 0),
     ]);
   } else if (theme.trees === 'snowpine') {
-    // Tall firs; the "round" variant is the same fir with a snow cap.
-    crownGeo = new THREE.ConeGeometry(1.5, 5, 7).toNonIndexed().translate(0, 4, 0);
-    crownGeo.computeVertexNormals();
-    roundGeo = new THREE.ConeGeometry(0.95, 2.2, 7).toNonIndexed().translate(0, 5.4, 0);
-    roundGeo.computeVertexNormals();
+    // Tiered firs; the "round" mesh is the snow lying on each tier.
+    crownGeo = shadeByHeight(merge([
+      new THREE.ConeGeometry(1.7, 2.8, 6).translate(0, 2.6, 0),
+      new THREE.ConeGeometry(1.3, 2.4, 6).translate(0, 4, 0),
+      new THREE.ConeGeometry(0.9, 2.1, 6).translate(0, 5.2, 0),
+    ]), 0.65, 1.1);
+    roundGeo = merge([
+      new THREE.ConeGeometry(1.25, 0.9, 6).translate(0, 3.55, 0),
+      new THREE.ConeGeometry(0.95, 0.8, 6).translate(0, 4.85, 0),
+      new THREE.ConeGeometry(0.62, 0.9, 6).translate(0, 5.95, 0),
+    ]);
   }
   const trunkGeo = new THREE.CylinderGeometry(0.22, 0.3, 1.8, 5);
   trunkGeo.translate(0, 0.9, 0);
-  const crowns = new THREE.InstancedMesh(crownGeo, toon('#ffffff'), treeCount);
-  const rounds = new THREE.InstancedMesh(roundGeo, toon('#ffffff'), treeCount);
+  const crowns = new THREE.InstancedMesh(crownGeo, toon('#ffffff', { vertexColors: !!crownGeo.getAttribute('color') }), treeCount);
+  const rounds = new THREE.InstancedMesh(roundGeo, toon('#ffffff', { vertexColors: !!roundGeo.getAttribute('color') }), treeCount);
   const trunks = new THREE.InstancedMesh(trunkGeo, toon('#6b4a2e'), treeCount * 2);
   let nc = 0, nr = 0, nt = 0;
   const greens = theme.treeColors;
@@ -147,31 +161,20 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
   rocks.castShadow = true;
   group.add(rocks);
 
-  // A few farmhouses with pitched roofs, well away from the road.
-  const houseGeo = new THREE.BoxGeometry(8, 3.6, 6);
-  houseGeo.translate(0, 1.8, 0);
-  const roofGeo = new THREE.CylinderGeometry(0.01, 4.6, 2.6, 4, 1).toNonIndexed();
-  roofGeo.rotateY(Math.PI / 4);
-  roofGeo.scale(1.25, 1, 0.95);
-  roofGeo.translate(0, 4.9, 0);
-  roofGeo.computeVertexNormals();
-  const walls = theme.houseWalls;
-  const roofs = theme.houseRoofs;
-  const houseRnd = makeRng((track.def.seed ?? 1) * 104729);
-  for (let i = 0; i < (theme.houses === false ? 0 : 9); i++) {
-    const p = pick(clear + 22, clear + 90, 80);
-    if (!p) continue;
-    const h = new THREE.Group();
-    const body = new THREE.Mesh(houseGeo, toon(walls[Math.floor(houseRnd() * walls.length)]));
-    const roof = new THREE.Mesh(roofGeo, toon(roofs[Math.floor(houseRnd() * roofs.length)]));
-    for (const m of [body, roof]) {
-      m.castShadow = true;
-      m.receiveShadow = true;
-      h.add(m);
-    }
-    h.position.set(p[0], 0, p[1]);
-    h.rotation.y = Math.floor(houseRnd() * 4) * (Math.PI / 2) + (houseRnd() - 0.5) * 0.3;
-    group.add(h);
-  }
   return group;
+}
+
+/** Vertex colours from `lo` at the bottom to `hi` at the top (multiplies the instance colour). */
+function shadeByHeight(geo: THREE.BufferGeometry, lo: number, hi: number): THREE.BufferGeometry {
+  geo.computeBoundingBox();
+  const { min, max } = geo.boundingBox!;
+  const pos = geo.getAttribute('position');
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const t = (pos.getY(i) - min.y) / Math.max(0.001, max.y - min.y);
+    const k = lo + (hi - lo) * t;
+    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = k;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
 }

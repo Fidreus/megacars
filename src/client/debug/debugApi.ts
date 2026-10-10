@@ -68,6 +68,10 @@ export function installDebugApi(app: App): void {
       /** Average ms per simulated + rendered frame. */
       bench: (frames = 120) => app.bench(frames),
       split: () => app.toggleSplit(),
+      /** Zoom the camera out (k > 1) or in, for looking at the scenery. */
+      zoom(k = 1) {
+        for (const vp of app.renderer.viewports) vp.cam.viewHeight = 51.3 * k;
+      },
       /** Visible meshes per top-level scene group (and how many cast shadows). */
       meshes() {
         const out: Record<string, { meshes: number; shadow: number; tris: number }> = {};

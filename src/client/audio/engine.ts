@@ -2,7 +2,7 @@
 // a firing-pulse LFO, driven through a soft clipper and a load-dependent
 // low-pass: gruff at idle, screaming near the limiter. A fake five-speed
 // gearbox drops the revs on upshifts, the limiter bounces when you hold it
-// flat out in top gear, and a turbo whistle rides on top when boosting.
+// flat out in top gear, and an airy turbo whistle rides on top when boosting.
 
 import type { AudioSystem } from './audio.ts';
 
@@ -44,7 +44,8 @@ export class EngineSound {
   private readonly filter: BiquadFilterNode;
   private readonly gain: GainNode;
   private readonly pan: StereoPannerNode;
-  private readonly whistle: OscillatorNode;
+  /** Turbo whistle: narrow band-passed noise (airy, not a pure tone). */
+  private readonly whistle: BiquadFilterNode;
   private readonly whistleGain: GainNode;
   private rpm = 0.2;
   private gear = 0;
@@ -98,13 +99,21 @@ export class EngineSound {
     this.osc2.connect(mix2).connect(this.body);
     this.sub.connect(mixSub).connect(this.body);
     this.body.connect(shaper).connect(this.filter).connect(this.gain).connect(this.pan).connect(audio.master!);
-    // Turbo whistle.
-    this.whistle = ctx.createOscillator();
-    this.whistle.type = 'sine';
+    // Turbo whistle: air rushing through the compressor.
+    this.whistle = ctx.createBiquadFilter();
+    this.whistle.type = 'bandpass';
+    this.whistle.Q.value = 14;
+    this.whistle.frequency.value = 1200;
     this.whistleGain = ctx.createGain();
     this.whistleGain.gain.value = 0;
-    this.whistle.connect(this.whistleGain).connect(this.pan);
-    for (const o of [this.osc1, this.osc2, this.sub, this.pulse, this.whistle]) o.start();
+    if (!far) {
+      const air = ctx.createBufferSource();
+      air.buffer = audio.noiseBuffer();
+      air.loop = true;
+      air.start();
+      air.connect(this.whistle).connect(this.whistleGain).connect(this.pan);
+    }
+    for (const o of [this.osc1, this.osc2, this.sub, this.pulse]) o.start();
   }
 
   /**
@@ -159,11 +168,11 @@ export class EngineSound {
     // Turbo: a whistle that rises with revs; a falling "pssh" tail when it ends.
     if (!this.far) {
       if (turbo) {
-        this.whistle.frequency.setTargetAtTime(1800 + this.rpm * 1600, now, 0.15);
-        this.whistleGain.gain.setTargetAtTime(volume * 0.035, now, 0.08);
+        this.whistle.frequency.setTargetAtTime(1300 + this.rpm * 1500, now, 0.25);
+        this.whistleGain.gain.setTargetAtTime(volume * 0.09, now, 0.12);
       } else {
-        if (this.turbo) this.whistle.frequency.setTargetAtTime(600, now, 0.25);
-        this.whistleGain.gain.setTargetAtTime(0, now, 0.18);
+        if (this.turbo) this.whistle.frequency.setTargetAtTime(700, now, 0.2);
+        this.whistleGain.gain.setTargetAtTime(0, now, 0.15);
       }
       this.turbo = turbo;
     }

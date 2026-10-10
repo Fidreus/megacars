@@ -338,16 +338,64 @@ export function playMineDrop(audio: AudioSystem, volume: number): void {
   }
 }
 
-export function playTurbo(audio: AudioSystem, volume: number): void {
+/**
+ * Turbo / nitro boost for `secs`: a deep "whoomp" as it lights, a fluttering
+ * jet roar that climbs while it burns, and a blow-off "pssh" at the end.
+ */
+export function playTurbo(audio: AudioSystem, volume: number, secs = 1.5): void {
   const ctx = running(audio);
   if (!ctx) return;
   const t = ctx.currentTime;
-  const bp = ctx.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.frequency.setValueAtTime(500, t);
-  bp.frequency.exponentialRampToValueAtTime(3200, t + 0.5);
-  out(audio, noise(audio, t, 0.7, 1).connect(bp).connect(decayGain(ctx, 0.3 * volume, t, 0.7, 0.05)), 0.15);
-  out(audio, tone(ctx, 'sawtooth', 160, 640, t, 0.5).connect(decayGain(ctx, 0.06 * volume, t, 0.55, 0.05)));
+  const end = t + secs;
+  // Ignition: low thump plus a dull pop.
+  out(audio, tone(ctx, 'sine', 110, 42, t, 0.3).connect(decayGain(ctx, 0.45 * volume, t, 0.32, 0.004)), 0.2);
+  const pop = ctx.createBiquadFilter();
+  pop.type = 'lowpass';
+  pop.frequency.value = 700;
+  out(audio, noise(audio, t, 0.2, 0.6).connect(pop).connect(decayGain(ctx, 0.35 * volume, t, 0.18, 0.002)), 0.2);
+  // The burn: band-passed noise sweeping up, with a fast flutter like a flame.
+  const roar = ctx.createBiquadFilter();
+  roar.type = 'bandpass';
+  roar.Q.value = 1.4;
+  roar.frequency.setValueAtTime(380, t);
+  roar.frequency.exponentialRampToValueAtTime(1400, end);
+  const body = ctx.createBiquadFilter();
+  body.type = 'lowpass';
+  body.frequency.value = 2600;
+  const flutter = ctx.createGain();
+  flutter.gain.value = 0.75;
+  const lfo = ctx.createOscillator();
+  lfo.type = 'triangle';
+  lfo.frequency.setValueAtTime(26, t);
+  lfo.frequency.linearRampToValueAtTime(38, end);
+  const depth = ctx.createGain();
+  depth.gain.value = 0.25;
+  lfo.connect(depth).connect(flutter.gain);
+  lfo.start(t);
+  lfo.stop(end + 0.4);
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.exponentialRampToValueAtTime(0.32 * volume, t + 0.12);
+  env.gain.setValueAtTime(0.32 * volume, end - 0.25);
+  env.gain.exponentialRampToValueAtTime(0.0001, end + 0.15);
+  out(audio, noise(audio, t, secs + 0.2, 0.8).connect(roar).connect(body).connect(flutter).connect(env), 0.15);
+  // A low rumble under it.
+  const rumble = ctx.createBiquadFilter();
+  rumble.type = 'lowpass';
+  rumble.frequency.value = 180;
+  const renv = ctx.createGain();
+  renv.gain.setValueAtTime(0.0001, t);
+  renv.gain.exponentialRampToValueAtTime(0.4 * volume, t + 0.08);
+  renv.gain.setValueAtTime(0.4 * volume, end - 0.3);
+  renv.gain.exponentialRampToValueAtTime(0.0001, end + 0.1);
+  out(audio, noise(audio, t, secs + 0.15, 0.4).connect(rumble).connect(renv));
+  // Blow-off valve as it ends: a short falling hiss.
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'bandpass';
+  hp.Q.value = 0.8;
+  hp.frequency.setValueAtTime(5200, end);
+  hp.frequency.exponentialRampToValueAtTime(1600, end + 0.4);
+  out(audio, noise(audio, end, 0.45, 1.2).connect(hp).connect(decayGain(ctx, 0.22 * volume, end, 0.42, 0.01)), 0.2);
 }
 
 // ------------------------------------------------------------ jumps, misc
