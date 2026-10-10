@@ -13,8 +13,9 @@ export interface CarTuning {
   // Steering
   rMin: number; // minimum turning radius at low speed
   omegaPeak: number; // max yaw rate rad/s
-  steerLo: number; // fraction of grip used by full lock at medium speed
-  steerHi: number; // fraction of grip demanded by full lock at high speed (>1 breaks traction)
+  steerGrip: number; // share of the grip budget full lock uses on paved ground
+  steerLo: number; // slippery ground: grip demanded by full lock at medium speed
+  steerHi: number; // slippery ground: grip demanded by full lock at high speed
   steerV0: number;
   steerV1: number;
   steerRateIn: number; // keyboard ramp, 1/s
@@ -23,11 +24,18 @@ export interface CarTuning {
   // Grip
   aGrip: number; // lateral budget while gripping, m/s²
   frictionCircle: number; // share of grip lost at full longitudinal use
-  overloadRatio: number; // yaw demand / grip budget that counts as overload
+  overloadRatio: number; // yaw demand / grip budget that counts as overload (slippery only)
   slideEnterTicks: number; // overloaded ticks before the car breaks loose
-  slipEnterDeg: number;
+  slipEnterDeg: number; // residual slip that starts a slide on slippery ground
+  slipEnterDegPaved: number; // ...and on paved ground (after knocks)
   slipExitDeg: number;
   slipExitTicks: number;
+  // Drift trigger: a short brake tap while steering
+  driftTapTicks: number; // longest press that counts as a tap
+  driftArmTicks: number; // window after the tap in which steering starts the drift
+  driftMinSpeed: number;
+  driftMinSteer: number;
+  driftKick: number; // yaw rate the car is flicked to, rad/s
   // Sliding
   aSlide: number; // lateral budget while sliding, m/s²
   kAlign: number; // 1/s, how fast velocity swings toward the nose per radian of slip
@@ -71,6 +79,7 @@ export const DEFAULT_TUNING: CarTuning = {
 
   rMin: 5.5,
   omegaPeak: 3.0,
+  steerGrip: 0.98,
   steerLo: 0.9,
   steerHi: 1.3,
   steerV0: 18,
@@ -84,8 +93,15 @@ export const DEFAULT_TUNING: CarTuning = {
   overloadRatio: 1.0,
   slideEnterTicks: 4,
   slipEnterDeg: 7,
+  slipEnterDegPaved: 12,
   slipExitDeg: 3,
   slipExitTicks: 6,
+
+  driftTapTicks: 15,
+  driftArmTicks: 10,
+  driftMinSpeed: 12,
+  driftMinSteer: 0.45,
+  driftKick: 1.6,
 
   aSlide: 26,
   kAlign: 3.5,

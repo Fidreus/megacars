@@ -380,6 +380,9 @@ export class App {
     drawText(ctx, 'KM/H', 10 + String(kmh).length * 12, H - 15, { color: '#c0c0c0' });
     if (car.wrongWayTicks > 90) drawText(ctx, 'WRONG WAY!', W / 2, H / 2 - 40, { scale: 2, color: '#ff4a3a', align: 'center' });
 
+    if (this.world.tick < 60 * 20) {
+      drawText(ctx, 'TAP BRAKE WHILE STEERING TO DRIFT', W / 2, H - 34, { color: '#ffd84a', align: 'center' });
+    }
     if (this.flashTime > 0) {
       this.flashTime -= dt;
       drawText(ctx, this.flash, W / 2, 30, { scale: 2, color: yellow, align: 'center' });

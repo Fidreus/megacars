@@ -17,10 +17,17 @@ npm run build && npm start   # produktion: en server för spel + WebSocket på $
 
 ## Styrning (driftsandlådan, M1)
 
+På asfalt greppar bilen tills gränsen och understyr sedan – den sladdar inte
+av sig själv. Driften startar du genom att dutta på bromsen (kortare än
+0,25 s) medan du styr in i kurvan. I sladden orkar däcken nästan dubbelt så
+mycket sidokraft, så rätt timing tar dig genom skarpa kurvor mycket fortare.
+Gas ökar sladdvinkeln, släpp gasen eller motstyr för att räta upp. Is, olja
+och snö sladdar av sig själva.
+
 | Tangent | Funktion |
 |---|---|
 | ↑ / W | Gas |
-| ↓ / S | Broms / back |
+| ↓ / S | Broms / back. **Dutta** på bromsen medan du styr = drift |
 | ← → / A D | Styr |
 | R | Sätt tillbaka bilen på banan |
 | P | Autopilot (AI kör din bil) |

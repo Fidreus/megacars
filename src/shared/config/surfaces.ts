@@ -27,12 +27,14 @@ export interface SurfaceProps {
   accel: number;
   /** Visual/audio hint: kicks up dust or spray when driven fast. */
   dusty: boolean;
+  /** Steering alone can break traction here (ice, oil, snow). */
+  slippery: boolean;
 }
 
 const S = (
   name: string, grip: number, slide: number, scrub: number, drag: number, dragLinear: number,
-  vTop: number, accel: number, dusty = false,
-): SurfaceProps => ({ name, grip, slide, scrub, drag, dragLinear, vTop, accel, dusty });
+  vTop: number, accel: number, dusty = false, slippery = false,
+): SurfaceProps => ({ name, grip, slide, scrub, drag, dragLinear, vTop, accel, dusty, slippery });
 
 export const SURFACES: readonly SurfaceProps[] = [
   S('asphalt', 1, 1, 1, 0, 0, 1, 1),
@@ -40,9 +42,9 @@ export const SURFACES: readonly SurfaceProps[] = [
   S('wet', 0.8, 0.85, 0.9, 0, 0, 1, 0.9),
   S('gravel', 0.6, 0.75, 0.6, 1.5, 0, 0.88, 0.8, true),
   S('grass', 0.5, 0.55, 0.8, 3.5, 0, 0.7, 0.6, true),
-  S('snow', 0.45, 0.6, 0.6, 1, 0, 0.85, 0.6, true),
-  S('ice', 0.18, 0.3, 0.3, 0, 0, 1, 0.35),
-  S('oil', 0.06, 0.12, 0.2, 0, 0, 1, 0.3),
+  S('snow', 0.45, 0.6, 0.6, 1, 0, 0.85, 0.6, true, true),
+  S('ice', 0.18, 0.3, 0.3, 0, 0, 1, 0.35, false, true),
+  S('oil', 0.06, 0.12, 0.2, 0, 0, 1, 0.3, false, true),
   S('shallow water', 0.7, 0.7, 1, 0, 0.25, 0.6, 0.7, true),
   S('deep water', 0.3, 0.3, 1, 4, 0.5, 0.3, 0.3, true),
 ];
@@ -56,6 +58,8 @@ export interface SurfaceMix {
   dragLinear: number;
   vTop: number;
   accel: number;
+  /** Share of contact patches on slippery ground (0, 0.5 or 1). */
+  slippery: number;
 }
 
 export function mixSurfaces(a: SurfaceId, b: SurfaceId, out: SurfaceMix): SurfaceMix {
@@ -67,9 +71,10 @@ export function mixSurfaces(a: SurfaceId, b: SurfaceId, out: SurfaceMix): Surfac
   out.dragLinear = (sa.dragLinear + sb.dragLinear) * 0.5;
   out.vTop = (sa.vTop + sb.vTop) * 0.5;
   out.accel = (sa.accel + sb.accel) * 0.5;
+  out.slippery = ((sa.slippery ? 1 : 0) + (sb.slippery ? 1 : 0)) * 0.5;
   return out;
 }
 
 export function makeSurfaceMix(): SurfaceMix {
-  return { grip: 1, slide: 1, scrub: 1, drag: 0, dragLinear: 0, vTop: 1, accel: 1 };
+  return { grip: 1, slide: 1, scrub: 1, drag: 0, dragLinear: 0, vTop: 1, accel: 1, slippery: 0 };
 }

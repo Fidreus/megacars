@@ -36,6 +36,10 @@ export interface CarState {
   damage: number;
   // Control
   prevButtons: number;
+  /** Ticks the brake has been held (drift tap detection). */
+  brakeTicks: number;
+  /** Ticks left in which steering turns a brake tap into a drift. */
+  driftArm: number;
   aiDriven: number;
   aiMode: number;
   aiSkill: number;
@@ -63,7 +67,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
     id, x, z, y: 0, vx: 0, vz: 0, vy: 0, heading, angVel: 0, steer: 0,
     sliding: 0, modeTicks: 0, spinTicks: 0, spinCool: 0, airborne: 0,
     damage: 0,
-    prevButtons: 0, aiDriven: 0, aiMode: 1, aiSkill: 1,
+    prevButtons: 0, brakeTicks: 0, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1,
     trackIdx: 0, trackS: 0, raceDist: 0, lap: 0, nextCp: 0,
     lapStartTick: 0, lastLapTicks: 0, bestLapTicks: 0, wrongWayTicks: 0, finished: 0,
     slip: 0, latAccel: 0, longAccel: 0, surfFront: 0, surfRear: 0,
@@ -142,17 +146,19 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
     s = ns;
   }
 
-  // 2. Yaw: steering sets a target yaw rate; rotation lags behind it, more so
-  //    in a slide (that inertia is what counter-steering fights).
+  // Grip budget for this tick: braking or hard acceleration eats lateral
+  // grip (friction circle).
+  const budget = gripBudget(t, surf, braking, aEng);
+  const slippery = surf.slippery > 0;
+
+  // 2. Drift trigger: a short brake tap while steering flicks the car into a slide.
   const fwd = vx * fx + vz * fz;
+  updateDriftTrigger(car, inp, t, fwd);
+
+  // 3. Yaw: steering sets a target yaw rate; rotation lags behind it, more so
+  //    in a slide (that inertia is what counter-steering fights).
   const dirSign = fwd >= 0 ? 1 : -1;
-  let omegaMax: number;
-  if (!car.sliding) {
-    const aSteer = t.aGrip * lerp(t.steerLo, t.steerHi, smoothstep(t.steerV0, t.steerV1, s));
-    omegaMax = Math.min(s / t.rMin, t.omegaPeak, aSteer / Math.max(s, 1));
-  } else {
-    omegaMax = Math.min(t.omegaPeak, t.aSteerSlide / Math.max(s, 5));
-  }
+  const omegaMax = car.sliding ? slideOmegaMax(t, s) : gripOmegaMax(t, s, budget, slippery);
   let omegaT = car.steer * omegaMax * dirSign;
   if (car.sliding) {
     const b = car.slip;
@@ -164,7 +170,7 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
   car.angVel += (omegaT - car.angVel) * (1 - Math.exp(-kYaw * dt));
   car.heading = wrapAngle(car.heading + car.angVel * dt);
 
-  // 3. Tyres: swing the velocity toward the nose within the budget.
+  // 4. Tyres: swing the velocity toward the nose within the budget.
   fx = Math.sin(car.heading);
   fz = -Math.cos(car.heading);
   const fwd2 = vx * fx + vz * fz;
@@ -180,16 +186,14 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
     const beta = wrapAngle(dirHeading - headingOf(vx, vz));
     let delta: number;
     if (!car.sliding) {
-      // Friction circle: braking or hard acceleration eats lateral grip.
-      const u = braking > 0 ? braking : (0.5 * aEng) / t.brakeDecel;
-      const budget = t.aGrip * surf.grip * (1 - t.frictionCircle * u * u);
       const maxRot = (budget / s) * dt;
       delta = clamp(beta, -maxRot, maxRot);
-      // Breaking loose: the yaw rate asks for more lateral grip than the tyres
-      // can give for a few ticks in a row, or the slip got too big anyway.
-      if (Math.abs(car.angVel) * s > budget * t.overloadRatio) car.modeTicks++;
+      // On slippery ground steering alone can overload the tyres. On paved
+      // ground only a big leftover slip (after a knock) breaks traction.
+      if (slippery && Math.abs(car.angVel) * s > budget * t.overloadRatio) car.modeTicks++;
       else car.modeTicks = 0;
-      if (car.modeTicks >= t.slideEnterTicks || Math.abs(beta - delta) > t.slipEnterDeg * DEG) {
+      const slipLimit = (slippery ? t.slipEnterDeg : t.slipEnterDegPaved) * DEG;
+      if (car.modeTicks >= t.slideEnterTicks || Math.abs(beta - delta) > slipLimit) {
         car.sliding = 1;
         car.modeTicks = 0;
       }
@@ -225,6 +229,51 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
   car.longAccel = aLong;
   car.x += vx * dt;
   car.z += vz * dt;
+}
+
+/** Lateral acceleration the tyres can give while gripping, m/s². */
+export function gripBudget(t: CarTuning, surf: SurfaceMix, braking: number, aEng: number): number {
+  const u = braking > 0 ? braking : (0.5 * aEng) / t.brakeDecel;
+  return t.aGrip * surf.grip * (1 - t.frictionCircle * u * u);
+}
+
+/**
+ * Highest yaw rate steering asks for while gripping. On paved ground full lock
+ * uses all the grip there is and no more, so the car understeers at the limit
+ * instead of sliding by itself. On slippery ground the wheel asks for
+ * asphalt-level grip and the car breaks loose.
+ */
+export function gripOmegaMax(t: CarTuning, s: number, budget: number, slippery: boolean): number {
+  const aSteer = slippery ? t.aGrip * lerp(t.steerLo, t.steerHi, smoothstep(t.steerV0, t.steerV1, s)) : budget * t.steerGrip;
+  return Math.min(s / t.rMin, t.omegaPeak, aSteer / Math.max(s, 1));
+}
+
+export function slideOmegaMax(t: CarTuning, s: number): number {
+  return Math.min(t.omegaPeak, t.aSteerSlide / Math.max(s, 5));
+}
+
+/**
+ * A short brake tap arms the drift; steering at speed while armed (during the
+ * tap or just after it) throws the car into a slide with a yaw flick. Holding
+ * the brake only brakes. While already sliding, a tap can flick the car the
+ * other way (S-bends).
+ */
+function updateDriftTrigger(car: CarState, inp: CarInput, t: CarTuning, fwd: number): void {
+  if (inp.brake > 0.5) {
+    car.brakeTicks++;
+  } else {
+    if (car.brakeTicks > 0 && car.brakeTicks <= t.driftTapTicks) car.driftArm = t.driftArmTicks;
+    car.brakeTicks = 0;
+  }
+  if (car.driftArm <= 0) return;
+  car.driftArm--;
+  if (fwd < t.driftMinSpeed || Math.abs(car.steer) < t.driftMinSteer) return;
+  const dir = car.steer > 0 ? 1 : -1;
+  if (car.sliding && (car.slip > 0 ? 1 : -1) === dir) return;
+  car.sliding = 1;
+  car.modeTicks = 0;
+  car.driftArm = 0;
+  if (dir * car.angVel < t.driftKick) car.angVel = dir * t.driftKick;
 }
 
 function startSpin(car: CarState, t: CarTuning, beta: number): void {

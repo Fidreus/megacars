@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DT } from '../config/constants.ts';
-import { makeSurfaceMix } from '../config/surfaces.ts';
+import { makeSurfaceMix, mixSurfaces, Surface } from '../config/surfaces.ts';
 import { DEFAULT_TUNING } from '../config/tuning.ts';
 import { makeRng } from '../math/rng.ts';
 import { buildTrack, distanceToCentreline } from '../track/builder.ts';
@@ -50,20 +50,81 @@ describe('car dynamics', () => {
     expect(Math.abs(v - DEFAULT_TUNING.vTop) / DEFAULT_TUNING.vTop).toBeLessThan(0.02);
   });
 
-  it('breaks traction with full lock at high speed but not at medium speed', () => {
-    for (const [speed, expectSlide] of [[40, true], [18, false]] as const) {
+  it('grips at full lock on asphalt at high speed (understeers, no self-slide)', () => {
+    for (const speed of [18, 30, 44]) {
       const car = createCar(0, 0, 0, 0);
       car.vz = -speed;
       const inp = neutralInput();
-      inp.throttle = 0.6;
+      inp.throttle = 1;
       inp.steer = 1;
-      let slid = false;
-      for (let i = 0; i < 45; i++) {
+      for (let i = 0; i < 120; i++) {
         stepCarDynamics(car, inp, DEFAULT_TUNING, asphalt, DT);
-        if (car.sliding) slid = true;
+        expect(car.sliding, `speed ${speed} tick ${i}`).toBe(0);
+        expect(Math.abs(car.latAccel)).toBeLessThanOrEqual(DEFAULT_TUNING.aGrip * 1.01);
       }
-      expect(slid, `speed ${speed}`).toBe(expectSlide);
     }
+  });
+
+  it('a normal brake before turning in does not start a drift', () => {
+    const car = createCar(0, 0, 0, 0);
+    car.vz = -35;
+    const inp = neutralInput();
+    for (let i = 0; i < 90; i++) {
+      // 0.4 s of braking, then turn in on the throttle.
+      inp.brake = i < 24 ? 1 : 0;
+      inp.throttle = inp.brake ? 0 : 1;
+      inp.steer = i >= 24 ? 1 : 0;
+      stepCarDynamics(car, inp, DEFAULT_TUNING, asphalt, DT);
+      expect(car.sliding, `tick ${i}`).toBe(0);
+    }
+  });
+
+  it('holding the brake while steering only brakes', () => {
+    const car = createCar(0, 0, 0, 0);
+    car.vz = -35;
+    const inp = neutralInput();
+    inp.brake = 1;
+    inp.steer = 1;
+    for (let i = 0; i < 90; i++) {
+      stepCarDynamics(car, inp, DEFAULT_TUNING, asphalt, DT);
+      expect(car.sliding).toBe(0);
+    }
+  });
+
+  it('a brake tap while steering starts a drift', () => {
+    for (const tapFirst of [false, true]) {
+      const car = createCar(0, 0, 0, 0);
+      car.vz = -32;
+      const inp = neutralInput();
+      inp.throttle = 1;
+      let started = -1;
+      for (let i = 0; i < 60; i++) {
+        // Tap = 6 ticks of brake; steering either already held or right after.
+        inp.brake = i >= 10 && i < 16 ? 1 : 0;
+        inp.throttle = inp.brake ? 0 : 1;
+        inp.steer = tapFirst ? (i >= 17 ? 1 : 0) : 1;
+        stepCarDynamics(car, inp, DEFAULT_TUNING, asphalt, DT);
+        if (car.sliding && started < 0) started = i;
+      }
+      expect(started, `tapFirst=${tapFirst}`).toBeGreaterThanOrEqual(16);
+      expect(started).toBeLessThan(30);
+    }
+  });
+
+  it('slides on its own on ice', () => {
+    const ice = makeSurfaceMix();
+    mixSurfaces(Surface.Ice, Surface.Ice, ice);
+    const car = createCar(0, 0, 0, 0);
+    car.vz = -20;
+    const inp = neutralInput();
+    inp.throttle = 0.5;
+    inp.steer = 1;
+    let slid = false;
+    for (let i = 0; i < 60; i++) {
+      stepCarDynamics(car, inp, DEFAULT_TUNING, ice, DT);
+      if (car.sliding) slid = true;
+    }
+    expect(slid).toBe(true);
   });
 
   it('survives 100k ticks of random input without NaN or leaving the track', () => {

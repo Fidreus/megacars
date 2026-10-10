@@ -6,10 +6,11 @@
 // tyres need to swing the velocity at the required rate, so drifting emerges
 // from the same physics players use.
 
-import { DEG, clamp, headingOf, lerp, smoothstep, wrapAngle } from '../math/angle.ts';
+import { DEG, clamp, headingOf, smoothstep, wrapAngle } from '../math/angle.ts';
+import type { SurfaceMix } from '../config/surfaces.ts';
 import type { CarTuning } from '../config/tuning.ts';
 import type { Track } from '../track/types.ts';
-import type { CarState } from '../sim/car.ts';
+import { gripBudget, gripOmegaMax, slideOmegaMax, type CarState } from '../sim/car.ts';
 import { Btn, type CarInput } from '../sim/input.ts';
 
 export const AiMode = { Grip: 0, Drift: 1 } as const;
@@ -29,6 +30,9 @@ export const AI_PARAMS = {
   /** Share of full braking the planner assumes. */
   brakeUse: 0.85,
   planAhead: 200,
+  /** Tap the brake to drift when the corner needs this share of the grip budget. */
+  tapRatio: 0.97,
+  tapTicks: 4,
 };
 
 function lineStep(track: Track, i: number): number {
@@ -57,7 +61,7 @@ export function plannedSpeed(track: Track, from: number, aLat: number, aBrake: n
   return vAllowed;
 }
 
-export function aiDrive(car: CarState, track: Track, t: CarTuning, out: CarInput): void {
+export function aiDrive(car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, out: CarInput): void {
   const line = track.line;
   const n = track.n;
   const s = Math.hypot(car.vx, car.vz);
@@ -113,18 +117,39 @@ export function aiDrive(car: CarState, track: Track, t: CarTuning, out: CarInput
   omegaDes += AI_PARAMS.kLead * (omegaDes - car.angVel);
 
   // Invert the yaw model from car.ts to find the steering that gives omegaDes.
+  const aEngGuess = throttle * t.accel0 * surf.accel * Math.max(0, 1 - (fwd / (t.vTop * surf.vTop)) ** 2);
+  const budget = gripBudget(t, surf, brake, aEngGuess);
   let omegaMax: number;
   let extra = 0;
   if (!car.sliding) {
-    const aSteer = t.aGrip * lerp(t.steerLo, t.steerHi, smoothstep(t.steerV0, t.steerV1, s));
-    omegaMax = Math.min(s / t.rMin, t.omegaPeak, aSteer / Math.max(s, 1));
+    omegaMax = gripOmegaMax(t, s, budget, surf.slippery > 0);
   } else {
-    omegaMax = Math.min(t.omegaPeak, t.aSteerSlide / Math.max(s, 5));
+    omegaMax = slideOmegaMax(t, s);
     const bs = beta > 0 ? 1 : beta < 0 ? -1 : 0;
     extra = bs * t.kPow * throttle * smoothstep(3 * DEG, 15 * DEG, Math.abs(beta)) - t.assistPad * beta;
   }
   const dirSign = fwd >= 0 ? 1 : -1;
   const steer = omegaMax > 1e-3 ? clamp(((omegaDes - extra) / omegaMax) * dirSign, -1, 1) : 0;
+
+  // A short brake pulse while steering would start a drift; when not
+  // drifting, keep the brake on past the tap window instead.
+  if (!drift && car.brakeTicks > 0 && car.brakeTicks <= t.driftTapTicks && brake <= 0.5 && Math.abs(steer) >= t.driftMinSteer) {
+    brake = 0.55;
+    throttle = 0;
+  }
+
+  // Drift entry: when the corner needs more grip than the tyres have, tap the
+  // brake while steering (press a few ticks, release) like a player would.
+  if (drift && !car.sliding && fwd > t.driftMinSpeed && Math.abs(steer) >= t.driftMinSteer) {
+    if (Math.abs(turnRate) * s > budget * AI_PARAMS.tapRatio) {
+      if (car.brakeTicks < AI_PARAMS.tapTicks) {
+        brake = 1;
+        throttle = 0;
+      } else {
+        brake = 0;
+      }
+    }
+  }
 
   out.steer = steer;
   out.throttle = throttle;

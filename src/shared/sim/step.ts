@@ -33,12 +33,12 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     const car = cars[i];
     const t = tunings[i] ?? tunings[0];
     let inp: CarInput = inputs[i] ?? NEUTRAL_INPUT;
-    if (car.aiDriven) {
-      aiDrive(car, track, t, aiInput);
-      inp = aiInput;
-    }
     sampleCarSurface(car, track, t);
     mixSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, surfMix);
+    if (car.aiDriven) {
+      aiDrive(car, track, t, surfMix, aiInput);
+      inp = aiInput;
+    }
     stepCarDynamics(car, inp, t, surfMix, DT);
     car.prevButtons = inp.buttons;
   }
