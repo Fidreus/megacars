@@ -3,7 +3,6 @@
 // in server snapshots. The browser session and the tests both drive this.
 
 import { DT } from '../config/constants.ts';
-import { cloneTuning, DEFAULT_TUNING } from '../config/tuning.ts';
 import { createRaceWorld } from '../game/raceSetup.ts';
 import { neutralInput, quantizeInput, type CarInput } from '../sim/input.ts';
 import type { World } from '../sim/world.ts';
@@ -50,7 +49,7 @@ export class NetRace {
   constructor(spec: RaceSpec, playerId: number, send: (data: Uint8Array) => void) {
     this.spec = spec;
     this.send = send;
-    const { track, world } = createRaceWorld(spec);
+    const { track, world, tunings } = createRaceWorld(spec);
     this.track = track;
     this.world = world;
     this.localCars = [];
@@ -59,7 +58,7 @@ export class NetRace {
     });
     this.names = spec.entrants.map((e) => e.name);
     this.colors = spec.entrants.map((e) => e.color);
-    this.predictor = new Predictor(world, track, [cloneTuning(DEFAULT_TUNING)], this.localCars);
+    this.predictor = new Predictor(world, track, tunings, this.localCars);
     this.local = this.localCars.map(() => neutralInput());
     this.drift = world.cars.map(() => ({ dx: 0, dz: 0, dh: 0 }));
   }

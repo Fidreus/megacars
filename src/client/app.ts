@@ -42,6 +42,12 @@ import { drawCountdown, drawPlayerHud, Minimap } from './ui/screens/hud.ts';
 import { drawResults } from './ui/screens/results.ts';
 import { connText, drawLobby, inviteLink, pingColor } from './ui/screens/lobby.ts';
 import { drawLogo } from './ui/screens/title.ts';
+import { drawStandings, ShopScreen, type ShopContext } from './ui/screens/shop.ts';
+import {
+  humanDrivers, isOver, leader, loadCup, newChampionship, nextRaceSpec, saveCup, settleRace, standingsRows, type Championship,
+} from './game/championship.ts';
+import { buy } from '../shared/game/shop.ts';
+import type { RaceSpec } from '../shared/net/protocol.ts';
 
 const SHADOW_HALF = 62;
 const SHADOW_MAP = 2048;
@@ -50,7 +56,7 @@ const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
 const VIEW_HEIGHT = 51.3;
 
 /** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
-type Mode = 'title' | 'online' | 'lobby' | 'race';
+type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -92,6 +98,12 @@ export class App {
   private readonly pauseMenu: Menu;
   private readonly onlineMenu: Menu;
   private readonly lobbyMenu: Menu;
+  private readonly cupMenu: Menu;
+  /** The shop being shown (mode 'shop'). */
+  private shop: ShopScreen | null = null;
+  /** Offline championship in progress, and whether the current race belongs to it. */
+  private cup: Championship | null = null;
+  private cupRace = false;
   private readonly camTargets = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly camInit = [false, false];
   private readonly tagPos = new THREE.Vector3();
@@ -150,7 +162,7 @@ export class App {
       {
         label: () => 'RESTART RACE',
         disabled: () => !(this.session instanceof RaceSession),
-        select: () => this.session instanceof RaceSession && this.startRace(this.session.settings),
+        select: () => this.restartRace(),
       },
       {
         label: () => (this.netRace ? 'LEAVE ROOM' : 'QUIT TO MENU'),
@@ -167,6 +179,28 @@ export class App {
     });
     this.onlineMenu = new Menu(this.buildOnlineItems(), { onMove: beep, onChange: beep });
     this.lobbyMenu = new Menu(this.buildLobbyItems(), { onMove: beep, onChange: beep });
+    this.cupMenu = new Menu([
+      {
+        label: () => {
+          const c = loadCup();
+          return c ? `CONTINUE  RACE ${c.race + 1} OF ${c.tracks.length}` : 'CONTINUE';
+        },
+        disabled: () => !loadCup(),
+        select: () => {
+          this.cup = loadCup();
+          if (this.cup) this.openCupShop(0);
+        },
+      },
+      {
+        label: () => 'NEW CHAMPIONSHIP',
+        select: () => {
+          this.cup = newChampionship(this.settings);
+          saveCup(this.cup);
+          this.openCupShop(0);
+        },
+      },
+      { label: () => 'BACK', select: () => this.toTitle() },
+    ], { onMove: beep });
 
     this.setMood(moodById(this.settings.mood));
     if (params.room) {
@@ -205,6 +239,7 @@ export class App {
     const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
     return [
       { label: () => 'START RACE', select: () => this.startRace(s) },
+      { label: () => 'CHAMPIONSHIP', select: () => { this.mode = 'cup'; this.cupMenu.index = loadCup() ? 0 : 1; } },
       { label: () => 'PLAY ONLINE', select: () => this.toOnline() },
       {
         label: () => (s.players === 1 ? 'PLAYERS: 1' : 'PLAYERS: 2 SPLIT SCREEN'),
@@ -302,9 +337,29 @@ export class App {
         change: (d: number) => o().configure({ difficulty: cycle(cfg()?.difficulty ?? 1, 3, d) }),
       },
       { label: () => `WEAPONS: ${cfg()?.weapons === false ? 'OFF' : 'ON'}`, disabled: notHost, change: () => o().configure({ weapons: cfg()?.weapons === false }) },
+      {
+        label: () => (cfg()?.upgrades === false ? 'SHOP: CLOSED' : `SHOP  $${o().profile?.money ?? '...'}`),
+        disabled: () => busy() || cfg()?.upgrades === false,
+        select: () => this.openOnlineShop(),
+      },
+      { label: () => `UPGRADES: ${cfg()?.upgrades === false ? 'OFF' : 'ON'}`, disabled: notHost, change: () => o().configure({ upgrades: cfg()?.upgrades === false }) },
+      { label: () => 'NEW SEASON', disabled: () => notHost() || busy() || !o().room?.races, select: () => o().newSeason() },
       { label: () => 'COPY INVITE LINK', select: () => this.copyInvite() },
       { label: () => 'LEAVE ROOM', select: () => this.leaveRoom() },
     ];
+  }
+
+  private openOnlineShop(): void {
+    const o = this.online;
+    this.mode = 'shop';
+    this.shop = this.makeShop({
+      title: () => `SHOP - ROOM ${o.room?.code ?? ''}`,
+      profile: () => o.profile,
+      buy: (item) => o.buy(item),
+      doneLabel: () => 'BACK TO LOBBY',
+      done: () => this.toLobby(),
+      weapons: () => o.room?.config.weapons !== false,
+    });
   }
 
   private copyInvite(): void {
@@ -357,11 +412,65 @@ export class App {
     this.setSession(attractSession(this.settings, this.tuning));
   }
 
-  startRace(settings: RaceSettings): void {
+  startRace(settings: RaceSettings, spec?: RaceSpec): void {
     this.mode = 'race';
     this.paused = false;
     this.lastLights = 0;
-    this.setSession(new RaceSession({ ...settings }, this.tuning));
+    this.cupRace = !!spec;
+    this.setSession(new RaceSession({ ...settings }, this.tuning, spec?.seed, spec));
+  }
+
+  private restartRace(): void {
+    const s = this.session;
+    if (!(s instanceof RaceSession)) return;
+    this.startRace(s.settings, this.cupRace ? s.spec : undefined);
+  }
+
+  // --------------------------------------------------------- championship
+
+  /** The shop for local player p before the next championship race. */
+  private openCupShop(p: number): void {
+    const cup = this.cup!;
+    const humans = humanDrivers(cup);
+    const d = humans[p];
+    this.showAttract('shop');
+    this.shop = this.makeShop({
+      title: () => `${humans.length > 1 ? `${d.name} - ` : ''}RACE ${cup.race + 1} OF ${cup.tracks.length}: ${TRACKS[cup.tracks[cup.race]].name.toUpperCase()}`,
+      profile: () => d.profile,
+      buy: (item) => {
+        const err = buy(d.profile, item);
+        if (!err) saveCup(cup);
+        return err;
+      },
+      doneLabel: () => (p + 1 < humans.length ? `DONE - ${humans[p + 1].name} SHOPS` : 'START RACE'),
+      done: () => (p + 1 < humans.length ? this.openCupShop(p + 1) : this.startCupRace()),
+      weapons: () => cup.weapons,
+    });
+  }
+
+  private startCupRace(): void {
+    const cup = this.cup!;
+    const spec = nextRaceSpec(cup);
+    saveCup(cup);
+    const players = humanDrivers(cup).length as 1 | 2;
+    this.startRace({ ...this.settings, track: spec.track, laps: spec.laps, weapons: spec.weapons, players, practice: false }, spec);
+  }
+
+  /** Results confirmed: score the race and show the table. */
+  private finishCupRace(): void {
+    const cup = this.cup!;
+    settleRace(cup, this.world);
+    saveCup(cup);
+    this.cupRace = false;
+    this.showAttract('standings');
+  }
+
+  private makeShop(ctx: ShopContext): ShopScreen {
+    return new ShopScreen(ctx, {
+      onMove: () => playTone(this.audio, 660, 0.04, 'square', 0.05),
+      onBuy: () => playTone(this.audio, 1046, 0.12, 'square', 0.08, 1568),
+      onDeny: () => playTone(this.audio, 160, 0.18, 'square', 0.08),
+    });
   }
 
   private setSession(session: GameSession): void {
@@ -505,6 +614,8 @@ export class App {
     if (this.mode === 'title') return this.titleMenu;
     if (this.mode === 'online') return this.onlineMenu;
     if (this.mode === 'lobby') return this.lobbyMenu;
+    if (this.mode === 'cup') return this.cupMenu;
+    if (this.mode === 'shop') return this.shop?.menu ?? null;
     return this.paused ? this.pauseMenu : null;
   }
 
@@ -553,9 +664,33 @@ export class App {
       this.lobbyMenu.handle(nav);
       return;
     }
+    if (this.mode === 'cup') {
+      if (nav.back) this.toTitle();
+      else this.cupMenu.handle(nav);
+      return;
+    }
+    if (this.mode === 'shop') {
+      if (nav.back && this.netRace === null && this.online.room && !this.cup) this.toLobby();
+      else this.shop?.handle(nav);
+      return;
+    }
+    if (this.mode === 'standings') {
+      if (nav.confirm || nav.click) {
+        const cup = this.cup!;
+        if (isOver(cup)) {
+          saveCup(null);
+          this.cup = null;
+          this.toTitle();
+        } else {
+          this.openCupShop(0);
+        }
+      }
+      return;
+    }
     if (this.showingResults) {
       if (nav.confirm || nav.click || nav.back) {
-        if (this.netRace && this.online.room) this.toLobby();
+        if (this.cupRace && this.cup) this.finishCupRace();
+        else if (this.netRace && this.online.room) this.toLobby();
         else if (this.netRace) this.showAttract('online');
         else this.toTitle();
       }
@@ -790,6 +925,26 @@ export class App {
       drawText(ctx, st.text, W / 2, H - 34, { align: 'center', color: st.color });
       drawText(ctx, 'CREATE A ROOM AND SEND THE CODE TO YOUR FRIENDS, OR TYPE THEIR CODE', W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
       drawText(ctx, 'ENTER SELECT   TYPE TO EDIT   ESC BACK', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+    } else if (this.mode === 'cup') {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, 0, W, H);
+      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
+      drawText(ctx, 'CHAMPIONSHIP', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
+      const names = TRACK_LIST.map((t) => t.name.toUpperCase()).join(', ');
+      drawText(ctx, `${TRACK_LIST.length} RACES: ${names}`, W / 2, top + 22, { color: '#9fd8ff', align: 'center' });
+      drawText(ctx, 'WIN PRIZE MONEY AND POINTS - UPGRADE YOUR CAR BETWEEN RACES', W / 2, top + 34, { color: '#c8d0dc', align: 'center' });
+      this.cupMenu.draw(ctx, W / 2, top + 56, fitScale(this.cupMenu, top + 56, H - 30), dt);
+      const s = this.settings;
+      drawText(ctx, `PLAYERS ${s.players}   OPPONENTS ${s.opponents}   ${DIFFICULTIES[s.difficulty]}   LAPS ${s.laps}   WEAPONS ${s.weapons ? 'ON' : 'OFF'}`, W / 2, H - 22, { color: '#8090a8', align: 'center' });
+      drawText(ctx, 'NEW CHAMPIONSHIPS USE THE SETTINGS FROM THE MAIN MENU', W / 2, H - 11, { color: '#8090a8', align: 'center' });
+    } else if (this.mode === 'shop' && this.shop) {
+      this.shop.draw(ctx, W, H, dt);
+    } else if (this.mode === 'standings' && this.cup) {
+      const cup = this.cup;
+      const over = isOver(cup);
+      const title = over ? `${leader(cup).name === 'YOU' ? 'YOU ARE' : `${leader(cup).name} IS`} CHAMPION!` : 'CHAMPIONSHIP';
+      const sub = over ? 'FINAL STANDINGS' : `AFTER RACE ${cup.race} OF ${cup.tracks.length}`;
+      drawStandings(ctx, W, H, title, sub, standingsRows(cup), this.time, over ? 'PRESS ENTER' : 'PRESS ENTER FOR THE SHOP');
     } else if (this.mode === 'lobby' && this.online.room) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);

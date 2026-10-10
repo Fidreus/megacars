@@ -7,6 +7,7 @@ import {
   type ClientMsg, type ErrorCode, type ServerMsg,
 } from '../shared/net/protocol.ts';
 import { neutralInput } from '../shared/sim/input.ts';
+import { isShopItem } from '../shared/game/shop.ts';
 import { Room, type Peer } from './room.ts';
 
 export interface Transport {
@@ -119,6 +120,17 @@ export class GameServer {
       case 'config': {
         const err = c.room?.setConfig(c.id, msg.config ?? {});
         if (err) c.error(err, err === 'notHost' ? 'Only the host can change that' : 'Race in progress');
+        break;
+      }
+      case 'buy': {
+        if (!isShopItem(msg.item)) return;
+        const err = c.room?.buy(c.id, msg.item);
+        if (err) c.error('bad', err);
+        break;
+      }
+      case 'newSeason': {
+        const err = c.room?.newSeason(c.id);
+        if (err) c.error(err, err === 'notHost' ? 'Only the host can start a new season' : 'Race in progress');
         break;
       }
       case 'start': {

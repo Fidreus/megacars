@@ -13,6 +13,10 @@ export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, r
   y += 7 * big + 6;
   drawText(ctx, `INVITE: ${inviteLink(room.code)}`, W / 2, y, { color: '#9fd8ff', align: 'center' });
   y += 14;
+  if (room.races > 0) {
+    drawText(ctx, `SEASON: ${room.races} RACE${room.races === 1 ? '' : 'S'} RUN`, W / 2, y - 4, { color: '#c8d0dc', align: 'center' });
+    y += 8;
+  }
 
   const rowH = 11;
   const boxW = Math.min(W - 24, 300);
@@ -46,7 +50,8 @@ export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, r
       status = Math.sin(time * 4) > 0 ? 'NOT READY' : '';
       color = '#ff9a1f';
     }
-    drawText(ctx, status, x0 + boxW - 58, ry, { color, align: 'right' });
+    drawText(ctx, status, x0 + boxW - 92, ry, { color, align: 'right' });
+    drawText(ctx, `${p.points}P`, x0 + boxW - 50, ry, { color: '#ffd84a', align: 'right' });
     if (p.ping >= 0) drawText(ctx, `${p.ping}MS`, x0 + boxW - 6, ry, { color: pingColor(p.ping), align: 'right' });
   }
   y += boxH + 4;

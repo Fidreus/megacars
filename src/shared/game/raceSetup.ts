@@ -1,13 +1,15 @@
 // Builds the starting world of a race from its spec. The server and every
-// client run this with the same spec and get identical worlds.
+// client run this with the same spec and get identical worlds and handling.
 
+import { DEFAULT_TUNING, type CarTuning } from '../config/tuning.ts';
 import type { RaceSpec } from '../net/protocol.ts';
 import { getTrack } from '../track/builder.ts';
 import { TRACKS } from '../track/defs/index.ts';
 import type { Track } from '../track/types.ts';
 import { createWorld, type World } from '../sim/world.ts';
+import { defaultLoadout, tuningFor } from './shop.ts';
 
-export function createRaceWorld(spec: RaceSpec): { track: Track; world: World } {
+export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING): { track: Track; world: World; tunings: CarTuning[] } {
   const def = TRACKS[spec.track];
   if (!def) throw new Error(`unknown track ${spec.track}`);
   const track = getTrack(def);
@@ -16,11 +18,21 @@ export function createRaceWorld(spec: RaceSpec): { track: Track; world: World } 
     countdownTicks: spec.countdownTicks,
     weapons: spec.weapons,
   });
+  const tunings: CarTuning[] = [];
   spec.entrants.forEach((e, i) => {
     const car = world.cars[i];
     car.aiSkill = e.skill;
     if (e.playerId >= 0) car.human = 1;
     else car.aiDriven = 1;
+    const l = e.loadout ?? defaultLoadout();
+    tunings.push(tuningFor(base, l));
+    if (e.loadout) {
+      // Ammo is kept even with weapons off, so it carries over to later races.
+      car.missiles = l.missiles;
+      car.mines = l.mines;
+      car.turbos = l.turbos;
+      car.damage = l.damage;
+    }
   });
-  return { track, world };
+  return { track, world, tunings };
 }

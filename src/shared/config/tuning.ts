@@ -70,6 +70,8 @@ export interface CarTuning {
   carFriction: number;
   wallDamageSpeed: number;
   carDamageSpeed: number;
+  /** Share of damage that gets through (armour upgrades lower it). */
+  armour: number;
 }
 
 export const DEFAULT_TUNING: CarTuning = {
@@ -139,6 +141,7 @@ export const DEFAULT_TUNING: CarTuning = {
   carFriction: 0.25,
   wallDamageSpeed: 6,
   carDamageSpeed: 4,
+  armour: 1,
 };
 
 export function cloneTuning(t: CarTuning): CarTuning {

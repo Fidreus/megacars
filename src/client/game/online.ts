@@ -2,6 +2,7 @@
 // race the server is running for it.
 
 import { NetRace } from '../../shared/net/netRace.ts';
+import { priceOf, type Profile, type ShopItem } from '../../shared/game/shop.ts';
 import { cleanName, MsgType, type RoomConfig, type RoomInfo, type ServerMsg } from '../../shared/net/protocol.ts';
 import type { CarInput } from '../../shared/sim/input.ts';
 import type { World } from '../../shared/sim/world.ts';
@@ -45,6 +46,8 @@ export class Online {
   readonly conn: Connection;
   room: RoomInfo | null = null;
   race: OnlineSession | null = null;
+  /** Our season profile in this room (from the server). */
+  profile: Profile | null = null;
   /** Room code being typed on the join screen. */
   code = '';
   private pending: { t: 'create' } | { t: 'join'; code: string } | null = null;
@@ -113,6 +116,7 @@ export class Online {
     this.conn.send({ t: 'leave' });
     this.setRoom(null);
     this.race = null;
+    this.profile = null;
   }
 
   setReady(ready: boolean): void {
@@ -125,6 +129,22 @@ export class Online {
 
   start(): void {
     this.conn.send({ t: 'start' });
+  }
+
+  /** Ask the server to buy; obvious refusals are answered locally. */
+  buy(item: ShopItem): string | null {
+    const p = this.profile;
+    if (!p) return 'NOT CONNECTED';
+    const price = priceOf(p, item);
+    if (price === null) return item === 'repair' ? 'NOTHING TO REPAIR' : 'MAXED OUT';
+    if (item !== 'repair' && p.money < price) return 'NOT ENOUGH MONEY';
+    if (item === 'repair' && p.money <= 0) return 'NO MONEY';
+    this.conn.send({ t: 'buy', item });
+    return null;
+  }
+
+  newSeason(): void {
+    this.conn.send({ t: 'newSeason' });
   }
 
   /** Per frame: keep the race clock informed about the round trip. */
@@ -178,6 +198,9 @@ export class Online {
         break;
       }
       case 'raceOver':
+        break;
+      case 'profile':
+        this.profile = msg.profile;
         break;
       case 'error':
         this.events.notice(msg.msg.toUpperCase());

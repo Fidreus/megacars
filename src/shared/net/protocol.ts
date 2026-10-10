@@ -3,6 +3,7 @@
 
 import { SIM_VERSION } from '../config/constants.ts';
 import type { CarInput } from '../sim/input.ts';
+import type { Loadout, Profile, ShopItem } from '../game/shop.ts';
 
 /** Bump when messages change incompatibly. Clients and server must match. */
 export const PROTOCOL_VERSION = 1 + SIM_VERSION * 100;
@@ -58,6 +59,8 @@ export interface RoomConfig {
   difficulty: number;
   /** Missiles, mines, turbo and damage. */
   weapons: boolean;
+  /** Prize money, the shop and upgrades carried between races. */
+  upgrades: boolean;
 }
 
 export interface PlayerInfo {
@@ -68,6 +71,9 @@ export interface PlayerInfo {
   connected: boolean;
   /** Round-trip time in ms (-1 = unknown). */
   ping: number;
+  /** Season points and the latest race's place (0 = none). */
+  points: number;
+  lastPlace: number;
 }
 
 export interface RoomInfo {
@@ -77,6 +83,8 @@ export interface RoomInfo {
   config: RoomConfig;
   /** 'race' while a race runs (newcomers spectate until the next one). */
   state: 'lobby' | 'race';
+  /** Races run this season. */
+  races: number;
 }
 
 export interface Entrant {
@@ -86,6 +94,8 @@ export interface Entrant {
   playerId: number;
   /** AI skill (also used when a person drops out mid-race). */
   skill: number;
+  /** Upgrades, ammo and damage (default: stock car, standard ammo). */
+  loadout?: Loadout;
 }
 
 /** Everything needed to build the same starting world everywhere. */
@@ -107,7 +117,9 @@ export type ClientMsg =
   | { t: 'name'; name: string }
   | { t: 'ready'; ready: boolean }
   | { t: 'config'; config: Partial<RoomConfig> }
-  | { t: 'start' };
+  | { t: 'start' }
+  | { t: 'buy'; item: ShopItem }
+  | { t: 'newSeason' };
 
 export type ServerMsg =
   | { t: 'welcome'; id: number; token: string }
@@ -117,7 +129,9 @@ export type ServerMsg =
   /** A race starts (or is running, for newcomers). `tick` is the server's world tick now. */
   | { t: 'race'; spec: RaceSpec; tick: number }
   /** The race is over; the room is back in the lobby. */
-  | { t: 'raceOver' };
+  | { t: 'raceOver' }
+  /** Your own season profile (money, upgrades, ammo, damage). */
+  | { t: 'profile'; profile: Profile };
 
 export type ErrorCode = 'version' | 'noRoom' | 'full' | 'busy' | 'notHost' | 'bad' | 'limit';
 

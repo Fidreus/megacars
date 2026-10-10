@@ -16,6 +16,7 @@ import { neutralInput, type CarInput } from '../shared/sim/input.ts';
 import { sampleCarSurface, stepWorld } from '../shared/sim/step.ts';
 import { RacePhase } from '../shared/sim/world.ts';
 import { GameServer, type Client } from './gameServer.ts';
+import { START_MONEY, UPGRADE_PRICES, type Profile } from '../shared/game/shop.ts';
 
 const TICK_MS = 1000 / 60;
 
@@ -56,6 +57,7 @@ class TestClient {
   id = -1;
   room: RoomInfo | null = null;
   race: NetRace | null = null;
+  profile: Profile | null = null;
   errors: string[] = [];
   /** Largest own-car correction (m) after warm-up, and the sum of all. */
   maxOwnCorrection = 0;
@@ -104,6 +106,7 @@ class TestClient {
     if (msg.t === 'welcome') this.id = msg.id;
     else if (msg.t === 'room') this.room = msg.room;
     else if (msg.t === 'error') this.errors.push(msg.code);
+    else if (msg.t === 'profile') this.profile = msg.profile;
     else if (msg.t === 'race') {
       this.race = new NetRace(msg.spec, this.id, (d) => {
         const copy = d.slice();
@@ -256,6 +259,37 @@ describe('online race', () => {
     expect(server.rooms.size).toBe(1);
     expect(room()!.state).toBe('lobby');
     expect(lateAfterStart).toBeGreaterThanOrEqual(0);
+  });
+
+  it('pays out after a race, sells upgrades, and races with them next time', () => {
+    const { net, cs, room } = setup([[20, 5, 1000 / 60], [30, 5, 1000 / 60]], 1);
+    expect(cs[0].profile?.money).toBe(START_MONEY);
+    expect(runRace(net, room)).toBeGreaterThan(0);
+    net.runUntil(net.now + 500);
+    for (const c of cs) {
+      expect(c.profile!.races).toBe(1);
+      expect(c.profile!.money).toBeGreaterThan(START_MONEY);
+    }
+    expect(cs[0].room!.races).toBe(1);
+    expect(cs[0].room!.players.reduce((a, p) => a + p.points, 0)).toBeGreaterThan(0);
+    // Buy tyres, and a second time too many (not enough money for level 2 + 3 at once).
+    const money = cs[1].profile!.money;
+    cs[1].send({ t: 'buy', item: 'tyres' });
+    net.runUntil(net.now + 300);
+    expect(cs[1].profile!.tyres).toBe(1);
+    expect(cs[1].profile!.money).toBe(money - UPGRADE_PRICES.tyres[0]);
+    // The next race uses the upgrade, identically on the server and every client.
+    cs[1].send({ t: 'ready', ready: true });
+    net.runUntil(net.now + 300);
+    cs[0].send({ t: 'start' });
+    net.runUntil(net.now + 1000);
+    const spec = room()!.race!.spec;
+    expect(spec.entrants.find((e) => e.playerId === cs[1].id)!.loadout!.tyres).toBe(1);
+    expect(cs[0].race!.spec).toEqual(spec);
+    // Shopping during a race is refused.
+    cs[1].send({ t: 'buy', item: 'missiles' });
+    net.runUntil(net.now + 300);
+    expect(cs[1].errors).toContain('bad');
   });
 
   it('hands a dropped driver to the computer and back on reconnect', () => {

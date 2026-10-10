@@ -122,7 +122,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
   }
   if (race.weapons && race.phase === RacePhase.Racing) {
     applyImpactDamage(cars, tunings, w.events, knocks);
-    for (const car of cars) checkWreck(car, w.events);
+    for (const car of cars) checkWreck(car, cars, w.events);
   }
   for (let i = 0; i < cars.length; i++) {
     const car = cars[i];

@@ -22,7 +22,7 @@ const I32: readonly CarKey[] = [
   'driftArm', 'aiDriven', 'aiMode', 'aiReverseTicks', 'human', 'trackIdx', 'lap', 'nextCp', 'lapStartTick',
   'lastLapTicks', 'bestLapTicks', 'wrongWayTicks', 'finished', 'finishTick', 'place', 'stuckTicks', 'ghostTicks',
   'respawns', 'surfFront', 'surfRear', 'missiles', 'mines', 'turbos', 'turboTicks', 'fireCool', 'mineCool',
-  'wreckTicks',
+  'wreckTicks', 'hits', 'kills', 'lastHitBy',
 ];
 
 /** Every CarState key except `id` must be listed above (checked by tests). */

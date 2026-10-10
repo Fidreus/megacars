@@ -2,7 +2,7 @@
 // room runs the authoritative simulation at 60 Hz, consumes each driver's
 // inputs for the tick they were meant for, and sends snapshots back.
 
-import { cloneTuning, DEFAULT_TUNING, type CarTuning } from '../shared/config/tuning.ts';
+import type { CarTuning } from '../shared/config/tuning.ts';
 import { AI_NAMES, AI_SKILL, CAR_COLORS } from '../shared/game/roster.ts';
 import { createRaceWorld } from '../shared/game/raceSetup.ts';
 import { makeRng } from '../shared/math/rng.ts';
@@ -11,6 +11,9 @@ import {
   type Entrant, type PlayerInfo, type RaceSpec, type RoomConfig, type RoomInfo, type ServerMsg,
 } from '../shared/net/protocol.ts';
 import { encodeSnapshot } from '../shared/net/snapshot.ts';
+import {
+  aiLoadout, averageLevel, buy, loadoutOf, newProfile, raceResults, settle, type Profile, type ShopItem,
+} from '../shared/game/shop.ts';
 import { copyInput, neutralInput, type CarInput } from '../shared/sim/input.ts';
 import { stepWorld } from '../shared/sim/step.ts';
 import { COUNTDOWN_TICKS, RacePhase, type World } from '../shared/sim/world.ts';
@@ -34,6 +37,9 @@ interface Member {
   peer: Peer | null;
   /** When the connection dropped (ms), for the reconnect grace period. */
   droppedAt: number;
+  /** Season: money, points, upgrades, ammo and damage. */
+  profile: Profile;
+  lastPlace: number;
 }
 
 const INPUT_RING = 128;
@@ -72,7 +78,9 @@ export class Room {
   readonly code: string;
   readonly members: Member[] = [];
   hostId = -1;
-  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true };
+  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true, upgrades: true };
+  /** Races finished this season. */
+  races = 0;
   race: RaceRun | null = null;
   /** Ticks of the latest race simulated (diagnostics). */
   simTicks = 0;
@@ -105,9 +113,11 @@ export class Room {
     const used = new Set(this.members.map((m) => m.color));
     let color = 0;
     while (used.has(color)) color++;
-    this.members.push({ id: peer.id, name: this.uniqueName(peer.id, peer.name), color, ready: false, peer, droppedAt: 0 });
+    const profile = newProfile();
+    this.members.push({ id: peer.id, name: this.uniqueName(peer.id, peer.name), color, ready: false, peer, droppedAt: 0, profile, lastPlace: 0 });
     if (this.hostId < 0 || !this.member(this.hostId)) this.hostId = peer.id;
     this.broadcastRoom();
+    peer.send({ t: 'profile', profile });
     if (this.race) this.sendRace(peer);
     return null;
   }
@@ -152,6 +162,7 @@ export class Room {
       d.ringTick.fill(-1);
     }
     this.broadcastRoom();
+    peer.send({ t: 'profile', profile: m.profile });
     if (this.race) this.sendRace(peer);
     return true;
   }
@@ -211,6 +222,7 @@ export class Room {
     if (Number.isFinite(c.laps)) cfg.laps = Math.max(1, Math.min(9, Math.round(c.laps!)));
     if (Number.isFinite(c.ai)) cfg.ai = Math.max(0, Math.min(MAX_PLAYERS - 1, Math.round(c.ai!)));
     if (typeof c.weapons === 'boolean') cfg.weapons = c.weapons;
+    if (typeof c.upgrades === 'boolean') cfg.upgrades = c.upgrades;
     if (Number.isFinite(c.difficulty)) cfg.difficulty = Math.max(0, Math.min(2, Math.round(c.difficulty!)));
     this.broadcastRoom();
     return null;
@@ -224,8 +236,10 @@ export class Room {
       ready: m.ready || m.id === this.hostId,
       connected: m.peer !== null,
       ping: m.peer ? Math.round(m.peer.rtt) : -1,
+      points: m.profile.points,
+      lastPlace: m.lastPlace,
     }));
-    return { code: this.code, hostId: this.hostId, players, config: { ...this.config }, state: this.state };
+    return { code: this.code, hostId: this.hostId, players, config: { ...this.config }, state: this.state, races: this.races };
   }
 
   broadcastRoom(): void {
@@ -243,6 +257,8 @@ export class Room {
     if (racers.some((m) => !m.ready && m.id !== this.hostId)) return 'bad';
     const rnd = makeRng(seed);
     const aiCount = Math.min(this.config.ai, MAX_PLAYERS - racers.length);
+    const shop = this.config.upgrades;
+    const level = averageLevel(racers.map((m) => m.profile));
     const names = [...AI_NAMES].sort(() => rnd() - 0.5);
     const used = new Set(racers.map((m) => m.color));
     const free = CAR_COLORS.map((_, i) => i).filter((i) => !used.has(i));
@@ -254,10 +270,14 @@ export class Room {
         color: CAR_COLORS[free[k % free.length]],
         playerId: -1,
         skill: AI_SKILL[this.config.difficulty] + (rnd() - 0.5) * 0.06,
+        loadout: shop ? aiLoadout(level, this.config.difficulty, rnd) : undefined,
       });
     }
     for (const m of racers) {
-      entrants.push({ name: m.name, color: CAR_COLORS[m.color], playerId: m.id, skill: AI_SKILL[1] });
+      entrants.push({
+        name: m.name, color: CAR_COLORS[m.color], playerId: m.id, skill: AI_SKILL[1],
+        loadout: shop ? loadoutOf(m.profile) : undefined,
+      });
     }
     const spec: RaceSpec = {
       id: raceIds++,
@@ -268,7 +288,7 @@ export class Room {
       weapons: this.config.weapons,
       entrants,
     };
-    const { world, track } = createRaceWorld(spec);
+    const { world, track, tunings } = createRaceWorld(spec);
     const drivers: Driver[] = [];
     entrants.forEach((e, car) => {
       if (e.playerId < 0) return;
@@ -285,7 +305,7 @@ export class Room {
     });
     this.race = {
       spec, world, track, drivers,
-      tunings: [cloneTuning(DEFAULT_TUNING)],
+      tunings,
       inputs: world.cars.map(() => neutralInput()),
     };
     this.simTicks = 0;
@@ -368,6 +388,7 @@ export class Room {
 
   endRace(): void {
     if (!this.race) return;
+    this.settleRace(this.race);
     this.race = null;
     for (const m of this.members) {
       m.ready = false;
@@ -375,6 +396,51 @@ export class Room {
     }
     this.pickHost();
     this.broadcastRoom();
+  }
+
+  /** Points always; money, ammo and damage carry over when upgrades are on. */
+  private settleRace(race: RaceRun): void {
+    this.races++;
+    for (const m of this.members) m.lastPlace = 0;
+    for (const r of raceResults(race.world)) {
+      const e = race.spec.entrants[r.car];
+      const m = e.playerId >= 0 ? this.member(e.playerId) : undefined;
+      if (!m) continue;
+      m.lastPlace = r.place;
+      if (this.config.upgrades) {
+        settle(m.profile, race.world, r);
+      } else {
+        m.profile.points += r.points;
+        m.profile.races++;
+        if (r.place === 1) m.profile.wins++;
+      }
+      m.peer?.send({ t: 'profile', profile: m.profile });
+    }
+  }
+
+  /** Spend money in the shop (between races only). */
+  buy(id: number, item: ShopItem): string | null {
+    const m = this.member(id);
+    if (!m) return 'NOT IN THIS ROOM';
+    if (this.race) return 'WAIT FOR THE RACE TO END';
+    if (!this.config.upgrades) return 'THE SHOP IS CLOSED IN THIS ROOM';
+    const err = buy(m.profile, item);
+    if (!err) m.peer?.send({ t: 'profile', profile: m.profile });
+    return err;
+  }
+
+  /** Host: everybody starts over with fresh cars and no points. */
+  newSeason(id: number): 'notHost' | 'busy' | null {
+    if (id !== this.hostId) return 'notHost';
+    if (this.race) return 'busy';
+    this.races = 0;
+    for (const m of this.members) {
+      m.profile = newProfile();
+      m.lastPlace = 0;
+      m.peer?.send({ t: 'profile', profile: m.profile });
+    }
+    this.broadcastRoom();
+    return null;
   }
 
   /** Late-input statistics for diagnostics. */

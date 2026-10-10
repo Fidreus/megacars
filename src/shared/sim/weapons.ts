@@ -157,8 +157,14 @@ export function stepBoostAndAir(car: CarState, t: CarTuning, dt: number): void {
 }
 
 /** A hit: damage, a spin and a shove in the given direction. */
-function hitCar(car: CarState, t: CarTuning, damage: number, dx: number, dz: number, ev: EventBuffer, kind: number, owner: number): void {
-  car.damage = Math.min(1, car.damage + damage);
+function hitCar(
+  car: CarState, cars: CarState[], t: CarTuning, damage: number, dx: number, dz: number, ev: EventBuffer, kind: number, owner: number,
+): void {
+  car.damage = Math.min(1, car.damage + damage * t.armour);
+  if (owner !== car.id && cars[owner]) {
+    cars[owner].hits++;
+    car.lastHitBy = owner;
+  }
   const keep = 0.45;
   car.vx = car.vx * keep + dx * 6;
   car.vz = car.vz * keep + dz * 6;
@@ -216,7 +222,7 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
       if (hit >= 0) {
         const sp = Math.hypot(s.vx, s.vz) || 1;
         const c = cars[hit];
-        hitCar(c, tunings[hit] ?? tunings[0], WEAPON.missileDamage, s.vx / sp, s.vz / sp, ev, 1, s.owner);
+        hitCar(c, cars, tunings[hit] ?? tunings[0], WEAPON.missileDamage, s.vx / sp, s.vz / sp, ev, 1, s.owner);
         s.kind = ShotKind.None;
       }
     } else if (s.kind === ShotKind.Mine) {
@@ -238,7 +244,7 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
           if (dx * dx + dz * dz < rr * rr) near = true;
         }
         if (!near) continue;
-        hitCar(c, t, WEAPON.mineDamage, 0, 0, ev, 2, s.owner);
+        hitCar(c, cars, t, WEAPON.mineDamage, 0, 0, ev, 2, s.owner);
         c.vy = WEAPON.mineLaunch;
         c.y = 0.01;
         c.airborne = 1;
@@ -256,23 +262,26 @@ export function applyImpactDamage(cars: CarState[], tunings: readonly CarTuning[
     if (e.kind === Ev.WallHit) {
       const c = cars[e.car];
       const t = tunings[c.id] ?? tunings[0];
-      if (!c.finished && e.value > t.wallDamageSpeed) c.damage = Math.min(1, c.damage + (e.value - t.wallDamageSpeed) * WEAPON.wallDamage);
+      if (!c.finished && e.value > t.wallDamageSpeed) c.damage = Math.min(1, c.damage + (e.value - t.wallDamageSpeed) * WEAPON.wallDamage * t.armour);
     } else if (e.kind === Ev.CarHit) {
       for (const id of [e.car, e.other]) {
         const c = cars[id];
         const t = tunings[c.id] ?? tunings[0];
-        if (!c.finished && e.value > t.carDamageSpeed) c.damage = Math.min(1, c.damage + (e.value - t.carDamageSpeed) * WEAPON.carDamage);
+        if (!c.finished && e.value > t.carDamageSpeed) c.damage = Math.min(1, c.damage + (e.value - t.carDamageSpeed) * WEAPON.carDamage * t.armour);
       }
     }
   }
 }
 
 /** Fully damaged cars blow up and sit out a moment. Returns true when one did. */
-export function checkWreck(car: CarState, ev: EventBuffer): boolean {
+export function checkWreck(car: CarState, cars: CarState[], ev: EventBuffer): boolean {
   if (car.damage < 1 || car.wreckTicks > 0 || car.finished) return false;
   car.wreckTicks = WEAPON.wreckTicks;
   car.turboTicks = 0;
-  pushEvent(ev, Ev.Wreck, car.id, -1, 0, car.x, car.z);
+  const by = car.lastHitBy;
+  if (by >= 0 && cars[by]) cars[by].kills++;
+  car.lastHitBy = -1;
+  pushEvent(ev, Ev.Wreck, car.id, by, 0, car.x, car.z);
   return true;
 }
 

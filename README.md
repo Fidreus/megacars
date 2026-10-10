@@ -45,6 +45,34 @@ Vapnen låses upp tre sekunder efter start. Krockar och träffar ger skada;
 en stund och kommer tillbaka lappad (30 % skada). Datorförarna använder också
 vapen – oftare ju svårare de är.
 
+## Mästerskap och butik
+
+**CHAMPIONSHIP** i titelmenyn kör ett lopp på varje bana (med inställningarna
+från huvudmenyn: spelare, motståndare, svårighetsgrad, varv, vapen). Poäng
+10-8-6-5-4-3-2-1; den med minst poäng startar längst fram, ledaren längst
+bak. Varje lopp ger prispengar efter placering ($1200 för en seger ner till
+$200) plus $40 per missil-/minträff och $150 per bil du skjutit sönder.
+Mästerskapet sparas efter varje lopp och kan fortsättas senare (CONTINUE).
+
+Före varje lopp öppnas **butiken** (vid delad skärm handlar P1 och sedan P2):
+
+| Vara | Effekt | Pris |
+|---|---|---|
+| Motor nivå 1–3 | +8 % acceleration, +4 % toppfart per nivå | $1500 / $2800 / $4500 |
+| Däck nivå 1–3 | +7 % grepp, +5 % sladdgrepp per nivå | $1000 / $2000 / $3200 |
+| Pansar nivå 1–3 | −18 % skada per nivå | $1200 / $2400 / $3800 |
+| Missil / mina / turbo | +1 (max 12 / 8 / 6) | $60 / $50 / $90 |
+| Reparation | så mycket pengarna räcker till | $8 per % skada |
+
+Oanvänd ammunition och skada följer med till nästa lopp. Du börjar med $1000.
+Datorförarna uppgraderar i samma takt som spelarna (lite mer på HARD, lite
+mindre på EASY).
+
+Online har varje rum en **säsong**: poängen syns i lobbyn, och med
+UPGRADES: ON (standard) tjänar alla pengar och handlar i lobbyns **SHOP**
+mellan loppen. Servern håller pengar och uppgraderingar och godkänner varje
+köp. Värden kan starta en **NEW SEASON**.
+
 | En spelare | Funktion |
 |---|---|
 | ↑ / W | Gas (släpp + tryck igen medan du styr = drift) |
