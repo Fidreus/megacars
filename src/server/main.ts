@@ -72,6 +72,10 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     res.end('ok');
     return;
   }
+  if (url.pathname === '/api/version') {
+    json(res, 200, { version: VERSION, build: currentBuild() });
+    return;
+  }
   if (url.pathname === '/api/records') {
     handleRecords(req, res);
     return;
@@ -133,6 +137,24 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   res.writeHead(200, headers);
   if (req.method === 'HEAD') res.end();
   else createReadStream(file).pipe(res);
+}
+
+const VERSION = (JSON.parse(readFileSync(resolve(import.meta.dirname, '../../package.json'), 'utf8')) as { version: string }).version;
+let build = { mtime: -1, name: '' };
+
+/** The built client's main bundle file name (it has a content hash), or ''. */
+function currentBuild(): string {
+  const file = join(DIST, 'index.html');
+  try {
+    const mtime = statSync(file).mtimeMs;
+    if (mtime !== build.mtime) {
+      const m = /\/assets\/(index-[\w-]+\.js)/.exec(readFileSync(file, 'utf8'));
+      build = { mtime, name: m ? m[1] : '' };
+    }
+  } catch {
+    return '';
+  }
+  return build.name;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {

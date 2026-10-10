@@ -37,6 +37,7 @@ import { ReplayRecorder, specProblem } from '../shared/game/records.ts';
 import { loadLocalRecords, noteLap, noteRace, submitRecord } from './game/records.ts';
 import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
 import { VERSION } from './version.ts';
+import { UpdateCheck } from './net/update.ts';
 import { InputManager, type LocalPlayerInput } from './input/inputManager.ts';
 import { Nav, type NavState } from './input/nav.ts';
 import type { Params } from './params.ts';
@@ -163,6 +164,9 @@ export class App {
   /** The touch BACK button (UI pixels), when shown. */
   private backRect: { x: number; y: number; w: number; h: number } | null = null;
   private readonly recordsScreen: RecordsScreen;
+  /** A newer build on the server (offered on the title screen). */
+  readonly update = new UpdateCheck();
+  private updateOffered = false;
   private readonly localRecords = loadLocalRecords();
   /** The player's inputs this race, for a verified lap record (stock single-player races). */
   private replay: ReplayRecorder | null = null;
@@ -359,6 +363,7 @@ export class App {
       // No storage: start high.
     }
     this.applyQuality();
+    this.update.start();
     installDebugApi(this);
 
     const unlock = () => {
@@ -424,7 +429,14 @@ export class App {
     const s = this.settings;
     const changed = () => saveSettings(s);
     const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
+    const update = this.update.available
+      ? [{
+        label: () => (this.update.version && this.update.version !== VERSION ? `NEW VERSION ${this.update.version} - UPDATE NOW` : 'GAME UPDATED - LOAD THE NEW VERSION'),
+        select: () => this.update.apply(),
+      }]
+      : [];
     return [
+      ...update,
       { label: () => 'START RACE', select: () => this.startRace(s) },
       { label: () => 'CAREER', select: () => this.toCareer() },
       { label: () => 'CHAMPIONSHIP', select: () => { this.career = null; this.mode = 'cup'; this.cupMenu.index = loadCup() ? 0 : 1; } },
@@ -1498,6 +1510,13 @@ export class App {
     const ctx = ui.begin();
     const W = ui.w;
     const H = ui.h;
+    // A new build is out (or the server said so): put the update first on the title menu.
+    if (this.online.conn.outdated) this.update.available = true;
+    if (this.update.available && !this.updateOffered) {
+      this.updateOffered = true;
+      this.titleMenu.items = this.buildTitleItems();
+      this.titleMenu.index = 0;
+    }
     if (this.mode === 'title') {
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(0, 0, W, H);
@@ -1514,6 +1533,9 @@ export class App {
         drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
       }
       drawText(ctx, `V${VERSION}`, W - 4, H - 11, { align: 'right', color: '#5a6478' });
+      if (this.update.available && Math.sin(this.time * 4) > -0.2) {
+        drawText(ctx, 'A NEW VERSION IS OUT - CHOOSE UPDATE NOW', W - 4, H - 22, { align: 'right', color: '#9cff9c' });
+      }
     } else if (this.mode === 'online') {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
