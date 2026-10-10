@@ -8,6 +8,8 @@ export const Btn = {
   Switch: 8,
   /** Put the car back on the track (acts on the press). */
   Reset: 16,
+  /** Dedicated drift: a press throws the car into a slide, holding keeps it there. */
+  Drift: 32,
   /** Set when steering comes from an analog stick (no keyboard ramp). */
   Analog: 128,
 } as const;

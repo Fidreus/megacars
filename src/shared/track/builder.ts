@@ -107,6 +107,7 @@ export function buildTrack(def: TrackDef): Track {
     surface: null as unknown as SurfaceGrid,
     checkpoints: new Float64Array(0),
     grid: [],
+    ramps: [],
     line: null as unknown as Track['line'],
     bounds: { minX, minZ, maxX, maxZ },
     errors,
@@ -116,6 +117,20 @@ export function buildTrack(def: TrackDef): Track {
   track.checkpoints = new Float64Array(ncp);
   for (let k = 0; k < ncp; k++) track.checkpoints[k] = (k * length) / ncp;
   track.grid = buildGrid(track, 8);
+  for (const r of def.ramps ?? []) {
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < n; i++) {
+      const d = (px[i] - r.x) ** 2 + (pz[i] - r.z) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    const s1 = s[best];
+    if (s1 - r.length < 0) errors.push(`ramp at (${r.x}, ${r.z}) crosses the start line`);
+    track.ramps.push({ s0: s1 - r.length, s1, height: r.height });
+  }
   track.line = computeRacingLine(track);
   return track;
 }
@@ -303,15 +318,18 @@ function buildSurfaceGrid(track: Track): SurfaceGrid {
     }
   }
   for (const p of def.patches ?? []) {
-    const c0 = Math.max(0, Math.floor((p.x - p.r - minX) / cell));
-    const c1 = Math.min(cols - 1, Math.floor((p.x + p.r - minX) / cell));
-    const r0 = Math.max(0, Math.floor((p.z - p.r - minZ) / cell));
-    const r1 = Math.min(rows - 1, Math.floor((p.z + p.r - minZ) / cell));
+    const rect = p.hx !== undefined && p.hz !== undefined;
+    const ex = rect ? p.hx! : p.r;
+    const ez = rect ? p.hz! : p.r;
+    const c0 = Math.max(0, Math.floor((p.x - ex - minX) / cell));
+    const c1 = Math.min(cols - 1, Math.floor((p.x + ex - minX) / cell));
+    const r0 = Math.max(0, Math.floor((p.z - ez - minZ) / cell));
+    const r1 = Math.min(rows - 1, Math.floor((p.z + ez - minZ) / cell));
     for (let r = r0; r <= r1; r++) {
       for (let c = c0; c <= c1; c++) {
         const cx = minX + (c + 0.5) * cell;
         const cz = minZ + (r + 0.5) * cell;
-        if ((cx - p.x) ** 2 + (cz - p.z) ** 2 > p.r * p.r) continue;
+        if (rect ? Math.abs(cx - p.x) > ex || Math.abs(cz - p.z) > ez : (cx - p.x) ** 2 + (cz - p.z) ** 2 > p.r * p.r) continue;
         const k = r * cols + c;
         const i = nearest[k];
         if (i < 0) continue;

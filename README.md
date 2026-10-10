@@ -25,16 +25,24 @@ röda startljus – när de släcks är det fullt ös. Efter målgång visas
 resultatlistan.
 
 På asfalt greppar bilen tills gränsen och understyr sedan – den sladdar inte
-av sig själv. Driften startar du genom att **släppa gasen kort (under 0,3 s)
-och trycka igen** medan du styr in i kurvan – eller genom att dutta på bromsen
+av sig själv. Driften startar du enklast med **driftknappen** (Z, eller LB på
+handkontrollen) medan du styr in i kurvan – håll den nere så håller bilen
+sladden. Det går också att **släppa gasen kort (under 0,3 s) och trycka
+igen** medan du styr in i kurvan – eller genom att dutta på bromsen
 (under 0,25 s) medan du styr. Längre rullning eller vanlig inbromsning startar
 ingen drift. I sladden orkar däcken mycket mer sidokraft, så rätt timing tar
 dig genom skarpa kurvor mycket fortare. Gas ökar sladdvinkeln, släpp gasen
 eller motstyr för att räta upp. Is, olja och snö sladdar av sig själva.
 
-Tre banor: **Green Valley** (bred landsbygdsbana), **Dust Bowl** (öken,
-smal och teknisk, grus och oljefläckar) och **Frost Ring** (vinter, snabba
-svep med is och packad snö).
+Fyra banor: **Green Valley** (bred landsbygdsbana), **Dust Bowl** (öken,
+smal och teknisk, grus, oljefläckar och ett hopp över en torr flodfåra),
+**Frost Ring** (vinter, snabba svep med is och packad snö) och **Meltdown
+Ridge** (genom ett kärnkraftverk: kyltorn, reaktorhallar, en kylvattenläcka
+och ett hopp över kylvattenkanalen – kommer du för kort får du vada ur).
+
+**Ramper och hopp:** kör upp på rampen så lyfter bilen – ju fortare desto
+längre. I luften går det inte att styra; en hård landning kostar lite fart
+(och lite skada när vapnen är på).
 
 **Vapen** (kan stängas av i menyn och i onlinelobbyn): varje bil startar med
 5 missiler, 3 minor och 3 turbo. Missiler flyger rakt fram och snurrar runt
@@ -78,15 +86,17 @@ köp. Värden kan starta en **NEW SEASON**.
 | ↑ / W | Gas (släpp + tryck igen medan du styr = drift) |
 | ↓ / S | Broms / back |
 | ← → / A D | Styr |
+| Z / B | Drift (håll för att behålla sladden) |
 | Space / K | Missil framåt |
 | X / J | Mina bakåt |
 | C / L | Turbo |
 | R | Sätt tillbaka bilen på banan (P2 i delad skärm: Enter) |
 | Esc / P | Paus |
 
-Delad skärm: **P1** WASD, missil/mina/turbo G/F/H, **P2** piltangenter,
-missil/mina/turbo . , -. Handkontroller: vänster spak styr, RT gas, LT broms,
-X/RB missil, Y/LB mina, A turbo;
+Delad skärm: **P1** WASD, drift Q, missil/mina/turbo G/F/H, **P2**
+piltangenter, drift L, missil/mina/turbo . , -. Handkontroller: vänster
+spak styr, RT/A gas, LT/B broms, LB drift, X/RB missil, Y/↓ mina, ↑/L3
+turbo, Start paus;
 handkontroll 1 = P1, handkontroll 2 = P2.
 
 ## Spela online

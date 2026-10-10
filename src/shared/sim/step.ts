@@ -15,6 +15,7 @@ import { Ev, pushEvent } from './events.ts';
 import { Btn, NEUTRAL_INPUT, neutralInput, type CarInput } from './input.ts';
 import { resetProgress, updateProgress } from './race.ts';
 import { RacePhase, respawnCar, standings, type World } from './world.ts';
+import { safeRespawnS, stepRamps } from './ramps.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
@@ -66,9 +67,11 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     let inp: CarInput = inputs[i] ?? NEUTRAL_INPUT;
     if (car.wreckTicks > 0) {
       stepWreck(car, DT);
+      // A car wrecked in mid-air still falls.
+      if (car.airborne) stepBoostAndAir(car, t, DT, w.events, false);
       if (--car.wreckTicks === 0) {
         // Towed back onto the track, patched up.
-        respawnCar(car, track, car.trackS - 4);
+        respawnCar(car, track, safeRespawnS(track, car.trackS - 4));
         car.damage = WEAPON.wreckRepair;
         pushEvent(w.events, Ev.Respawn, car.id, -1, 2, car.x, car.z);
       }
@@ -85,7 +88,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
       inp = aiInput;
     } else if (inp.buttons & Btn.Reset && !(car.prevButtons & Btn.Reset) && race.phase === RacePhase.Racing && !car.finished) {
       // The driver asked to be put back on the track.
-      respawnCar(car, track, car.trackS);
+      respawnCar(car, track, safeRespawnS(track, car.trackS));
       resetProgress(car, track);
       pushEvent(w.events, Ev.Respawn, car.id, -1, 1, car.x, car.z);
     }
@@ -98,7 +101,8 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     } else {
       stepCarDynamics(car, inp, t, surfMix, DT);
     }
-    stepBoostAndAir(car, t, DT);
+    stepBoostAndAir(car, t, DT, w.events, race.weapons === 1);
+    stepRamps(car, track);
     car.prevButtons = inp.buttons;
 
     // Stuck: nearly stopped while trying to drive.
@@ -132,7 +136,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     if (race.laps > 0 && !car.finished && car.lap > lapsBefore && lapsBefore >= race.laps) finishCar(w, car);
     const lost = car.stuckTicks > STUCK_RESPAWN_TICKS || (car.aiDriven && car.wrongWayTicks > AI_WRONG_WAY_TICKS);
     if (lost && !car.finished && car.wreckTicks === 0) {
-      respawnCar(car, track, car.trackS - 4);
+      respawnCar(car, track, safeRespawnS(track, car.trackS - 4));
       car.respawns++;
       pushEvent(w.events, Ev.Respawn, car.id, -1, 0, car.x, car.z);
     }

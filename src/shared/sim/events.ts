@@ -16,6 +16,8 @@ export const Ev = {
   /** `value`: 1 missile hit, 2 mine, 3 missile on a wall; `other` = owner. */
   Explosion: 11,
   Wreck: 12,
+  /** Back on the ground after a jump; `value` = vertical impact speed. */
+  Land: 13,
 } as const;
 
 export interface SimEvent {

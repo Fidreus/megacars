@@ -15,6 +15,12 @@ export interface Theme {
   houseRoofs: string[];
   pond: 'water' | 'ice' | 'none';
   shore: string;
+  /** Run-off colour instead of its surface's colour (concrete aprons). */
+  runoff?: string;
+  /** Farmhouses in the countryside around. */
+  houses?: boolean;
+  /** Power plant buildings, cooling towers and pipes. */
+  industry?: boolean;
 }
 
 const COUNTRYSIDE: Theme = {
@@ -58,6 +64,22 @@ export const THEMES: Record<string, Theme> = {
     houseRoofs: ['#f2f5f8', '#e6ebf0'],
     pond: 'ice',
     shore: '#cfd8e2',
+  },
+  nuclear: {
+    ground: '#7c8270',
+    trees: 'cone',
+    treeColors: ['#3c5a35', '#46663c', '#34502f'],
+    treeDensity: 0.18,
+    bushColors: ['#5a6a48', '#66764f'],
+    rockColors: ['#9a9a94', '#7e7e78', '#b0aea6'],
+    rockCount: 160,
+    houseWalls: [],
+    houseRoofs: [],
+    pond: 'none',
+    shore: '#9a9a94',
+    runoff: '#a3a39c',
+    houses: false,
+    industry: true,
   },
 };
 

@@ -10,6 +10,8 @@ export interface NavState {
   right: boolean;
   confirm: boolean;
   back: boolean;
+  /** Pause during a race: Escape, P or a pad's Start (B is the brake there). */
+  pause: boolean;
   /** Pointer position in low-res UI pixels, and a click this frame. */
   pointerX: number;
   pointerY: number;
@@ -25,7 +27,7 @@ const REPEAT_RATE = 0.09;
 
 export class Nav {
   readonly state: NavState = {
-    up: false, down: false, left: false, right: false, confirm: false, back: false,
+    up: false, down: false, left: false, right: false, confirm: false, back: false, pause: false,
     pointerX: -1, pointerY: -1, pointerMoved: false, click: false, typed: '', erase: false,
   };
   /** A text field has focus: letters type instead of navigating. */
@@ -61,6 +63,7 @@ export class Nav {
     s.right = kb.wasPressed('ArrowRight') || (letters && kb.wasPressed('KeyD'));
     s.confirm = kb.wasPressed('Enter') || (letters && kb.wasPressed('Space')) || kb.wasPressed('NumpadEnter');
     s.back = kb.wasPressed('Escape') || (letters && kb.wasPressed('Backspace'));
+    s.pause = kb.wasPressed('Escape') || kb.wasPressed('KeyP');
     s.typed = this.textMode ? kb.typed : '';
     s.erase = this.textMode && kb.wasPressed('Backspace');
     s.click = this.clicked;
@@ -89,6 +92,7 @@ export class Nav {
     s.right ||= this.repeat('right', dirRight, dt);
     s.confirm ||= !!buttons[0] && !this.padButtons[0];
     s.back ||= (!!buttons[1] && !this.padButtons[1]) || (!!buttons[9] && !this.padButtons[9]);
+    s.pause ||= !!buttons[9] && !this.padButtons[9];
     this.padButtons = buttons;
     return s;
   }

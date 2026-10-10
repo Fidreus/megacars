@@ -27,6 +27,7 @@ export function installDebugApi(app: App): void {
           x: +c.x.toFixed(2),
           z: +c.z.toFixed(2),
           speed: +Math.hypot(c.vx, c.vz).toFixed(2),
+          y: +c.y.toFixed(2),
           heading: +c.heading.toFixed(3),
           slipDeg: +((c.slip * 180) / Math.PI).toFixed(1),
           sliding: c.sliding,

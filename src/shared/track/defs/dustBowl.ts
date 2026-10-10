@@ -3,7 +3,8 @@ import type { TrackDef } from '../types.ts';
 
 // Desert: narrower and more technical. A tight right-left chicane after the
 // first corner, a fast sweeper, then a twisty infield with an oil slick and
-// sandy corners before the long run back to the line.
+// sandy corners before the long run back to the line. A jump over a dry
+// wash on the back straight.
 export const DUST_BOWL: TrackDef = {
   id: 'dustbowl',
   name: 'Dust Bowl',
@@ -33,5 +34,8 @@ export const DUST_BOWL: TrackDef = {
     { surface: Surface.Oil, x: 20, z: 420, r: 9 },
     { surface: Surface.Gravel, x: -52, z: 292, r: 20, runoff: true },
     { surface: Surface.Oil, x: 60, z: 230, r: 7 },
+    // A dry wash under the jump on the back straight.
+    { surface: Surface.Gravel, x: 230, z: 420, r: 11, runoff: true },
   ],
+  ramps: [{ x: 252, z: 420, length: 10, height: 1.4 }],
 };

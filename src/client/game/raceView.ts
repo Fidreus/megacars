@@ -29,7 +29,7 @@ export class RaceView {
   readonly particles = new Particles();
   private readonly skid = new SkidMarks();
   private readonly shots = new ShotView();
-  private readonly effects: Effects;
+  readonly effects: Effects;
   private readonly prev: Pose[] = [];
   /** Visual offset left over from network corrections; decays to zero. */
   private readonly offset: Pose[] = [];

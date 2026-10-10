@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { Surface } from '../../shared/config/surfaces.ts';
 import type { Track } from '../../shared/track/types.ts';
+import { buildRamps } from './rampMesh.ts';
 import { themeOf } from './theme.ts';
 import { toon } from './materials.ts';
 
@@ -55,6 +56,7 @@ export function buildTrackView(track: Track): THREE.Group {
   group.add(buildWalls(track));
   group.add(buildStartGantry(track));
   group.add(buildGridMarks(track));
+  group.add(buildRamps(track));
   return group;
 }
 
@@ -133,8 +135,9 @@ function buildRoad(track: Track): THREE.Mesh {
     uPatch: { value: patchData },
     uPatchColor: { value: patchColors },
     uPatchCount: { value: patches.length },
+    uPatchRect: { value: Array.from({ length: MAX_PATCHES }, (_, k) => new THREE.Vector2(patches[k]?.hx ?? 0, patches[k]?.hz ?? 0)) },
     uAsphalt: { value: new THREE.Color(SURFACE_COLORS[Surface.Asphalt]) },
-    uRunoff: { value: new THREE.Color(SURFACE_COLORS[track.def.runoffSurface ?? Surface.Grass]) },
+    uRunoff: { value: new THREE.Color(themeOf(track.def.theme).runoff ?? SURFACE_COLORS[track.def.runoffSurface ?? Surface.Grass]) },
     uLine: { value: new THREE.Color('#e6e6e0') },
     uCurbA: { value: new THREE.Color('#d42a24') },
     uCurbB: { value: new THREE.Color('#ececec') },
@@ -155,7 +158,14 @@ function buildRoad(track: Track): THREE.Mesh {
         varying vec4 vRoad;
         uniform vec4 uPatch[MAX_PATCHES];
         uniform vec3 uPatchColor[MAX_PATCHES];
+        uniform vec2 uPatchRect[MAX_PATCHES];
         uniform int uPatchCount;
+        bool inPatch(int k, vec2 q) {
+          vec4 p = uPatch[k];
+          vec2 rr = uPatchRect[k];
+          if (rr.x > 0.0) return abs(q.x - p.x) <= rr.x && abs(q.y - p.y) <= rr.y;
+          return distance(q, p.xy) < p.z;
+        }
         uniform vec3 uAsphalt;
         uniform vec3 uRunoff;
         uniform vec3 uLine;
@@ -180,7 +190,7 @@ function buildRoad(track: Track): THREE.Mesh {
             for (int k = 0; k < MAX_PATCHES; k++) {
               if (k >= uPatchCount) break;
               vec4 p = uPatch[k];
-              if (distance(vWPos.xz, p.xy) < p.z) col = uPatchColor[k] * (0.88 + 0.2 * n1);
+              if (inPatch(k, vWPos.xz)) col = uPatchColor[k] * (0.88 + 0.2 * n1);
             }
             if (a > hwv - 0.55 && a < hwv - 0.3) col = uLine;
             if (abs(kap) > 1.0 / 140.0 && a > hwv - 0.9) {
@@ -197,7 +207,7 @@ function buildRoad(track: Track): THREE.Mesh {
             for (int k = 0; k < MAX_PATCHES; k++) {
               if (k >= uPatchCount) break;
               vec4 p = uPatch[k];
-              if (p.w > 0.5 && distance(vWPos.xz, p.xy) < p.z) col = uPatchColor[k] * (0.84 + 0.2 * n1);
+              if (p.w > 0.5 && inPatch(k, vWPos.xz)) col = uPatchColor[k] * (0.84 + 0.2 * n1);
             }
           }
           diffuseColor.rgb = col;

@@ -158,7 +158,7 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
   const walls = theme.houseWalls;
   const roofs = theme.houseRoofs;
   const houseRnd = makeRng((track.def.seed ?? 1) * 104729);
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < (theme.houses === false ? 0 : 9); i++) {
     const p = pick(clear + 22, clear + 90, 80);
     if (!p) continue;
     const h = new THREE.Group();

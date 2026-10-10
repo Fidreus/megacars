@@ -130,7 +130,7 @@ export function useWeapons(car: CarState, inp: CarInput, shots: Shot[], ev: Even
 }
 
 /** Turbo thrust and flight after a mine blast. Called after the car's dynamics. */
-export function stepBoostAndAir(car: CarState, t: CarTuning, dt: number): void {
+export function stepBoostAndAir(car: CarState, t: CarTuning, dt: number, ev: EventBuffer, damage: boolean): void {
   if (car.turboTicks > 0) {
     car.turboTicks--;
     if (car.spinTicks === 0 && car.wreckTicks === 0) {
@@ -149,9 +149,18 @@ export function stepBoostAndAir(car: CarState, t: CarTuning, dt: number): void {
     car.vy -= t.gravity * dt;
     car.y += car.vy * dt;
     if (car.y <= 0) {
+      const impact = -car.vy;
       car.y = 0;
       car.vy = 0;
       car.airborne = 0;
+      // Hard landings hurt a little and cost some speed.
+      if (impact > 4) {
+        pushEvent(ev, Ev.Land, car.id, -1, impact, car.x, car.z);
+        if (damage && impact > 9) car.damage = Math.min(1, car.damage + (impact - 9) * 0.01 * t.armour);
+        const k = Math.max(0.85, 1 - impact * 0.008);
+        car.vx *= k;
+        car.vz *= k;
+      }
     }
   }
 }

@@ -9,6 +9,7 @@ import { Ev } from '../../shared/sim/events.ts';
 import { ShotKind } from '../../shared/sim/weapons.ts';
 import type { World } from '../../shared/sim/world.ts';
 import type { Particles } from './particles.ts';
+import type { SteamSource } from './industry.ts';
 
 const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
 const R = Math.random;
@@ -17,6 +18,8 @@ export class Effects {
   private readonly particles: Particles;
   private readonly track: Track;
   private readonly prevSliding: number[] = [];
+  /** Chimneys and cooling towers that puff steam (set per track). */
+  steam: SteamSource[] = [];
 
   constructor(particles: Particles, track: Track) {
     this.particles = particles;
@@ -106,6 +109,19 @@ export class Effects {
       }
     }
 
+    // Steam from cooling towers and chimneys, drifting with the wind.
+    for (const st of this.steam) {
+      if (R() > (st.r > 3 ? 0.7 : 0.25)) continue;
+      const a = R() * Math.PI * 2;
+      const d = R() * st.r * 0.8;
+      const g = 0.86 + R() * 0.1;
+      p.spawn(
+        st.x + Math.cos(a) * d, st.y, st.z + Math.sin(a) * d,
+        2.5 + R(), 3 + R() * 2, -1 + R(),
+        4 + R() * 2.5, st.r > 3 ? 22 : 6, st.r > 3 ? 60 : 20, g, g, g * 1.02, -0.6, 0.15,
+      );
+    }
+
     // Missile exhaust trails.
     for (const sh of world.shots) {
       if (sh.kind !== ShotKind.Missile) continue;
@@ -142,6 +158,45 @@ export class Effects {
           );
         }
       }
+    }
+  }
+
+  /** Dust (and sparks on a hard one) where a car comes down from a jump. */
+  landing(x: number, z: number, impact: number, car: { vx: number; vz: number }): void {
+    const p = this.particles;
+    const surf = surfaceAt(this.track, x, z);
+    const water = surf === Surface.ShallowWater || surf === Surface.DeepWater;
+    const n = Math.min(30, Math.round(impact * 2.5));
+    for (let i = 0; i < n; i++) {
+      const a = R() * Math.PI * 2;
+      const sp = 2 + R() * 4;
+      const c = water ? [0.75, 0.88, 1] : SURFACES[surf].dusty ? [0.62, 0.55, 0.42] : [0.7, 0.7, 0.72];
+      p.spawn(
+        x + Math.cos(a) * 1.4, 0.3, z + Math.sin(a) * 1.4,
+        Math.cos(a) * sp + car.vx * 0.3, 1 + R() * (water ? 6 : 2), Math.sin(a) * sp + car.vz * 0.3,
+        0.5 + R() * 0.6, water ? 2 : 3, water ? 3 : 10, c[0], c[1], c[2], water ? -18 : -1, 1.6,
+      );
+    }
+    if (impact > 7 && !water) {
+      for (let i = 0; i < 12; i++) {
+        p.spawn(x, 0.3, z, car.vx * 0.5 + (R() - 0.5) * 8, 2 + R() * 4, car.vz * 0.5 + (R() - 0.5) * 8, 0.25 + R() * 0.3, 1.5, 1, 5, 3.2, 1, -22, 0.4);
+      }
+    }
+  }
+
+  /** A burst of coloured sparks high above the track (victory). */
+  firework(x: number, z: number): void {
+    const p = this.particles;
+    const y = 14 + R() * 10;
+    const hue = [[6, 1.4, 1], [1.2, 4, 1.4], [1.4, 2, 6], [6, 5, 1.2], [5, 1.4, 5]][Math.floor(R() * 5)];
+    for (let i = 0; i < 40; i++) {
+      const a = R() * Math.PI * 2;
+      const e = (R() - 0.3) * Math.PI;
+      const sp = 7 + R() * 3;
+      p.spawn(
+        x, y, z, Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp, Math.sin(a) * Math.cos(e) * sp,
+        0.9 + R() * 0.5, 2.2, 0.8, hue[0], hue[1], hue[2], -6, 1.2,
+      );
     }
   }
 

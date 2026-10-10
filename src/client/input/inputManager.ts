@@ -46,6 +46,7 @@ export class InputManager {
       if (kb.anyDown(k.fireRear)) buttons |= Btn.FireRear;
       if (kb.anyDown(k.turbo)) buttons |= Btn.Turbo;
       if (kb.anyDown(k.reset)) buttons |= Btn.Reset;
+      if (kb.anyDown(k.drift)) buttons |= Btn.Drift;
     }
     if (player.pad >= 0) {
       const p = readPad(player.pad, this.pad);
@@ -61,6 +62,7 @@ export class InputManager {
         if (p.fireFront) buttons |= Btn.FireFront;
         if (p.fireRear) buttons |= Btn.FireRear;
         if (p.turbo) buttons |= Btn.Turbo;
+        if (p.drift) buttons |= Btn.Drift;
       }
     }
     out.steer = steer;

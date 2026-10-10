@@ -16,6 +16,24 @@ export interface SurfacePatch {
   r: number;
   /** Also cover the run-off area next to the road. */
   runoff?: boolean;
+  /** Axis-aligned rectangle instead of a circle: half sizes along x and z (r is then ignored). */
+  hx?: number;
+  hz?: number;
+}
+
+/** A jump ramp across the road. (x, z) is the lip; the ramp rises over `length` metres before it. */
+export interface RampDef {
+  x: number;
+  z: number;
+  length: number;
+  height: number;
+}
+
+/** A built ramp: rises from s0 to s1 along the centreline. */
+export interface Ramp {
+  s0: number;
+  s1: number;
+  height: number;
 }
 
 export interface TrackDef {
@@ -32,6 +50,7 @@ export interface TrackDef {
   /** Start line position as a fraction along the straight from the last point to the first. */
   startAt: number;
   patches?: readonly SurfacePatch[];
+  ramps?: readonly RampDef[];
   laps?: number;
   seed?: number;
 }
@@ -98,6 +117,7 @@ export interface Track {
   /** Checkpoint positions along s; index 0 is the start/finish line (s = 0). */
   checkpoints: Float64Array;
   grid: GridSlot[];
+  ramps: Ramp[];
   line: RacingLine;
   bounds: { minX: number; minZ: number; maxX: number; maxZ: number };
   /** Problems found while building (empty when the track is valid). */

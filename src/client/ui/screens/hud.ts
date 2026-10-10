@@ -55,7 +55,7 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   if (car.bestLapTicks) drawText(ctx, `BEST ${formatTime(car.bestLapTicks * DT)}`, x, y, { color: '#9cff9c' });
   if (label) drawText(ctx, label, r.x + r.w - 6, 6, { scale: 2, color: label === 'P1' ? '#ff6b5e' : '#6fa0ff', align: 'right' });
 
-  if (race.weapons) drawArsenal(ctx, x, r.h - 44, car);
+  if (race.weapons) drawArsenal(ctx, x, r.h - 46, car);
   const grace = race.startTick + 180 - world.tick;
   if (race.weapons && race.phase === RacePhase.Racing && grace > -90 && !practice) {
     const text = grace > 0 ? `WEAPONS IN ${Math.ceil(grace / 60)}` : 'WEAPONS FREE!';
@@ -74,42 +74,46 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   }
 }
 
-/** Missiles, mines and turbos left, and a damage bar. */
+/** Missiles, mines and turbos left (big), and a damage bar. */
 function drawArsenal(ctx: CanvasRenderingContext2D, x: number, y: number, car: World['cars'][number]): void {
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillRect(x - 3, y - 13, 112, 24);
+  const w = 150;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(x - 4, y - 16, w, 36);
   // Damage bar.
   const d = Math.min(1, car.damage);
-  drawText(ctx, 'DMG', x, y - 10, { color: '#9aa4b8' });
+  drawText(ctx, 'DAMAGE', x, y - 13, { color: '#9aa4b8' });
   ctx.fillStyle = '#222';
-  ctx.fillRect(x + 22, y - 10, 82, 6);
+  ctx.fillRect(x + 40, y - 13, w - 50, 6);
   ctx.fillStyle = car.wreckTicks > 0 ? '#ff2b1c' : d < 0.4 ? '#9cff9c' : d < 0.7 ? '#ffd84a' : '#ff6b5e';
-  ctx.fillRect(x + 22, y - 10, Math.round(82 * d), 6);
-  // Ammo: missile, mine, turbo icons with counts.
+  ctx.fillRect(x + 40, y - 13, Math.round((w - 50) * d), 6);
+  // Ammo: missile, mine, turbo icons with big counts.
   const icon = (ix: number, kind: number, n: number) => {
     const dim = n === 0;
+    const iy = y + 1;
     if (kind === 0) {
       ctx.fillStyle = dim ? '#555' : '#e8e6e0';
-      ctx.fillRect(ix, y + 2, 10, 3);
+      ctx.fillRect(ix, iy + 4, 16, 5);
       ctx.fillStyle = dim ? '#444' : '#d42a24';
-      ctx.fillRect(ix + 10, y + 2, 2, 3);
-      ctx.fillRect(ix, y + 1, 2, 5);
+      ctx.fillRect(ix + 16, iy + 5, 3, 3);
+      ctx.fillRect(ix, iy + 2, 3, 9);
     } else if (kind === 1) {
       ctx.fillStyle = dim ? '#444' : '#2a2c30';
-      ctx.fillRect(ix + 1, y + 1, 8, 6);
+      ctx.fillRect(ix + 1, iy + 2, 14, 10);
+      ctx.fillStyle = dim ? '#555' : '#8a8f98';
+      ctx.fillRect(ix, iy + 4, 16, 6);
       ctx.fillStyle = dim ? '#555' : '#ff2b1c';
-      ctx.fillRect(ix + 4, y + 2, 2, 2);
+      ctx.fillRect(ix + 6, iy + 5, 4, 4);
     } else {
       ctx.fillStyle = dim ? '#555' : '#6fd0ff';
-      ctx.fillRect(ix, y + 2, 8, 3);
+      ctx.fillRect(ix, iy + 4, 12, 5);
       ctx.fillStyle = dim ? '#444' : '#ffffff';
-      ctx.fillRect(ix + 8, y + 1, 3, 5);
+      ctx.fillRect(ix + 12, iy + 2, 5, 9);
     }
-    drawText(ctx, String(n), ix + 14, y + 1, { color: dim ? '#6a7488' : '#ffffff' });
+    drawText(ctx, String(n), ix + 22, iy, { scale: 2, color: dim ? '#6a7488' : '#ffffff' });
   };
   icon(x, 0, car.missiles);
-  icon(x + 38, 1, car.mines);
-  icon(x + 74, 2, car.turbos);
+  icon(x + 50, 1, car.mines);
+  icon(x + 100, 2, car.turbos);
 }
 
 /** Start lights and "GO!" at the top centre of the screen. */

@@ -236,7 +236,8 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
       const scrub = Math.max(0, 1 - t.cScrub * surf.scrub * Math.abs(Math.sin(beta)) * dt);
       vx *= scrub;
       vz *= scrub;
-      if (Math.abs(beta) < t.slipExitDeg * DEG) {
+      // Holding the drift button keeps the car sliding.
+      if (Math.abs(beta) < t.slipExitDeg * DEG && !(inp.buttons & Btn.Drift)) {
         if (++car.modeTicks >= t.slipExitTicks) {
           car.sliding = 0;
           car.modeTicks = 0;
@@ -293,6 +294,7 @@ export function slideOmegaMax(t: CarTuning, s: number): number {
  * the car the other way (S-bends).
  */
 function updateDriftTrigger(car: CarState, inp: CarInput, t: CarTuning, fwd: number): void {
+  if (inp.buttons & Btn.Drift && !(car.prevButtons & Btn.Drift)) car.driftArm = t.driftArmTicks;
   if (inp.brake > 0.5) {
     car.brakeTicks++;
   } else {

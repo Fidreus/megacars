@@ -35,6 +35,8 @@ import { PALETTE_MODE_NAMES, PaletteMode, type PaletteModeId } from './render/pa
 import { buildProps } from './render/props.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
+import { buildIndustry, type SteamSource } from './render/industry.ts';
+import { themeOf } from './render/theme.ts';
 import { buildTrackView } from './render/trackMesh.ts';
 import { drawText, LINE_H } from './ui/font.ts';
 import { Menu } from './ui/menu.ts';
@@ -107,6 +109,11 @@ export class App {
   private readonly camTargets = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly camInit = [false, false];
   private readonly tagPos = new THREE.Vector3();
+  private steam: SteamSource[] = [];
+  /** Camera shake strength 0..1 (decays). */
+  private shake = 0;
+  /** Seconds of victory fireworks left. */
+  private fireworks = 0;
   private acc = 0;
   private last = -1;
   private time = 0;
@@ -478,6 +485,9 @@ export class App {
     if (this.track !== session.track) this.setTrack(session.track);
     this.session = session;
     this.view = new RaceView(this.scene, session, this.mood.lights, this.mood.headlight);
+    this.view.effects.steam = this.steam;
+    this.fireworks = 0;
+    this.shake = 0;
     const split = this.mode === 'race' && session.playerCars.length === 2;
     this.renderer.setSplit(split);
     for (const vp of this.renderer.viewports) vp.cam.viewHeight = split ? VIEW_HEIGHT * 1.25 : VIEW_HEIGHT;
@@ -494,7 +504,15 @@ export class App {
     g.add(buildTrackView(track));
     const props = buildProps(track);
     g.add(props.group);
-    g.add(buildScenery(track, props.keepOut));
+    const keepOut = [...props.keepOut];
+    this.steam = [];
+    if (themeOf(track.def.theme).industry) {
+      const plant = buildIndustry(track, keepOut);
+      g.add(plant.group);
+      keepOut.push(...plant.keepOut);
+      this.steam = plant.steam;
+    }
+    g.add(buildScenery(track, keepOut));
     this.debugView = buildTrackDebugView(track, this.tuning);
     g.add(this.debugView);
     this.nightLights = props.nightLights;
@@ -701,7 +719,7 @@ export class App {
       else this.pauseMenu.handle(nav);
       return;
     }
-    if (nav.back || kb.wasPressed('KeyP')) {
+    if (nav.pause) {
       this.paused = true;
       this.pauseMenu.index = 0;
     }
@@ -765,6 +783,14 @@ export class App {
         }
       } else if (e.kind === Ev.Finish && players.includes(e.car)) {
         playFanfare(this.audio, e.other <= 3);
+        if (e.other === 1 && this.mode === 'race') this.fireworks = 6;
+      } else if (e.kind === Ev.Land) {
+        this.view.effects.landing(e.x, e.z, e.value, w.cars[e.car]);
+        const d = Math.hypot(e.x - me.x, e.z - me.z);
+        if (d < 50) {
+          this.shake = Math.max(this.shake, Math.min(1, e.value / 14) * (1 - d / 50));
+          if (this.audio.ready) playImpact(this.audio, e.value * 0.8 * (1 - d / 50), (e.x - me.x) / 30);
+        }
       } else if (e.kind === Ev.RaceStart && this.mode === 'race') {
         playTone(this.audio, 880, 0.45, 'square', 0.14);
       }
@@ -786,6 +812,10 @@ export class App {
     const vol = Math.max(0, 1 - dist / 90);
     const pan = dx / 40;
     const mine = players.includes(car);
+    if (kind === Ev.Explosion || kind === Ev.Wreck) {
+      const k = kind === Ev.Wreck ? 1.2 : value === 3 ? 0.4 : 0.8;
+      this.shake = Math.max(this.shake, k * Math.max(0, 1 - dist / 45));
+    }
     if (this.audio.ready && vol > 0) {
       if (kind === Ev.Fire) {
         if (other === ShotKind.Missile) playLaunch(this.audio, vol, pan);
@@ -810,6 +840,12 @@ export class App {
       // Attract mode and spectators: follow the leaders, switching cars now and then.
       const order = standings(this.world);
       this.viewCar[0] = order[Math.floor(this.time / 9) % Math.min(3, order.length)];
+    }
+    this.shake = Math.max(0, this.shake - dt * 2.2);
+    if (this.fireworks > 0 && this.mode === 'race') {
+      this.fireworks -= dt;
+      const t = this.camTargets[0];
+      if (Math.random() < dt * 5) this.view.effects.firework(t.x + (Math.random() - 0.5) * 70, t.z - 8 - Math.random() * 25);
     }
     const views = this.renderer.viewCount;
     for (let v = 0; v < views; v++) this.updateCamera(v, dt);
@@ -854,7 +890,15 @@ export class App {
       target.x += (tx - target.x) * k;
       target.z += (tz - target.z) * k;
     }
-    cam.update(target.x, 0, target.z, vp.w, vp.h);
+    // Explosions and hard landings shake the view (a few pixels, decaying).
+    let sx = 0;
+    let sz = 0;
+    if (this.shake > 0.01) {
+      const a = this.shake * this.shake * 0.9;
+      sx = Math.sin(this.time * 61) * a;
+      sz = Math.cos(this.time * 47) * a;
+    }
+    cam.update(target.x + sx, 0, target.z + sz, vp.w, vp.h);
   }
 
   /** Keep the shadow map centred on the view, snapped to whole shadow texels. */
@@ -911,8 +955,8 @@ export class App {
       const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
       this.titleMenu.draw(ctx, W / 2, top + 14, fitScale(this.titleMenu, top + 14, H - 30), dt);
       const help = this.settings.players === 2
-        ? 'P1: WASD + G/F/H   P2: ARROWS + . , -   OR GAMEPADS'
-        : 'ARROWS/WASD DRIVE   SPACE MISSILE   X MINE   C TURBO   R RESET';
+        ? 'P1: WASD + Q DRIFT + G/F/H   P2: ARROWS + L DRIFT + . , -   OR GAMEPADS'
+        : 'ARROWS/WASD DRIVE   Z DRIFT   SPACE MISSILE   X MINE   C TURBO   R RESET';
       drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
       drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
     } else if (this.mode === 'online') {
@@ -993,7 +1037,8 @@ export class App {
     drawCountdown(ctx, W, w);
     if (this.firstRace && w.tick < w.race.startTick + 60 * 15) {
       const hintY = split ? my - 14 : H - 36;
-      drawText(ctx, 'DRIFT: LET GO OF GAS + PRESS AGAIN WHILE TURNING', W / 2, hintY, { color: '#ffd84a', align: 'center' });
+      const drift = split ? 'P1 Q / P2 L' : 'Z';
+      drawText(ctx, `DRIFT: HOLD ${drift} WHILE TURNING (OR LIFT OFF + GAS AGAIN)`, W / 2, hintY, { color: '#ffd84a', align: 'center' });
       if (w.race.weapons) {
         const keys = split ? 'P1 G/F/H   P2 . , -' : 'SPACE MISSILE   X MINE   C TURBO';
         drawText(ctx, `WEAPONS: ${keys}`, W / 2, hintY - 11, { color: '#ffd84a', align: 'center' });
