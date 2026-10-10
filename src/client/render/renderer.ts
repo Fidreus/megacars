@@ -123,6 +123,7 @@ export class RetroRenderer {
     tint: new THREE.Color(1, 1, 1),
     lift: new THREE.Color(0, 0, 0),
     exposure: 1,
+    saturation: 1.3,
     bloom: 0.75,
     bloomThreshold: 1.1,
   };

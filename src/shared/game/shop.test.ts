@@ -3,7 +3,7 @@ import { DEFAULT_TUNING } from '../config/tuning.ts';
 import { AI_SKILL } from './roster.ts';
 import { createRaceWorld } from './raceSetup.ts';
 import {
-  AMMO_MAX, buy, defaultLoadout, newProfile, POINTS, priceOf, raceResults, REPAIR_PRICE, settle, START_MONEY, tuningFor,
+  AMMO_MAX, buy, CAR_MODELS, defaultLoadout, newProfile, POINTS, priceOf, raceResults, REPAIR_PRICE, settle, START_MONEY, tuningFor,
   UPGRADE_PRICES, type Loadout,
 } from './shop.ts';
 import { stepWorld } from '../sim/step.ts';
@@ -53,6 +53,24 @@ describe('shop', () => {
     expect(p.damage).toBeCloseTo(0.3, 5);
     expect(p.money).toBe(0);
     expect(buy(p, 'repair')).toBe('NO MONEY');
+  });
+
+  it('sells better cars in order, keeping upgrades and leaving damage behind', () => {
+    const p = newProfile();
+    p.money = 20_000;
+    p.engine = 1;
+    p.damage = 0.4;
+    expect(priceOf(p, 'car')).toBe(CAR_MODELS[1].price);
+    expect(buy(p, 'car')).toBeNull();
+    expect(p.car).toBe(1);
+    expect(p.engine).toBe(1);
+    expect(p.damage).toBe(0);
+    expect(buy(p, 'car')).toBeNull();
+    expect(buy(p, 'car')).toBe('MAXED OUT');
+    const stock = tuningFor(DEFAULT_TUNING, defaultLoadout());
+    const brute = tuningFor(DEFAULT_TUNING, { ...defaultLoadout(), car: 2 });
+    expect(brute.accel0).toBeGreaterThan(stock.accel0);
+    expect(brute.armour).toBeLessThan(stock.armour);
   });
 
   it('upgrades change the handling', () => {

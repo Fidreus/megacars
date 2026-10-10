@@ -17,6 +17,7 @@ export interface Mood {
   tint: THREE.Color;
   lift: THREE.Color;
   exposure: number;
+  saturation: number;
   bloom: number;
   bloomThreshold: number;
   /** Headlights, street lamps and lit windows. */
@@ -41,7 +42,8 @@ export const MOODS: Mood[] = [
     background: '#4c8a3a',
     tint: new THREE.Color(1, 1, 1),
     lift: new THREE.Color(0, 0, 0),
-    exposure: 1,
+    exposure: 1.04,
+    saturation: 1.24,
     bloom: 0.75,
     bloomThreshold: 1.1,
     lights: false,
@@ -62,6 +64,7 @@ export const MOODS: Mood[] = [
     tint: new THREE.Color(1.06, 0.93, 0.84),
     lift: new THREE.Color(0.012, 0.004, 0.012),
     exposure: 1.02,
+    saturation: 1.28,
     bloom: 0.8,
     bloomThreshold: 1.0,
     lights: true,
@@ -82,6 +85,7 @@ export const MOODS: Mood[] = [
     tint: new THREE.Color(0.82, 0.9, 1.12),
     lift: new THREE.Color(0.003, 0.004, 0.012),
     exposure: 1.1,
+    saturation: 1.15,
     bloom: 1.2,
     bloomThreshold: 0.85,
     lights: true,

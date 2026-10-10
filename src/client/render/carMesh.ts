@@ -56,6 +56,9 @@ const STYLES: Style[] = [
   },
 ];
 
+/** Body style for each car model (INTERCEPTOR, VIPER, BRUTE). */
+export const MODEL_STYLE = [1, 0, 2];
+
 const BODY_W = 1.92;
 const TRACK_HALF = 0.98;
 const BOTTOM = 0.22;

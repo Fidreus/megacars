@@ -53,6 +53,22 @@ Vapnen låses upp tre sekunder efter start. Krockar och träffar ger skada;
 en stund och kommer tillbaka lappad (30 % skada). Datorförarna använder också
 vapen – oftare ju svårare de är.
 
+## Karriär
+
+**CAREER** i titelmenyn: börja i **Division 3** och kör säsonger – ett
+mästerskap över alla banor mot sju datorförare. Slutar du topp 3 flyttas du
+upp en division; motståndarna blir skickligare (EASY → NORMAL → HARD) och
+bättre utrustade. Vinn **Division 1** för att bli **MEGACARS CHAMPION**, och
+försvara sedan titeln. Varje säsong ger en bonus efter slutplacering (mer i
+högre divisioner). Pengar, uppgraderingar, bil, ammunition och skada följer
+med mellan säsongerna, och karriären sparas efter varje lopp (CONTINUE).
+
+**Bilar:** INTERCEPTOR (startbil), **VIPER** ($4000: +7 % acceleration,
++4 % toppfart, +5 % grepp) och **BRUTE** ($9000: +15 % acceleration, +8 %
+toppfart, +8 % grepp, −15 % skada). Köps i butiken i alla lägen (även
+online); uppgraderingarna följer med till den nya bilen. Varje modell har
+sin egen kaross.
+
 ## Mästerskap och butik
 
 **CHAMPIONSHIP** i titelmenyn kör ett lopp på varje bana (med inställningarna
@@ -66,6 +82,7 @@ Före varje lopp öppnas **butiken** (vid delad skärm handlar P1 och sedan P2):
 
 | Vara | Effekt | Pris |
 |---|---|---|
+| Ny bil | Viper / Brute (se Karriär) | $4000 / $9000 |
 | Motor nivå 1–3 | +8 % acceleration, +4 % toppfart per nivå | $1500 / $2800 / $4500 |
 | Däck nivå 1–3 | +7 % grepp, +5 % sladdgrepp per nivå | $1000 / $2000 / $3200 |
 | Pansar nivå 1–3 | −18 % skada per nivå | $1200 / $2400 / $3800 |

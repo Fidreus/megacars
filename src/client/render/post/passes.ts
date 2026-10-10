@@ -82,6 +82,7 @@ uniform float uBloom;
 uniform vec3 uTint;
 uniform vec3 uLift;
 uniform float uExposure;
+uniform float uSaturation;
 uniform int uMode;
 uniform float uDither;
 uniform vec2 uGrid;
@@ -114,6 +115,10 @@ void main() {
   col += texture(tBloom, gl_FragCoord.xy / uSize).rgb * uBloom;
   col = col * uExposure * uTint + uLift;
   vec3 s = toSRGB(clamp(col, 0.0, 1.0));
+  // Punchier colours: push saturation and a touch of contrast in display space.
+  float luma = dot(s, vec3(0.299, 0.587, 0.114));
+  s = clamp(mix(vec3(luma), s, uSaturation), 0.0, 1.0);
+  s = clamp((s - 0.5) * (1.0 + (uSaturation - 1.0) * 0.25) + 0.5, 0.0, 1.0);
 
   // Ordered dither anchored to the world (camera grid), so it never swims.
   vec2 g = mod(gl_FragCoord.xy - 0.5 + uGrid, 4.0);
@@ -132,6 +137,8 @@ export interface GradeSettings {
   tint: THREE.Color;
   lift: THREE.Color;
   exposure: number;
+  /** 1 = as rendered, >1 more colourful. */
+  saturation: number;
   bloom: number;
   bloomThreshold: number;
 }
@@ -151,7 +158,7 @@ export class PostChain {
     tColor: { value: null }, tDepth: { value: null }, tBloom: { value: null }, tLut: { value: null },
     uSize: { value: new THREE.Vector2() }, uNear: { value: 1 }, uFar: { value: 1000 },
     uOutline: { value: 0.5 }, uOutlineThr: { value: 0.45 }, uBloom: { value: 1 },
-    uTint: { value: new THREE.Color(1, 1, 1) }, uLift: { value: new THREE.Color(0, 0, 0) }, uExposure: { value: 1 },
+    uTint: { value: new THREE.Color(1, 1, 1) }, uLift: { value: new THREE.Color(0, 0, 0) }, uExposure: { value: 1 }, uSaturation: { value: 1 },
     uMode: { value: PaletteMode.Bits12 }, uDither: { value: 1 }, uGrid: { value: new THREE.Vector2() },
   });
 
@@ -208,6 +215,7 @@ export class PostChain {
     u.uTint.value.copy(grade.tint);
     u.uLift.value.copy(grade.lift);
     u.uExposure.value = grade.exposure;
+    u.uSaturation.value = grade.saturation;
     u.uMode.value = mode;
     u.uGrid.value.copy(grid);
     fs.render(gl, this.resolve, this.out);

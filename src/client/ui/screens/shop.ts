@@ -4,7 +4,7 @@
 
 import { DEFAULT_TUNING } from '../../../shared/config/tuning.ts';
 import {
-  AMMO_MAX, MAX_LEVEL, priceOf, tuningFor, type Profile, type ShopItem,
+  AMMO_MAX, CAR_MODELS, defaultLoadout, MAX_LEVEL, priceOf, tuningFor, type Profile, type ShopItem,
 } from '../../../shared/game/shop.ts';
 import { drawText } from '../font.ts';
 import { Menu, type MenuEvents, type MenuItem } from '../menu.ts';
@@ -24,6 +24,7 @@ export interface ShopContext {
 }
 
 const LABELS: Record<ShopItem, string> = {
+  car: 'CAR',
   engine: 'ENGINE', tyres: 'TYRES', armour: 'ARMOUR', missiles: 'MISSILES', mines: 'MINES', turbos: 'TURBO', repair: 'REPAIR',
 };
 
@@ -51,6 +52,7 @@ export class ShopScreen {
       },
     });
     this.menu = new Menu([
+      item('car'),
       item('engine'), item('tyres'), item('armour'),
       item('missiles'), item('mines'), item('turbos'),
       item('repair'),
@@ -72,6 +74,11 @@ export class ShopScreen {
     if (!p) return LABELS[it];
     const price = priceOf(p, it);
     const cost = price === null ? '' : `  $${price}`;
+    if (it === 'car') {
+      const now = CAR_MODELS[p.car ?? 0].name;
+      const next = CAR_MODELS[(p.car ?? 0) + 1];
+      return next ? `CAR ${now} > ${next.name}${cost}` : `CAR ${now}  BEST`;
+    }
     if (it === 'engine' || it === 'tyres' || it === 'armour') {
       const pips = '■'.repeat(p[it]) + '□'.repeat(MAX_LEVEL - p[it]);
       return `${LABELS[it]} ${pips}${price === null ? '  MAX' : cost}`;
@@ -96,13 +103,17 @@ export class ShopScreen {
     drawText(g, `$${p.money}`, W / 2, y, { scale: 2, color: this.flashMoney > 0 ? '#ffffff' : '#9cff9c', align: 'center' });
     y += 22;
 
-    // Car stats: stock bar plus what the upgrades add.
+    // Car stats: the stock car in blue, what model and upgrades add in yellow,
+    // scaled so a maxed-out best car fills the bar.
     const t = tuningFor(DEFAULT_TUNING, p);
+    const stock = tuningFor(DEFAULT_TUNING, defaultLoadout());
+    const best = tuningFor(DEFAULT_TUNING, { ...defaultLoadout(), car: CAR_MODELS.length - 1, engine: MAX_LEVEL, tyres: MAX_LEVEL, armour: MAX_LEVEL });
+    const prot = (x: typeof t) => 1.1 - x.armour;
     const stats: [string, number, number, string][] = [
-      ['TOP SPEED', t.vTop / (DEFAULT_TUNING.vTop * 1.12), DEFAULT_TUNING.vTop / (DEFAULT_TUNING.vTop * 1.12), `${Math.round(t.vTop * 3.6)} KM/H`],
-      ['ACCEL', t.accel0 / (DEFAULT_TUNING.accel0 * 1.24), 1 / 1.24, ''],
-      ['GRIP', t.aGrip / (DEFAULT_TUNING.aGrip * 1.21), 1 / 1.21, ''],
-      ['ARMOUR', (1.1 - t.armour) / 0.64, 0.1 / 0.64, ''],
+      ['TOP SPEED', t.vTop / best.vTop, stock.vTop / best.vTop, `${Math.round(t.vTop * 3.6)} KM/H`],
+      ['ACCEL', t.accel0 / best.accel0, stock.accel0 / best.accel0, ''],
+      ['GRIP', t.aGrip / best.aGrip, stock.aGrip / best.aGrip, ''],
+      ['ARMOUR', prot(t) / prot(best), prot(stock) / prot(best), ''],
       ['DAMAGE', p.damage, 0, `${Math.round(p.damage * 100)}%`],
     ];
     const sw = Math.min(260, W - 40);

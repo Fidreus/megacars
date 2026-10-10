@@ -7,7 +7,7 @@ import { Surface } from '../../shared/config/surfaces.ts';
 import { surfaceAt } from '../../shared/track/builder.ts';
 import type { CarState } from '../../shared/sim/car.ts';
 import { RacePhase } from '../../shared/sim/world.ts';
-import { CarView } from '../render/carMesh.ts';
+import { CarView, MODEL_STYLE } from '../render/carMesh.ts';
 import { Effects } from '../render/effects.ts';
 import { Particles } from '../render/particles.ts';
 import { ShotView } from '../render/shotView.ts';
@@ -42,7 +42,8 @@ export class RaceView {
     this.session = session;
     this.effects = new Effects(this.particles, session.track);
     for (const car of session.world.cars) {
-      const view = new CarView(session.colors[car.id], car.id + 1);
+      const model = session.models[car.id] ?? -1;
+      const view = new CarView(session.colors[car.id], car.id + 1, model >= 0 ? MODEL_STYLE[model] : undefined);
       view.setLights(lightsOn, headlight);
       this.cars.push(view);
       this.group.add(view.root);

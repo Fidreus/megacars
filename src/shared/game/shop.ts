@@ -10,8 +10,27 @@ import { START_AMMO } from '../sim/weapons.ts';
 
 export const MAX_LEVEL = 3;
 
+/** Car models: better chassis cost more and lift every stat. */
+export interface CarModel {
+  name: string;
+  price: number;
+  accel: number;
+  top: number;
+  grip: number;
+  /** Damage multiplier of the bodywork. */
+  armour: number;
+}
+
+export const CAR_MODELS: readonly CarModel[] = [
+  { name: 'INTERCEPTOR', price: 0, accel: 1, top: 1, grip: 1, armour: 1 },
+  { name: 'VIPER', price: 4000, accel: 1.07, top: 1.04, grip: 1.05, armour: 1 },
+  { name: 'BRUTE', price: 9000, accel: 1.15, top: 1.08, grip: 1.08, armour: 0.85 },
+];
+
 /** What a car brings to the start line. */
 export interface Loadout {
+  /** Index into CAR_MODELS (missing in old saves = 0). */
+  car: number;
   engine: number;
   tyres: number;
   armour: number;
@@ -34,7 +53,7 @@ export interface Profile extends Loadout {
 export const START_MONEY = 1000;
 
 export function defaultLoadout(): Loadout {
-  return { engine: 0, tyres: 0, armour: 0, ...START_AMMO, damage: 0 };
+  return { car: 0, engine: 0, tyres: 0, armour: 0, ...START_AMMO, damage: 0 };
 }
 
 export function newProfile(): Profile {
@@ -43,7 +62,7 @@ export function newProfile(): Profile {
 
 export function loadoutOf(p: Loadout): Loadout {
   return {
-    engine: p.engine, tyres: p.tyres, armour: p.armour,
+    car: p.car ?? 0, engine: p.engine, tyres: p.tyres, armour: p.armour,
     missiles: p.missiles, mines: p.mines, turbos: p.turbos, damage: p.damage,
   };
 }
@@ -53,11 +72,12 @@ export function loadoutOf(p: Loadout): Loadout {
 /** Handling for a car with these upgrades. */
 export function tuningFor(base: CarTuning, l: Loadout): CarTuning {
   const t = cloneTuning(base);
-  t.accel0 *= 1 + 0.08 * l.engine;
-  t.vTop *= 1 + 0.04 * l.engine;
-  t.aGrip *= 1 + 0.07 * l.tyres;
-  t.aSlide *= 1 + 0.05 * l.tyres;
-  t.armour = 1 - 0.18 * l.armour;
+  const m = CAR_MODELS[l.car ?? 0] ?? CAR_MODELS[0];
+  t.accel0 *= m.accel * (1 + 0.08 * l.engine);
+  t.vTop *= m.top * (1 + 0.04 * l.engine);
+  t.aGrip *= m.grip * (1 + 0.07 * l.tyres);
+  t.aSlide *= m.grip * (1 + 0.05 * l.tyres);
+  t.armour = m.armour * (1 - 0.18 * l.armour);
   return t;
 }
 
@@ -67,7 +87,7 @@ export const UPGRADES = ['engine', 'tyres', 'armour'] as const;
 export type Upgrade = (typeof UPGRADES)[number];
 export const AMMO = ['missiles', 'mines', 'turbos'] as const;
 export type Ammo = (typeof AMMO)[number];
-export type ShopItem = Upgrade | Ammo | 'repair';
+export type ShopItem = Upgrade | Ammo | 'repair' | 'car';
 
 /** Price of the next level (index = current level). */
 export const UPGRADE_PRICES: Record<Upgrade, readonly number[]> = {
@@ -81,11 +101,12 @@ export const AMMO_MAX: Record<Ammo, number> = { missiles: 12, mines: 8, turbos: 
 export const REPAIR_PRICE = 800;
 
 export function isShopItem(x: unknown): x is ShopItem {
-  return x === 'repair' || (UPGRADES as readonly unknown[]).includes(x) || (AMMO as readonly unknown[]).includes(x);
+  return x === 'repair' || x === 'car' || (UPGRADES as readonly unknown[]).includes(x) || (AMMO as readonly unknown[]).includes(x);
 }
 
 /** Cost of buying `item` once, or null when it can't be bought (maxed, nothing to repair). */
 export function priceOf(p: Loadout, item: ShopItem): number | null {
+  if (item === 'car') return CAR_MODELS[(p.car ?? 0) + 1]?.price ?? null;
   if (item === 'repair') return p.damage > 0.005 ? Math.ceil(p.damage * REPAIR_PRICE) : null;
   if ((UPGRADES as readonly string[]).includes(item)) {
     const lvl = p[item as Upgrade];
@@ -111,6 +132,12 @@ export function buy(p: Profile, item: ShopItem): string | null {
   }
   if (p.money < price) return 'NOT ENOUGH MONEY';
   p.money -= price;
+  if (item === 'car') {
+    // A new chassis: upgrades move over, the old car's damage stays behind.
+    p.car = (p.car ?? 0) + 1;
+    p.damage = 0;
+    return null;
+  }
   if ((UPGRADES as readonly string[]).includes(item)) p[item as Upgrade]++;
   else p[item as Ammo]++;
   return null;
@@ -173,6 +200,7 @@ export function aiLoadout(humanLevel: number, difficulty: number, rnd: () => num
     const lvl = Math.round(humanLevel + (difficulty - 1) * 0.7 + (rnd() - 0.5) * 1.2);
     l[u] = Math.max(0, Math.min(MAX_LEVEL, lvl));
   }
+  l.car = Math.max(0, Math.min(CAR_MODELS.length - 1, Math.round(humanLevel * 0.7 + (difficulty - 1) * 0.5 + (rnd() - 0.6))));
   return l;
 }
 
@@ -180,6 +208,6 @@ export function aiLoadout(humanLevel: number, difficulty: number, rnd: () => num
 export function averageLevel(ps: readonly Loadout[]): number {
   if (ps.length === 0) return 0;
   let sum = 0;
-  for (const p of ps) sum += (p.engine + p.tyres + p.armour) / 3;
+  for (const p of ps) sum += (p.engine + p.tyres + p.armour + (p.car ?? 0) * 1.5) / 4;
   return sum / ps.length;
 }

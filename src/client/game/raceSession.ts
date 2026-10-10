@@ -25,6 +25,7 @@ export class RaceSession implements GameSession {
   readonly playerCars: number[];
   readonly names: string[];
   readonly colors: string[];
+  readonly models: number[];
 
   /**
    * A race from menu settings, or from a ready-made spec (championships).
@@ -46,6 +47,7 @@ export class RaceSession implements GameSession {
     }
     this.names = this.spec.entrants.map((e) => e.name);
     this.colors = this.spec.entrants.map((e) => e.color);
+    this.models = this.spec.entrants.map((e) => e.loadout?.car ?? -1);
   }
 
   step(): void {

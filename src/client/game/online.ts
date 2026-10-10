@@ -21,6 +21,7 @@ export class OnlineSession implements GameSession {
   readonly playerCars: readonly number[];
   readonly names: readonly string[];
   readonly colors: readonly string[];
+  readonly models: readonly number[];
 
   constructor(net: NetRace) {
     this.net = net;
@@ -30,6 +31,7 @@ export class OnlineSession implements GameSession {
     this.playerCars = net.localCars;
     this.names = net.names;
     this.colors = net.colors;
+    this.models = net.spec.entrants.map((e) => e.loadout?.car ?? -1);
   }
 }
 

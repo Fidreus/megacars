@@ -35,6 +35,7 @@ import { PALETTE_MODE_NAMES, PaletteMode, type PaletteModeId } from './render/pa
 import { buildProps } from './render/props.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
+import { buildTown } from './render/town.ts';
 import { buildIndustry, type SteamSource } from './render/industry.ts';
 import { themeOf } from './render/theme.ts';
 import { buildTrackView } from './render/trackMesh.ts';
@@ -48,7 +49,9 @@ import { drawStandings, ShopScreen, type ShopContext } from './ui/screens/shop.t
 import {
   humanDrivers, isOver, leader, loadCup, newChampionship, nextRaceSpec, saveCup, settleRace, standingsRows, type Championship,
 } from './game/championship.ts';
-import { buy } from '../shared/game/shop.ts';
+import { buy, CAR_MODELS } from '../shared/game/shop.ts';
+import { DIVISIONS, endSeason, loadCareer, newCareer, saveCareer, type Career } from './game/career.ts';
+import { drawSeasonEnd } from './ui/screens/season.ts';
 import type { RaceSpec } from '../shared/net/protocol.ts';
 
 const SHADOW_HALF = 62;
@@ -58,7 +61,7 @@ const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
 const VIEW_HEIGHT = 51.3;
 
 /** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
-type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings';
+type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -105,11 +108,16 @@ export class App {
   private shop: ShopScreen | null = null;
   /** Offline championship in progress, and whether the current race belongs to it. */
   private cup: Championship | null = null;
+  /** Career in progress (its current season is `cup`). */
+  private career: Career | null = null;
+  private readonly careerMenu: Menu;
   private cupRace = false;
   private readonly camTargets = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly camInit = [false, false];
   private readonly tagPos = new THREE.Vector3();
   private steam: SteamSource[] = [];
+  /** Building window materials, lit at night. */
+  private windowMats: THREE.MeshToonMaterial[] = [];
   /** Camera shake strength 0..1 (decays). */
   private shake = 0;
   /** Seconds of victory fireworks left. */
@@ -208,6 +216,31 @@ export class App {
       },
       { label: () => 'BACK', select: () => this.toTitle() },
     ], { onMove: beep });
+    this.careerMenu = new Menu([
+      {
+        label: () => {
+          const c = this.career ?? loadCareer();
+          return c ? `CONTINUE - DIVISION ${c.division}, RACE ${c.cup.race + 1} OF ${c.cup.tracks.length}` : 'CONTINUE';
+        },
+        disabled: () => !(this.career ?? loadCareer()),
+        select: () => {
+          this.career = this.career ?? loadCareer();
+          if (!this.career) return;
+          this.cup = this.career.cup;
+          this.openCupShop(0);
+        },
+      },
+      {
+        label: () => ((this.career ?? loadCareer()) ? 'NEW CAREER (DELETES THE OLD ONE)' : 'NEW CAREER'),
+        select: () => {
+          this.career = newCareer();
+          this.cup = this.career.cup;
+          saveCareer(this.career);
+          this.openCupShop(0);
+        },
+      },
+      { label: () => 'BACK', select: () => this.toTitle() },
+    ], { onMove: beep });
 
     this.setMood(moodById(this.settings.mood));
     if (params.room) {
@@ -246,7 +279,8 @@ export class App {
     const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
     return [
       { label: () => 'START RACE', select: () => this.startRace(s) },
-      { label: () => 'CHAMPIONSHIP', select: () => { this.mode = 'cup'; this.cupMenu.index = loadCup() ? 0 : 1; } },
+      { label: () => 'CAREER', select: () => this.toCareer() },
+      { label: () => 'CHAMPIONSHIP', select: () => { this.career = null; this.mode = 'cup'; this.cupMenu.index = loadCup() ? 0 : 1; } },
       { label: () => 'PLAY ONLINE', select: () => this.toOnline() },
       {
         label: () => (s.players === 1 ? 'PLAYERS: 1' : 'PLAYERS: 2 SPLIT SCREEN'),
@@ -442,11 +476,11 @@ export class App {
     const d = humans[p];
     this.showAttract('shop');
     this.shop = this.makeShop({
-      title: () => `${humans.length > 1 ? `${d.name} - ` : ''}RACE ${cup.race + 1} OF ${cup.tracks.length}: ${TRACKS[cup.tracks[cup.race]].name.toUpperCase()}`,
+      title: () => `${this.career ? `DIV ${this.career.division} - ` : ''}${humans.length > 1 ? `${d.name} - ` : ''}RACE ${cup.race + 1} OF ${cup.tracks.length}: ${TRACKS[cup.tracks[cup.race]].name.toUpperCase()}`,
       profile: () => d.profile,
       buy: (item) => {
         const err = buy(d.profile, item);
-        if (!err) saveCup(cup);
+        if (!err) this.saveProgress();
         return err;
       },
       doneLabel: () => (p + 1 < humans.length ? `DONE - ${humans[p + 1].name} SHOPS` : 'START RACE'),
@@ -458,7 +492,7 @@ export class App {
   private startCupRace(): void {
     const cup = this.cup!;
     const spec = nextRaceSpec(cup);
-    saveCup(cup);
+    this.saveProgress();
     const players = humanDrivers(cup).length as 1 | 2;
     this.startRace({ ...this.settings, track: spec.track, laps: spec.laps, weapons: spec.weapons, players, practice: false }, spec);
   }
@@ -467,9 +501,22 @@ export class App {
   private finishCupRace(): void {
     const cup = this.cup!;
     settleRace(cup, this.world);
-    saveCup(cup);
+    this.saveProgress();
     this.cupRace = false;
     this.showAttract('standings');
+  }
+
+  /** Save the championship, or the whole career when in one. */
+  private saveProgress(): void {
+    if (this.career) saveCareer(this.career);
+    else saveCup(this.cup);
+  }
+
+  private toCareer(): void {
+    this.cup = null;
+    this.career = loadCareer();
+    this.showAttract('career');
+    this.careerMenu.index = this.career ? 0 : 1;
   }
 
   private makeShop(ctx: ShopContext): ShopScreen {
@@ -512,6 +559,10 @@ export class App {
       keepOut.push(...plant.keepOut);
       this.steam = plant.steam;
     }
+    const town = buildTown(track, track.def.theme, keepOut);
+    g.add(town.group);
+    keepOut.push(...town.keepOut);
+    this.windowMats = town.windows;
     g.add(buildScenery(track, keepOut));
     this.debugView = buildTrackDebugView(track, this.tuning);
     g.add(this.debugView);
@@ -539,12 +590,14 @@ export class App {
     g.tint.copy(mood.tint);
     g.lift.copy(mood.lift);
     g.exposure = mood.exposure;
+    g.saturation = mood.saturation;
     g.bloom = mood.bloom;
     g.bloomThreshold = mood.bloomThreshold;
     if (this.view) this.view.particles.light.value = mood.particleLight;
     this.lampBulbs?.color.setRGB(mood.lights ? 5 : 0.55, mood.lights ? 4.4 : 0.55, mood.lights ? 3.2 : 0.5);
     this.lampPools?.color.setRGB(0.95 * mood.lampLight, 0.8 * mood.lampLight, 0.56 * mood.lampLight);
     for (const o of this.nightLights) o.visible = mood.lights;
+    for (const m of this.windowMats) m.emissiveIntensity = mood.lights ? (mood.id === 'night' ? 2.2 : 1.1) : 0;
     this.view?.setLights(mood.lights, mood.headlight);
   }
 
@@ -633,6 +686,7 @@ export class App {
     if (this.mode === 'online') return this.onlineMenu;
     if (this.mode === 'lobby') return this.lobbyMenu;
     if (this.mode === 'cup') return this.cupMenu;
+    if (this.mode === 'career') return this.careerMenu;
     if (this.mode === 'shop') return this.shop?.menu ?? null;
     return this.paused ? this.pauseMenu : null;
   }
@@ -692,10 +746,26 @@ export class App {
       else this.shop?.handle(nav);
       return;
     }
+    if (this.mode === 'career') {
+      if (nav.back) this.toTitle();
+      else this.careerMenu.handle(nav);
+      return;
+    }
+    if (this.mode === 'seasonEnd') {
+      if (nav.confirm || nav.click) this.toCareer();
+      return;
+    }
     if (this.mode === 'standings') {
       if (nav.confirm || nav.click) {
         const cup = this.cup!;
-        if (isOver(cup)) {
+        if (isOver(cup) && this.career) {
+          // Season over: bonus, promotion, and the next season set up.
+          endSeason(this.career);
+          this.cup = this.career.cup;
+          saveCareer(this.career);
+          this.mode = 'seasonEnd';
+          this.fireworks = 0;
+        } else if (isOver(cup)) {
           saveCup(null);
           this.cup = null;
           this.toTitle();
@@ -981,13 +1051,22 @@ export class App {
       const s = this.settings;
       drawText(ctx, `PLAYERS ${s.players}   OPPONENTS ${s.opponents}   ${DIFFICULTIES[s.difficulty]}   LAPS ${s.laps}   WEAPONS ${s.weapons ? 'ON' : 'OFF'}`, W / 2, H - 22, { color: '#8090a8', align: 'center' });
       drawText(ctx, 'NEW CHAMPIONSHIPS USE THE SETTINGS FROM THE MAIN MENU', W / 2, H - 11, { color: '#8090a8', align: 'center' });
+    } else if (this.mode === 'career') {
+      this.drawCareer(ctx, W, H, dt);
+    } else if (this.mode === 'seasonEnd' && this.career?.last) {
+      drawSeasonEnd(ctx, W, H, this.career, this.time);
+      if (Math.random() < dt * 4 && (this.career.last.outcome === 'champion' || this.career.last.outcome === 'defended' || this.career.last.outcome === 'promoted')) {
+        const t = this.camTargets[0];
+        this.view.effects.firework(t.x + (Math.random() - 0.5) * 70, t.z - 8 - Math.random() * 25);
+      }
     } else if (this.mode === 'shop' && this.shop) {
       this.shop.draw(ctx, W, H, dt);
     } else if (this.mode === 'standings' && this.cup) {
       const cup = this.cup;
       const over = isOver(cup);
-      const title = over ? `${leader(cup).name === 'YOU' ? 'YOU ARE' : `${leader(cup).name} IS`} CHAMPION!` : 'CHAMPIONSHIP';
-      const sub = over ? 'FINAL STANDINGS' : `AFTER RACE ${cup.race} OF ${cup.tracks.length}`;
+      const head = this.career ? `DIVISION ${this.career.division}` : 'CHAMPIONSHIP';
+      const title = over ? `${leader(cup).name === 'YOU' ? 'YOU WIN' : `${leader(cup).name} WINS`} ${head}!` : head;
+      const sub = over ? 'FINAL STANDINGS' : `AFTER RACE ${cup.race} OF ${cup.tracks.length}${this.career ? ` - SEASON ${this.career.season}` : ''}`;
       drawStandings(ctx, W, H, title, sub, standingsRows(cup), this.time, over ? 'PRESS ENTER' : 'PRESS ENTER FOR THE SHOP');
     } else if (this.mode === 'lobby' && this.online.room) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -1055,6 +1134,30 @@ export class App {
       drawText(ctx, 'PAUSED', W / 2, Math.round(H * 0.3), { scale: 4, color: '#ffd84a', align: 'center' });
       this.pauseMenu.draw(ctx, W / 2, Math.round(H * 0.3) + 44, 2);
     }
+  }
+
+  /** Career hub: where you stand, what you drive, continue or start over. */
+  private drawCareer(ctx: CanvasRenderingContext2D, W: number, H: number, dt: number): void {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, 0, W, H);
+    const top = drawLogo(ctx, W / 2, Math.round(H * 0.06), Math.min(W - 40, 380), this.time);
+    drawText(ctx, 'CAREER', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
+    let y = top + 24;
+    const c = this.career ?? loadCareer();
+    if (c) {
+      const p = humanDrivers(c.cup)[0].profile;
+      const stars = '■'.repeat(DIVISIONS - c.division + 1) + '□'.repeat(c.division - 1);
+      drawText(ctx, `DIVISION ${c.division} ${stars}   SEASON ${c.season}   TITLES ${c.titles}`, W / 2, y, { color: '#ffd84a', align: 'center' });
+      y += 12;
+      drawText(ctx, `$${p.money}   ${CAR_MODELS[p.car ?? 0].name}   ENGINE ${p.engine} TYRES ${p.tyres} ARMOUR ${p.armour}   ${p.points} PTS`, W / 2, y, { color: '#9cff9c', align: 'center' });
+    } else {
+      drawText(ctx, 'START IN DIVISION 3 - TOP 3 OF A SEASON MOVES YOU UP', W / 2, y, { color: '#9fd8ff', align: 'center' });
+      y += 12;
+      drawText(ctx, 'WIN DIVISION 1 TO BECOME MEGACARS CHAMPION', W / 2, y, { color: '#9fd8ff', align: 'center' });
+    }
+    y += 22;
+    this.careerMenu.draw(ctx, W / 2, y, fitScale(this.careerMenu, y, H - 24), dt);
+    drawText(ctx, 'MONEY, UPGRADES AND YOUR CAR STAY WITH YOU FROM SEASON TO SEASON', W / 2, H - 14, { color: '#8090a8', align: 'center' });
   }
 
   /** Name tags over other people's cars, ping, connection trouble. */

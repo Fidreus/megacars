@@ -13,4 +13,6 @@ export interface GameSession {
   readonly playerCars: readonly number[];
   readonly names: readonly string[];
   readonly colors: readonly string[];
+  /** Car model per car (index into CAR_MODELS), or -1 for "any look". */
+  readonly models: readonly number[];
 }
