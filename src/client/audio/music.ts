@@ -56,6 +56,24 @@ interface ChiptunePlayer {
   setRepeatCount(n: number): void;
   onInitialized(h: () => void): void;
   onError(h: (e: unknown) => void): void;
+  onProgress(h: () => void): void;
+}
+
+/**
+ * Glide a gain to `to` over `secs` along a straight line from wherever it is
+ * now. Linear ramps reach exactly zero (setTargetAtTime never does, so a song
+ * stopped under it still clicks), and holding the current value first avoids
+ * the jump back to the last set value that cancelScheduledValues causes.
+ */
+function fade(param: AudioParam, ctx: AudioContext, to: number, secs: number): void {
+  const t = ctx.currentTime;
+  if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(t);
+  else {
+    const v = param.value;
+    param.cancelScheduledValues(t);
+    param.setValueAtTime(v, t);
+  }
+  param.linearRampToValueAtTime(to, t + secs);
 }
 
 const DB = 'megacars-music';
@@ -86,7 +104,8 @@ export class Music {
 
   setVolume(v: number): void {
     this.volume = v;
-    if (this.out && this.audio.ctx) this.out.gain.setTargetAtTime(this.mode === 2 ? 0 : v * 0.55 * this.songGain, this.audio.ctx.currentTime, 0.1);
+    // Not while a song is fading in or out: that fade decides the level.
+    if (this.out && this.audio.ctx && !this.fading) fade(this.out.gain, this.audio.ctx, this.mode === 2 ? 0 : v * 0.55 * this.songGain, 0.15);
   }
 
   setMode(m: MusicMode): void {
@@ -145,14 +164,14 @@ export class Music {
     // Cancel a song that is still loading.
     this.switchToken++;
     if (!this.out || !this.audio.ctx) return;
-    this.out.gain.setTargetAtTime(0, this.audio.ctx.currentTime, 0.15);
+    fade(this.out.gain, this.audio.ctx, 0, 0.4);
     const p = this.player;
     const src = this.source;
     this.source = null;
     setTimeout(() => {
       p?.stop();
       src?.stop();
-    }, 600);
+    }, 550);
     this.nowPlaying = '';
   }
 
@@ -179,28 +198,48 @@ export class Music {
     const ctx = this.audio.ctx;
     if ((!recording && !player) || token !== this.switchToken || !ctx) return;
     const out = this.ensureOut(ctx);
-    // Fade out what is playing, then start the new song and fade in.
-    out.gain.setTargetAtTime(0, ctx.currentTime, 0.12);
+    // Fade out what is playing (to exactly zero), then start the new song
+    // silent and fade it in once it is really producing sound.
+    this.fading = true;
+    fade(out.gain, ctx, 0, 0.35);
     const data = recording ? await this.fetchRecording(key, ctx) : await this.fetchSong(key);
     await new Promise((r) => setTimeout(r, 450));
-    if (!data || token !== this.switchToken || this.mode === 2) return;
+    if (!data || token !== this.switchToken || this.mode === 2) {
+      if (token === this.switchToken) this.fading = false;
+      return;
+    }
     this.player?.stop();
     this.source?.stop();
     this.source = null;
+    fade(out.gain, ctx, 0, 0.01);
     if (data instanceof AudioBuffer) {
       const src = ctx.createBufferSource();
       src.buffer = data;
       src.loop = true;
       src.connect(out);
-      src.start();
+      // Start a moment ahead so the gain is surely at zero by then.
+      src.start(ctx.currentTime + 0.05);
       this.source = src;
     } else {
+      // The worklet parses the module before the first note: wait for it to
+      // report progress so the fade-in doesn't start ahead of the music.
+      const started = new Promise<void>((ok) => {
+        this.onStarted = ok;
+        setTimeout(ok, 1500);
+      });
       player!.play(data.slice(0));
+      await started;
+      this.onStarted = null;
+      if (token !== this.switchToken || (this.mode as MusicMode) === 2) return;
     }
-    out.gain.cancelScheduledValues(ctx.currentTime);
-    out.gain.setValueAtTime(0, ctx.currentTime);
     this.songGain = SONGS[key]?.gain ?? 1;
-    out.gain.linearRampToValueAtTime(this.volume * 0.55 * this.songGain, ctx.currentTime + 1.2);
+    const t = ctx.currentTime + 0.06;
+    out.gain.cancelScheduledValues(t);
+    out.gain.setValueAtTime(0, t);
+    out.gain.linearRampToValueAtTime(this.volume * 0.55 * this.songGain, t + 1.2);
+    setTimeout(() => {
+      if (token === this.switchToken) this.fading = false;
+    }, 1300);
     const song = SONGS[key];
     this.nowPlaying = song ? `${song.title} - ${song.artist}` : key.replace(/^own:/, '').toUpperCase();
     this.onSong(this.nowPlaying);
@@ -208,6 +247,9 @@ export class Music {
 
   private source: AudioBufferSourceNode | null = null;
   private songGain = 1;
+  /** A song switch owns the output gain until its fade-in is done. */
+  private fading = false;
+  private onStarted: (() => void) | null = null;
   private readonly decoded = new Map<string, AudioBuffer>();
 
   /** The music output (created once; module player and recordings both feed it). */
@@ -272,6 +314,7 @@ export class Music {
           player.onError((e) => fail(e));
           setTimeout(() => fail(new Error('music worklet timeout')), 10000);
         });
+        player.onProgress(() => this.onStarted?.());
         player.gain.connect(this.ensureOut(ctx));
         this.player = player;
         return player;

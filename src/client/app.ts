@@ -14,9 +14,11 @@ import { RacePhase, respawnCar, standings } from '../shared/sim/world.ts';
 import { AudioSystem } from './audio/audio.ts';
 import { EngineSound } from './audio/engine.ts';
 import {
-  playExplosion, playFanfare, playImpact, playLaunch, playMineDrop, playTone, playTurbo, SkidSound,
+  Crowd, playBackfire, playDebris, playExplosion, playFanfare, playImpact, playLanding, playLaunch, playMineDrop,
+  playSplash, playStartBeep, playTurbo, playUi, playWhoosh, playZap, TyreSound, TyreSurface,
 } from './audio/sfx.ts';
 import { ShotKind } from '../shared/sim/weapons.ts';
+import type { CarState } from '../shared/sim/car.ts';
 import { installDebugApi } from './debug/debugApi.ts';
 import { buildTrackDebugView } from './debug/trackDebugView.ts';
 import { loadSavedTuning, openTuningPanel } from './debug/tuningPanel.ts';
@@ -58,7 +60,22 @@ import type { RaceSpec } from '../shared/net/protocol.ts';
 
 const SHADOW_HALF = 62;
 const SHADOW_MAP = 2048;
-const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
+/** Tyre sound family for each surface id. */
+const TYRE_SURFACE: number[] = [];
+TYRE_SURFACE[Surface.Asphalt] = TyreSurface.Paved;
+TYRE_SURFACE[Surface.Curb] = TyreSurface.Paved;
+TYRE_SURFACE[Surface.Wet] = TyreSurface.Paved;
+TYRE_SURFACE[Surface.Gravel] = TyreSurface.Loose;
+TYRE_SURFACE[Surface.Snow] = TyreSurface.Loose;
+TYRE_SURFACE[Surface.Grass] = TyreSurface.Grass;
+TYRE_SURFACE[Surface.ShallowWater] = TyreSurface.Water;
+TYRE_SURFACE[Surface.DeepWater] = TyreSurface.Water;
+TYRE_SURFACE[Surface.Ice] = TyreSurface.Ice;
+TYRE_SURFACE[Surface.Oil] = TyreSurface.Ice;
+/** Opponent engines heard at once (the nearest ones). */
+const FAR_ENGINES = 3;
+/** Opponents are heard out to this distance, metres. */
+const FAR_RANGE = 45;
 /** Visible height of a full-screen view, metres. Split screen zooms out a little. */
 const VIEW_HEIGHT = 51.3;
 
@@ -91,7 +108,7 @@ export class App {
   private readonly sunRight = new THREE.Vector3();
   private readonly sunUp = new THREE.Vector3();
   private readonly sunDir = new THREE.Vector3(0, 1, 0);
-  private readonly audio = new AudioSystem();
+  readonly audio = new AudioSystem();
   private readonly minimap = new Minimap();
   private trackGroup: THREE.Group | null = null;
   private debugView: THREE.Group | null = null;
@@ -99,7 +116,11 @@ export class App {
   private lampBulbs: THREE.MeshBasicMaterial | null = null;
   private lampPools: THREE.MeshBasicMaterial | null = null;
   private engines: EngineSound[] = [];
-  private skidSound: SkidSound | null = null;
+  private tyres: TyreSound[] = [];
+  private farEngines: EngineSound[] = [];
+  private crowd: Crowd | null = null;
+  /** Airborne flag of each player car last tick (for the take-off whoosh). */
+  private wasAirborne = [false, false];
   private tuningPanel: { toggle(): void } | null = null;
   private readonly titleMenu: Menu;
   private readonly pauseMenu: Menu;
@@ -175,8 +196,9 @@ export class App {
     sun.shadow.normalBias = 0.04;
     this.scene.add(sun, sun.target);
 
-    const beep = () => playTone(this.audio, 660, 0.04, 'square', 0.05);
-    this.titleMenu = new Menu(this.buildTitleItems(), { onMove: beep, onChange: beep });
+    const beep = () => playUi(this.audio, 'move');
+    const change = () => playUi(this.audio, 'change');
+    this.titleMenu = new Menu(this.buildTitleItems(), { onMove: beep, onChange: change });
     this.pauseMenu = new Menu([
       { label: () => 'RESUME', select: () => (this.paused = false) },
       {
@@ -197,8 +219,8 @@ export class App {
       },
       notice: (text) => this.flashMessage(text, 2.5),
     });
-    this.onlineMenu = new Menu(this.buildOnlineItems(), { onMove: beep, onChange: beep });
-    this.lobbyMenu = new Menu(this.buildLobbyItems(), { onMove: beep, onChange: beep });
+    this.onlineMenu = new Menu(this.buildOnlineItems(), { onMove: beep, onChange: change });
+    this.lobbyMenu = new Menu(this.buildLobbyItems(), { onMove: beep, onChange: change });
     this.cupMenu = new Menu([
       {
         label: () => {
@@ -226,7 +248,7 @@ export class App {
     this.music.volume = this.settings.musicVolume / 10;
     this.audio.volume = (this.settings.soundVolume / 10) * 0.9;
     this.music.onSong = () => (this.songToast = 4);
-    this.optionsMenu = new Menu(this.buildOptionItems(), { onMove: beep, onChange: beep });
+    this.optionsMenu = new Menu(this.buildOptionItems(), { onMove: beep, onChange: change });
     // Music on/off, volumes and next song are also in the pause menu (Esc).
     this.pauseMenu.items.splice(2, 0, ...this.buildOptionItems().slice(0, 4));
     this.careerMenu = new Menu([
@@ -274,9 +296,12 @@ export class App {
     const unlock = () => {
       if (this.params.mute) return;
       this.audio.unlock();
-      if (!this.skidSound && this.audio.ctx) {
+      if (!this.crowd && this.audio.ctx) {
         this.engines = [new EngineSound(this.audio), new EngineSound(this.audio)];
-        this.skidSound = new SkidSound(this.audio);
+        this.engines.forEach((e, p) => (e.onBackfire = (k) => playBackfire(this.audio, k, this.playerPan(p))));
+        this.tyres = [new TyreSound(this.audio), new TyreSound(this.audio)];
+        this.farEngines = Array.from({ length: FAR_ENGINES }, () => new EngineSound(this.audio, true));
+        this.crowd = new Crowd(this.audio);
         this.music.play(this.musicScene(), true);
       }
     };
@@ -605,9 +630,9 @@ export class App {
 
   private makeShop(ctx: ShopContext): ShopScreen {
     return new ShopScreen(ctx, {
-      onMove: () => playTone(this.audio, 660, 0.04, 'square', 0.05),
-      onBuy: () => playTone(this.audio, 1046, 0.12, 'square', 0.08, 1568),
-      onDeny: () => playTone(this.audio, 160, 0.18, 'square', 0.08),
+      onMove: () => playUi(this.audio, 'move'),
+      onBuy: () => playUi(this.audio, 'buy'),
+      onDeny: () => playUi(this.audio, 'deny'),
     });
   }
 
@@ -934,37 +959,55 @@ export class App {
       if ((e.kind === Ev.WallHit || e.kind === Ev.CarHit) && this.audio.ready) {
         const dx = e.x - me.x;
         const dist = Math.hypot(dx, e.z - me.z);
-        if (dist < 60) playImpact(this.audio, e.value * (1 - dist / 60), dx / 30);
+        if (dist < 60) playImpact(this.audio, e.value * (1 - dist / 60), dx / 30, e.kind === Ev.CarHit ? 0.9 : 0.5);
       } else if (e.kind === Ev.Fire || e.kind === Ev.Explosion || e.kind === Ev.Wreck || e.kind === Ev.Turbo) {
         this.weaponEvent(e.kind, e.car, e.other, e.value, e.x, e.z);
       } else if (e.kind === Ev.Respawn) {
         this.view.snap(e.car);
-        if (e.value === 1 && players.includes(e.car)) this.flashMessage('RESET');
+        if (players.includes(e.car) && this.mode === 'race') {
+          if (e.value === 1) this.flashMessage('RESET');
+          playZap(this.audio);
+        }
       } else if (e.kind === Ev.Lap && players.includes(e.car) && this.mode === 'race') {
         const car = w.cars[e.car];
         const best = car.bestLapTicks === e.value;
         if (w.race.laps === 0 || car.lap <= w.race.laps) {
           this.flashMessage(`${best ? 'BEST LAP ' : 'LAP '}${(e.value * DT).toFixed(2)}`, 2.2);
-          playTone(this.audio, best ? 1046 : 784, 0.12, 'square', 0.1);
+          playUi(this.audio, best ? 'buy' : 'select');
+          this.crowd?.cheer(this.crowdCloseness(car) * 0.8 + 0.1, 1.6);
         }
       } else if (e.kind === Ev.Finish && players.includes(e.car)) {
         playFanfare(this.audio, e.other <= 3);
+        this.crowd?.cheer(e.other <= 3 ? 1 : 0.5, 3.2);
         if (e.other === 1 && this.mode === 'race') this.fireworks = 6;
       } else if (e.kind === Ev.Land) {
         this.view.effects.landing(e.x, e.z, e.value, w.cars[e.car]);
         const d = Math.hypot(e.x - me.x, e.z - me.z);
         if (d < 50) {
           this.shake = Math.max(this.shake, Math.min(1, e.value / 14) * (1 - d / 50));
-          if (this.audio.ready) playImpact(this.audio, e.value * 0.8 * (1 - d / 50), (e.x - me.x) / 30);
+          if (this.audio.ready) {
+            const car = w.cars[e.car];
+            const wet = TYRE_SURFACE[car.surfRear] === TyreSurface.Water;
+            if (wet) playSplash(this.audio, Math.min(1, e.value / 10) * (1 - d / 50));
+            playLanding(this.audio, e.value * (1 - d / 50), (e.x - me.x) / 30);
+          }
         }
       } else if (e.kind === Ev.RaceStart && this.mode === 'race') {
-        playTone(this.audio, 880, 0.45, 'square', 0.14);
+        playStartBeep(this.audio, true);
+        this.crowd?.cheer(0.7, 2.6);
       }
     }
+    // Taking off from a ramp.
+    players.forEach((id, p) => {
+      const car = w.cars[id];
+      const air = car.airborne > 0;
+      if (air && !this.wasAirborne[p] && this.mode === 'race' && Math.hypot(car.vx, car.vz) > 12) playWhoosh(this.audio, 1);
+      this.wasAirborne[p] = air;
+    });
     // Countdown beeps as the start lights come on.
     if (this.mode === 'race' && w.race.phase === RacePhase.Countdown) {
       const lit = lightsOn(w.tick, w.race.startTick);
-      if (lit > this.lastLights) playTone(this.audio, 440, 0.12, 'square', 0.12);
+      if (lit > this.lastLights) playStartBeep(this.audio, false);
       this.lastLights = lit;
     }
   }
@@ -990,6 +1033,7 @@ export class App {
         playExplosion(this.audio, vol, pan, value === 3 ? 0.6 : 1);
       } else if (kind === Ev.Wreck) {
         playExplosion(this.audio, vol, pan, 1.6);
+        playDebris(this.audio, vol, pan);
       } else if (kind === Ev.Turbo && mine) {
         playTurbo(this.audio, 1);
       }
@@ -1079,35 +1123,74 @@ export class App {
     this.sun.target.updateMatrixWorld();
   }
 
+  /** Stereo position of a player's own sounds (split screen: left/right). */
+  private playerPan(p: number): number {
+    return this.mode === 'race' && this.session.playerCars.length === 2 ? (p === 0 ? -0.6 : 0.6) : 0;
+  }
+
+  /** 0..1: how close a car is to the grandstand by the start line. */
+  private crowdCloseness(car: { x: number; z: number }): number {
+    const t = this.track;
+    return Math.max(0, 1 - Math.hypot(car.x - t.px[0], car.z - t.pz[0]) / 80);
+  }
+
   private updateAudio(): void {
     const ctx = this.audio.ctx;
-    if (!ctx || !this.skidSound) return;
+    if (!ctx || !this.crowd) return;
     const now = ctx.currentTime;
-    const players = this.mode === 'race' ? this.session.playerCars : [];
+    const racing = this.mode === 'race' && !this.paused;
+    const players = racing ? this.session.playerCars : [];
+    const countdown = this.world.race.phase === RacePhase.Countdown;
     this.engines.forEach((engine, p) => {
+      const tyres = this.tyres[p];
       const id = players[p];
-      if (id === undefined || this.paused) {
+      if (id === undefined) {
         engine.silence(now);
+        tyres.silence(now);
         return;
       }
       const car = this.world.cars[id];
-      const pan = players.length === 2 ? (p === 0 ? -0.6 : 0.6) : 0;
+      const pan = this.playerPan(p);
       const throttle = this.session.inputs[id].throttle;
       const speed = Math.hypot(car.vx, car.vz);
+      const speed01 = speed / this.tuning.vTop;
       // On the grid the engine revs with the throttle.
-      const rev = this.world.race.phase === RacePhase.Countdown ? throttle * 0.6 : speed / this.tuning.vTop;
-      engine.update(rev, throttle, 1, pan, now);
-    });
-    const car = players.length ? this.world.cars[players[0]] : null;
-    let amount = 0;
-    if (car && !this.paused) {
-      const speed = Math.hypot(car.vx, car.vz);
+      engine.update(countdown ? throttle * 0.6 : speed01, throttle, 1, pan, now, 1, car.turboTicks > 0);
       const slipDeg = (Math.abs(car.slip) * 180) / Math.PI;
-      if ((car.sliding || car.spinTicks > 0) && speed > 5) amount = Math.min(1, (slipDeg - 3) / 22) * Math.min(1, speed / 18);
-      if (car.longAccel < -12 && speed > 8) amount = Math.max(amount, 0.55);
-      if (!PAVED.has(car.surfRear)) amount = 0;
+      let slide = 0;
+      if ((car.sliding || car.spinTicks > 0) && speed > 5) slide = Math.min(1, (slipDeg - 3) / 22) * Math.min(1, speed / 18);
+      if (car.longAccel < -12 && speed > 8) slide = Math.max(slide, 0.55);
+      tyres.update(Math.max(0, slide), Math.min(1, speed01), TYRE_SURFACE[car.surfRear] ?? TyreSurface.Paved, car.airborne > 0, now);
+    });
+    // The nearest opponents: quieter engines with stereo position and doppler.
+    const me = players.length ? this.world.cars[players[0]] : null;
+    const near: { car: CarState; d: number }[] = [];
+    if (me) {
+      for (const car of this.world.cars) {
+        if (players.includes(car.id) || car.wreckTicks > 0) continue;
+        const d = Math.hypot(car.x - me.x, car.z - me.z);
+        if (d < FAR_RANGE) near.push({ car, d });
+      }
+      near.sort((a, b) => a.d - b.d);
     }
-    this.skidSound.update(Math.max(0, amount), 0.5, now);
+    this.farEngines.forEach((engine, i) => {
+      const n = near[i];
+      if (!n || !me) {
+        engine.silence(now);
+        return;
+      }
+      const { car, d } = n;
+      const dx = car.x - me.x;
+      const dz = car.z - me.z;
+      // Closing speed along the line between the cars (positive = approaching).
+      const closing = d > 0.5 ? ((me.vx - car.vx) * dx + (me.vz - car.vz) * dz) / d : 0;
+      const doppler = Math.max(0.8, Math.min(1.25, 343 / (343 - closing * 1.6)));
+      const fall = 1 - d / FAR_RANGE;
+      const throttle = this.session.inputs[car.id]?.throttle ?? 1;
+      const speed01 = Math.hypot(car.vx, car.vz) / this.tuning.vTop;
+      engine.update(countdown ? 0.3 + 0.3 * Math.random() : speed01, throttle, fall * fall * 0.8, dx / 25, now, doppler);
+    });
+    this.crowd.update(me ? this.crowdCloseness(me) : 0, now);
   }
 
   private drawUi(dt: number): void {

@@ -93,6 +93,10 @@ export function installDebugApi(app: App): void {
     music() {
       return { playing: app.music.nowPlaying, mode: app.music.mode, level: +app.music.level().toFixed(4), own: app.music.own.size };
     },
+    /** Level of the sound effects (engines, tyres, bangs) right now. */
+    sfx() {
+      return +app.audio.level().toFixed(4);
+    },
     /** Online status: screen, room, connection and prediction health. */
     online() {
       const o = app.online;
