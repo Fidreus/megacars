@@ -1155,12 +1155,13 @@ export class App {
       const speed = Math.hypot(car.vx, car.vz);
       const speed01 = speed / this.tuning.vTop;
       // On the grid the engine revs with the throttle.
-      engine.update(countdown ? throttle * 0.6 : speed01, throttle, 1, pan, now, 1, car.turboTicks > 0);
       const slipDeg = (Math.abs(car.slip) * 180) / Math.PI;
       let slide = 0;
       if ((car.sliding || car.spinTicks > 0) && speed > 5) slide = Math.min(1, (slipDeg - 3) / 22) * Math.min(1, speed / 18);
       if (car.longAccel < -12 && speed > 8) slide = Math.max(slide, 0.55);
-      tyres.update(Math.max(0, slide), Math.min(1, speed01), TYRE_SURFACE[car.surfRear] ?? TyreSurface.Paved, car.airborne > 0, now);
+      slide = Math.max(0, slide);
+      engine.update(countdown ? throttle * 0.6 : speed01, throttle, 1, pan, now, 1, car.turboTicks > 0, slide);
+      tyres.update(slide, Math.min(1, speed01), TYRE_SURFACE[car.surfRear] ?? TyreSurface.Paved, car.airborne > 0, now);
     });
     // The nearest opponents: quieter engines with stereo position and doppler.
     const me = players.length ? this.world.cars[players[0]] : null;
@@ -1188,7 +1189,9 @@ export class App {
       const fall = 1 - d / FAR_RANGE;
       const throttle = this.session.inputs[car.id]?.throttle ?? 1;
       const speed01 = Math.hypot(car.vx, car.vz) / this.tuning.vTop;
-      engine.update(countdown ? 0.3 + 0.3 * Math.random() : speed01, throttle, fall * fall * 0.8, dx / 25, now, doppler);
+      // On the grid: a slow blip of the throttle, different for each car.
+      const grid = 0.08 + 0.08 * (0.5 + 0.5 * Math.sin(this.time * 2.3 + car.id * 1.7));
+      engine.update(countdown ? grid : speed01, countdown ? 0.3 : throttle, fall * fall * 0.8, dx / 25, now, doppler);
     });
     this.crowd.update(me ? this.crowdCloseness(me) : 0, now);
   }

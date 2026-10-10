@@ -109,9 +109,10 @@ export class EngineSound {
 
   /**
    * speed01: speed / top speed (or a rev target on the grid); throttle 0..1;
-   * volume 0..1; pan -1..1; doppler pitch factor (1 = none); turbo boosting.
+   * volume 0..1; pan -1..1; doppler pitch factor (1 = none); turbo boosting;
+   * wheelspin 0..1 (drifting: the revs flare above road speed).
    */
-  update(speed01: number, throttle: number, volume: number, pan: number, now: number, doppler = 1, turbo = false): void {
+  update(speed01: number, throttle: number, volume: number, pan: number, now: number, doppler = 1, turbo = false, wheelspin = 0): void {
     const dt = Math.min(0.1, Math.max(0, now - this.lastNow));
     this.lastNow = now;
     // Gearbox: shift up at the top of a gear, down with some hysteresis.
@@ -125,7 +126,7 @@ export class EngineSound {
     this.gear = g;
     const lo = g === 0 ? 0 : GEAR_TOP[g - 1] * 0.7;
     const inGear = Math.min(1.05, Math.max(0, (speed01 - lo) / (GEAR_TOP[g] - lo)));
-    let target = 0.18 + 0.8 * inGear + throttle * 0.08;
+    let target = 0.18 + 0.8 * inGear + throttle * 0.08 + wheelspin * throttle * 0.16;
     if (this.shift > 0) {
       this.shift -= dt;
       target *= 0.82;

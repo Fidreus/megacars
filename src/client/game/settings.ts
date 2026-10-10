@@ -20,7 +20,12 @@ export interface RaceSettings {
   /** 0..10 */
   musicVolume: number;
   soundVolume: number;
+  /** Bumped when the default volumes change, so saved settings pick them up once. */
+  audioRev?: number;
 }
+
+/** Current default-volume revision (2: music starts on the second lowest step). */
+const AUDIO_REV = 2;
 
 export const DEFAULT_SETTINGS: RaceSettings = {
   track: DEFAULT_TRACK,
@@ -32,8 +37,9 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   practice: false,
   weapons: true,
   musicMode: 0,
-  musicVolume: 6,
+  musicVolume: 1,
   soundVolume: 7,
+  audioRev: AUDIO_REV,
 };
 
 const KEY = 'megacars.settings.v1';
@@ -53,6 +59,10 @@ export function loadSettings(): RaceSettings {
   s.difficulty = Math.max(0, Math.min(2, Math.round(s.difficulty)));
   s.weapons = s.weapons !== false;
   s.musicMode = [0, 1, 2].includes(s.musicMode) ? s.musicMode : 0;
+  if ((s.audioRev ?? 1) < AUDIO_REV) {
+    s.musicVolume = DEFAULT_SETTINGS.musicVolume;
+    s.audioRev = AUDIO_REV;
+  }
   s.musicVolume = Math.max(0, Math.min(10, Math.round(s.musicVolume)));
   s.soundVolume = Math.max(0, Math.min(10, Math.round(s.soundVolume)));
   return s;

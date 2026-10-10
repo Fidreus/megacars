@@ -118,7 +118,7 @@ handkontroll 1 = P1, handkontroll 2 = P2.
 
 ## Musik
 
-Trackermusik (MOD/XM) spelas med libopenmpt (chiptune3, i en AudioWorklet).
+Trackermusik (MOD/XM) spelas med libopenmpt i en Web Worker; en liten AudioWorklet spelar upp det renderade ljudet, så ljudtråden aldrig blockeras.
 Varje bana har sin låt, menyerna och resultaten sina; låtarna tonas mellan
 skärmarna. **OPTIONS** i titelmenyn: musik TRACKS / SHUFFLE / OFF,
 musik- och ljudvolym, nästa låt (även **N**), tid på dygnet och credits.

@@ -1,10 +1,11 @@
-// Tracker music (MOD/XM/S3M/IT) through libopenmpt in an AudioWorklet
-// (chiptune3, loaded from /vendor only when music first plays). Each screen
+// Tracker music (MOD/XM/S3M/IT) through libopenmpt in a Web Worker (see
+// modPlayer.ts; loaded only when music first plays). Each screen
 // and track has its song; songs fade out and in when the scene changes.
 // People can drop their own module files on the window to add them to the
 // shuffle list; those stay in their browser (IndexedDB) and are never uploaded.
 
 import type { AudioSystem } from './audio.ts';
+import { ModPlayer } from './modPlayer.ts';
 
 export interface Song {
   file: string;
@@ -48,17 +49,6 @@ export type MusicMode = 0 | 1 | 2;
 /** What is on screen, which decides the song. */
 export type MusicScene = { kind: 'title' } | { kind: 'menu' } | { kind: 'results' } | { kind: 'race'; track: string };
 
-interface ChiptunePlayer {
-  context: AudioContext;
-  gain: GainNode;
-  play(buf: ArrayBuffer): void;
-  stop(): void;
-  setRepeatCount(n: number): void;
-  onInitialized(h: () => void): void;
-  onError(h: (e: unknown) => void): void;
-  onProgress(h: () => void): void;
-}
-
 /**
  * Glide a gain to `to` over `secs` along a straight line from wherever it is
  * now. Linear ramps reach exactly zero (setTargetAtTime never does, so a song
@@ -87,8 +77,8 @@ export class Music {
   /** Own files dropped on the window: name -> bytes. */
   readonly own = new Map<string, ArrayBuffer>();
   private readonly audio: AudioSystem;
-  private player: ChiptunePlayer | null = null;
-  private loading: Promise<ChiptunePlayer | null> | null = null;
+  private player: ModPlayer | null = null;
+  private loading: Promise<ModPlayer | null> | null = null;
   private out: GainNode | null = null;
   private current = '';
   private scene: MusicScene = { kind: 'title' };
@@ -221,13 +211,13 @@ export class Music {
       src.start(ctx.currentTime + 0.05);
       this.source = src;
     } else {
-      // The worklet parses the module before the first note: wait for it to
-      // report progress so the fade-in doesn't start ahead of the music.
+      // The worker parses the module before the first note: wait for the
+      // first samples so the fade-in doesn't start ahead of the music.
       const started = new Promise<void>((ok) => {
         this.onStarted = ok;
         setTimeout(ok, 1500);
       });
-      player!.play(data.slice(0));
+      player!.play(data);
       await started;
       this.onStarted = null;
       if (token !== this.switchToken || (this.mode as MusicMode) === 2) return;
@@ -257,7 +247,7 @@ export class Music {
     if (!this.out) {
       this.out = ctx.createGain();
       this.out.gain.value = 0;
-      this.out.connect(ctx.destination);
+      this.out.connect(this.audio.bus ?? ctx.destination);
     }
     return this.out;
   }
@@ -299,23 +289,16 @@ export class Music {
     return bytes;
   }
 
-  private ensurePlayer(): Promise<ChiptunePlayer | null> {
+  private ensurePlayer(): Promise<ModPlayer | null> {
     if (this.player) return Promise.resolve(this.player);
     if (this.loading) return this.loading;
     const ctx = this.audio.ctx;
     if (!ctx) return Promise.resolve(null);
     this.loading = (async () => {
       try {
-        const url = '/vendor/chiptune3/chiptune3.js';
-        const mod = (await import(/* @vite-ignore */ url)) as { ChiptuneJsPlayer: new (cfg: object) => ChiptunePlayer };
-        const player = new mod.ChiptuneJsPlayer({ context: ctx, repeatCount: -1, stereoSeparation: 70 });
-        await new Promise<void>((ok, fail) => {
-          player.onInitialized(ok);
-          player.onError((e) => fail(e));
-          setTimeout(() => fail(new Error('music worklet timeout')), 10000);
-        });
-        player.onProgress(() => this.onStarted?.());
-        player.gain.connect(this.ensureOut(ctx));
+        const player = await ModPlayer.create(ctx);
+        player.onStarted = () => this.onStarted?.();
+        player.output.connect(this.ensureOut(ctx));
         this.player = player;
         return player;
       } catch (e) {

@@ -33,4 +33,4 @@ browsers without Ogg Vorbis.
 
 The composer asks for credit ("Skrjablin") although it is not required.
 
-Playback: chiptune3 (MIT) with libopenmpt (BSD), see /vendor/chiptune3/.
+Playback: libopenmpt (BSD), see /vendor/libopenmpt/.

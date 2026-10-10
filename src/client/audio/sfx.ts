@@ -78,6 +78,10 @@ export class TyreSound {
   private readonly hissGain: GainNode;
   private readonly roadGain: GainNode;
   private readonly roadFilter: BiquadFilterNode;
+  private readonly whine: OscillatorNode[];
+  private readonly whineGain: GainNode;
+  private readonly scrubGain: GainNode;
+  private readonly scrubFilter: BiquadFilterNode;
 
   constructor(audio: AudioSystem) {
     const ctx = audio.ctx!;
@@ -102,7 +106,57 @@ export class TyreSound {
     this.squealLfo.start();
     this.squealGain = ctx.createGain();
     this.squealGain.gain.value = 0;
-    loop(1).connect(this.squealFilter).connect(this.squealGain).connect(audio.master!);
+    // Squeal noise, spread a little in stereo for width.
+    const spread = ctx.createChannelMerger(2);
+    loop(1).connect(this.squealFilter).connect(this.squealGain);
+    this.squealGain.connect(spread, 0, 0);
+    const late = ctx.createDelay(0.05);
+    late.delayTime.value = 0.011;
+    this.squealGain.connect(late).connect(spread, 0, 1);
+    out(audio, spread, 0.25);
+    // Tonal whine: a rubber "eeee" with a couple of harmonics, chattering.
+    this.whineGain = ctx.createGain();
+    this.whineGain.gain.value = 0;
+    const chatter = ctx.createGain();
+    chatter.gain.value = 0.7;
+    const chatLfo = ctx.createOscillator();
+    chatLfo.type = 'triangle';
+    chatLfo.frequency.value = 27;
+    const chatDepth = ctx.createGain();
+    chatDepth.gain.value = 0.3;
+    chatLfo.connect(chatDepth).connect(chatter.gain);
+    chatLfo.start();
+    const whineBp = ctx.createBiquadFilter();
+    whineBp.type = 'bandpass';
+    whineBp.frequency.value = 1500;
+    whineBp.Q.value = 1.2;
+    this.whine = [1, 2.01, 3.02].map((h, i) => {
+      const o = ctx.createOscillator();
+      o.type = i === 0 ? 'triangle' : 'sine';
+      o.frequency.value = 800 * h;
+      const g = ctx.createGain();
+      g.gain.value = [0.6, 0.3, 0.15][i];
+      o.connect(g).connect(chatter);
+      o.start();
+      return o;
+    });
+    // Slow wander of the pitch, like a real tyre.
+    const wander = ctx.createOscillator();
+    wander.frequency.value = 3.1;
+    const wanderDepth = ctx.createGain();
+    wanderDepth.gain.value = 25;
+    wander.connect(wanderDepth);
+    for (const o of this.whine) wanderDepth.connect(o.frequency);
+    wander.start();
+    chatter.connect(whineBp).connect(this.whineGain);
+    out(audio, this.whineGain, 0.3);
+    // Scrub: the low, gritty sound of a tyre dragged sideways.
+    this.scrubFilter = ctx.createBiquadFilter();
+    this.scrubFilter.type = 'lowpass';
+    this.scrubFilter.frequency.value = 500;
+    this.scrubGain = ctx.createGain();
+    this.scrubGain.gain.value = 0;
+    loop(0.45).connect(this.scrubFilter).connect(this.scrubGain).connect(audio.master!);
     // Crunch: low-passed noise, chopped by a fast random-ish AM.
     this.crunchFilter = ctx.createBiquadFilter();
     this.crunchFilter.type = 'lowpass';
@@ -146,8 +200,16 @@ export class TyreSound {
     const k = 0.05;
     const on = airborne ? 0 : 1;
     const paved = surface === TyreSurface.Paved;
-    this.squealGain.gain.setTargetAtTime(paved ? on * slide * 0.2 : 0, now, k);
+    // A curve so light slides whisper and a full drift really screams.
+    const sq = paved ? on * Math.pow(slide, 0.8) : 0;
+    this.squealGain.gain.setTargetAtTime(sq * 0.24, now, k);
     this.squealFilter.frequency.setTargetAtTime(1100 + slide * 700 + speed01 * 300, now, 0.08);
+    const whineOn = paved || surface === TyreSurface.Ice ? on * Math.max(0, slide - 0.12) / 0.88 : 0;
+    this.whineGain.gain.setTargetAtTime(whineOn * (surface === TyreSurface.Ice ? 0.05 : 0.11), now, k);
+    const pitch = 720 + slide * 260 + speed01 * 180;
+    this.whine.forEach((o, i) => o.frequency.setTargetAtTime(pitch * [1, 2.01, 3.02][i], now, 0.12));
+    this.scrubGain.gain.setTargetAtTime(on * slide * Math.min(1, speed01 * 3) * (paved ? 0.16 : 0.08), now, k);
+    this.scrubFilter.frequency.setTargetAtTime(300 + speed01 * 700, now, 0.1);
     const loose = surface === TyreSurface.Loose;
     this.crunchGain.gain.setTargetAtTime(loose ? on * (0.05 + slide * 0.18) * Math.min(1, speed01 * 3) : 0, now, k);
     this.crunchFilter.frequency.setTargetAtTime(700 + speed01 * 1600, now, 0.1);
@@ -158,7 +220,9 @@ export class TyreSound {
   }
 
   silence(now: number): void {
-    for (const g of [this.squealGain, this.crunchGain, this.rumbleGain, this.hissGain, this.roadGain]) g.gain.setTargetAtTime(0, now, 0.05);
+    for (const g of [this.squealGain, this.whineGain, this.scrubGain, this.crunchGain, this.rumbleGain, this.hissGain, this.roadGain]) {
+      g.gain.setTargetAtTime(0, now, 0.05);
+    }
   }
 }
 

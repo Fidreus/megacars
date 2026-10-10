@@ -97,6 +97,10 @@ export function installDebugApi(app: App): void {
     sfx() {
       return +app.audio.level().toFixed(4);
     },
+    /** Peak sample of the whole mix before the limiter (over 1 = would clip). */
+    peak() {
+      return +app.audio.peak().toFixed(3);
+    },
     /** Online status: screen, room, connection and prediction health. */
     online() {
       const o = app.online;
