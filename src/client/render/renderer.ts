@@ -1,11 +1,14 @@
 // Retro render pipeline: each viewport renders the 3D scene into a small
-// render target (internal resolution ≈ 240 lines), then a composite pass
+// render target (internal resolution ≈ 240 lines), runs the low-res post
+// chain (outlines, bloom, grading, dither, palette), then a composite pass
 // upscales it with nearest-neighbour filtering by an integer factor, applies
-// the sub-pixel scroll offset and overlays the Canvas2D UI.
+// the sub-pixel scroll offset, overlays the Canvas2D UI and an optional CRT look.
 
 import * as THREE from 'three';
 import { CanvasUI } from '../ui/canvasUI.ts';
+import { PaletteMode, type PaletteModeId } from './palette.ts';
 import { PixelCamera } from './pixelCamera.ts';
+import { FullscreenPass, PostChain, type GradeSettings } from './post/passes.ts';
 
 /** Target number of internal lines; the integer scale is floor(deviceHeight / this). */
 const TARGET_LINES = 240;
@@ -13,6 +16,9 @@ const TARGET_LINES = 240;
 export class Viewport {
   readonly cam = new PixelCamera();
   readonly rt: THREE.WebGLRenderTarget;
+  readonly post = new PostChain();
+  /** World-anchored dither offset (camera position on the pixel grid). */
+  readonly grid = new THREE.Vector2();
   /** Position and size in low-res (UI) pixels. */
   x = 0;
   w = 1;
@@ -35,6 +41,7 @@ export class Viewport {
     this.h = h;
     // One pixel of margin on every side so the sub-pixel shift never shows an edge.
     this.rt.setSize(w + 2, h + 2);
+    this.post.resize(w + 2, h + 2);
   }
 }
 
@@ -54,17 +61,10 @@ uniform vec2 uOff1;
 uniform float uScale;
 uniform float uSplitX;
 uniform float uView1X;
-uniform float uScanlines;
-uniform vec2 uLowSize;
+uniform float uCrt;
+uniform vec2 uDevice;
 
-vec3 toSRGB(vec3 c) {
-  vec3 lo = c * 12.92;
-  vec3 hi = 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055;
-  return mix(lo, hi, step(vec3(0.0031308), c));
-}
-
-void main() {
-  vec2 frag = gl_FragCoord.xy;
+vec3 sampleScene(vec2 frag) {
   vec2 lp = floor(frag / uScale);
   vec3 col;
   if (lp.x < uSplitX) {
@@ -73,13 +73,32 @@ void main() {
     vec2 f = frag - vec2(uView1X * uScale, 0.0);
     col = texelFetch(tView1, ivec2(floor((f + uOff1) / uScale)) + ivec2(1), 0).rgb;
   }
-  col = toSRGB(clamp(col, 0.0, 1.0));
   vec4 ui = texelFetch(tUI, ivec2(lp), 0);
-  col = mix(col, ui.rgb, ui.a);
-  if (uScanlines > 0.0 && uScale >= 3.0) {
-    // Darken the last device row of every low-res line.
-    float row = mod(frag.y, uScale);
-    col *= row < 1.0 ? 1.0 - 0.28 * uScanlines : 1.0;
+  return mix(col, ui.rgb, ui.a);
+}
+
+void main() {
+  vec2 frag = gl_FragCoord.xy;
+  if (uCrt > 1.5 && uScale >= 4.0) {
+    // Gentle barrel distortion of the whole screen.
+    vec2 uv = frag / uDevice * 2.0 - 1.0;
+    uv *= 1.0 + 0.018 * dot(uv, uv);
+    if (abs(uv.x) > 1.0 || abs(uv.y) > 1.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+    frag = floor((uv * 0.5 + 0.5) * uDevice) + 0.5;
+  }
+  vec3 col = sampleScene(frag);
+  if (uCrt > 0.5 && uScale >= 3.0) {
+    // Scanlines: darken the last device row of every low-res line.
+    float row = mod(gl_FragCoord.y, uScale);
+    col *= row < 1.0 ? 0.74 : 1.0;
+    // Aperture-grille mask and vignette.
+    if (uCrt > 1.5) {
+      float m = mod(gl_FragCoord.x, 3.0);
+      col *= m < 1.0 ? vec3(1.06, 0.94, 0.94) : m < 2.0 ? vec3(0.94, 1.06, 0.94) : vec3(0.94, 0.94, 1.06);
+    }
+    vec2 v = gl_FragCoord.xy / uDevice - 0.5;
+    col *= 1.0 - 0.55 * dot(v, v);
+    col *= 1.06;
   }
   gl_FragColor = vec4(col, 1.0);
 }
@@ -96,7 +115,18 @@ export class RetroRenderer {
   lowW = 1;
   lowH = 1;
   forcedScale: number | null = null;
-  scanlines = 0;
+  /** 0 = off, 1 = scanlines + vignette, 2 = + aperture mask + curvature. */
+  crt = 0;
+  paletteMode: PaletteModeId = PaletteMode.Bits12;
+  outlines = true;
+  readonly grade: GradeSettings = {
+    tint: new THREE.Color(1, 1, 1),
+    lift: new THREE.Color(0, 0, 0),
+    exposure: 1,
+    bloom: 0.6,
+    bloomThreshold: 1.1,
+  };
+  private readonly fs = new FullscreenPass();
   private split = false;
   private readonly compositeScene = new THREE.Scene();
   private readonly compositeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -132,8 +162,8 @@ export class RetroRenderer {
         uScale: { value: 1 },
         uSplitX: { value: 1e9 },
         uView1X: { value: 0 },
-        uScanlines: { value: 0 },
-        uLowSize: { value: new THREE.Vector2(1, 1) },
+        uCrt: { value: 0 },
+        uDevice: { value: new THREE.Vector2(1, 1) },
       },
     });
     const tri = new THREE.BufferGeometry();
@@ -204,6 +234,8 @@ export class RetroRenderer {
     const vp = this.viewports[index];
     this.gl.setRenderTarget(vp.rt);
     this.gl.render(scene, vp.cam.camera);
+    vp.grid.set(vp.cam.gridX, vp.cam.gridY);
+    vp.post.run(this.gl, this.fs, vp.rt, vp.cam.camera, vp.grid, this.grade, this.paletteMode, this.outlines);
   }
 
   /** Upscale the viewports to the screen and overlay the UI. */
@@ -211,21 +243,21 @@ export class RetroRenderer {
     const u = this.composite.uniforms;
     const s = this.scale;
     const v0 = this.viewports[0];
-    u.tView0.value = v0.rt.texture;
+    u.tView0.value = v0.post.out.texture;
     u.uOff0.value.set(Math.round(v0.cam.fracX * s), Math.round(v0.cam.fracY * s));
     if (this.split) {
       const v1 = this.viewports[1];
-      u.tView1.value = v1.rt.texture;
+      u.tView1.value = v1.post.out.texture;
       u.uOff1.value.set(Math.round(v1.cam.fracX * s), Math.round(v1.cam.fracY * s));
       u.uSplitX.value = v1.x;
       u.uView1X.value = v1.x;
     } else {
-      u.tView1.value = v0.rt.texture;
+      u.tView1.value = v0.post.out.texture;
       u.uSplitX.value = 1e9;
     }
     u.uScale.value = s;
-    u.uScanlines.value = this.scanlines;
-    u.uLowSize.value.set(this.lowW, this.lowH);
+    u.uCrt.value = this.crt;
+    u.uDevice.value.set(this.deviceW, this.deviceH);
     this.gl.setRenderTarget(null);
     this.gl.render(this.compositeScene, this.compositeCam);
   }

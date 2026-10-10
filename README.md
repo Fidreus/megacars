@@ -33,15 +33,24 @@ och snö sladdar av sig själva.
 | ← → / A D | Styr |
 | R | Sätt tillbaka bilen på banan |
 | P | Autopilot (AI kör din bil) |
+| M | Stämning: dag / solnedgång / natt |
+| 3 | CRT: av / scanlines / full (mask + kurvatur) |
+| 4 | Färger: full / 12-bit Amiga / 32 färger |
+| V | Delad skärm (test, höger vy följer AI-bil 1) |
 | 1 | Debugvy (väggar, racinglinje, checkpoints) |
 | 2 | Telemetri (slip, sidokraft, underlag) |
-| 3 | Scanlines |
 | 0 | Trimningspanel (lil-gui) |
 
 Handkontroll: vänster spak styr, RT gas, LT broms.
 
-URL-parametrar: `?ai=0..7` (antal AI-bilar), `?debug=1`, `?scale=N`
-(pixelstorlek), `?mpp=0.19` (meter per pixel), `?scanlines=1`, `?mute=1`.
+URL-parametrar: `?ai=0..7` (antal AI-bilar), `?mood=day|sunset|night`,
+`?debug=1`, `?scale=N` (pixelstorlek), `?mpp=0.19` (meter per pixel),
+`?scanlines=1`, `?mute=1`.
+
+Felsökning i konsolen: `__megacars.state()`, `.advance(ticks)`, `.pause()`,
+`.autopilot()`, `.debug.crawlTest()` (1 = ingen pixelkrypning),
+`.debug.bench()`, `.debug.look({ mood, palette, crt })` och
+`.debug.snap(namn)` som sparar en skärmdump i `screenshots/` (bara i dev).
 
 ## Struktur
 

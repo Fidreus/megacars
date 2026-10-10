@@ -1,7 +1,7 @@
 // Game server: serves the built client from dist/ and hosts the WebSocket
 // endpoint on /ws. In development Vite serves the client and proxies /ws here.
 
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -10,6 +10,9 @@ import { MsgType } from '../shared/net/protocol.ts';
 // SERVER_PORT wins in development (PORT may be set for the Vite dev server).
 const PORT = Number(process.env.SERVER_PORT ?? process.env.PORT ?? 8787);
 const DIST = resolve(import.meta.dirname, '../../dist');
+const SHOTS = resolve(import.meta.dirname, '../../screenshots');
+/** Development helpers (screenshot upload) are only enabled by `npm run dev`. */
+const DEV = process.env.MEGACARS_DEV === '1' || (process.env.SERVER_PORT !== undefined && process.env.NODE_ENV !== 'production');
 const START = performance.now();
 
 const MIME: Record<string, string> = {
@@ -31,6 +34,10 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   if (url.pathname === '/healthz') {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.end('ok');
+    return;
+  }
+  if (DEV && url.pathname === '/dev/snap' && req.method === 'POST') {
+    saveScreenshot(req, res, url);
     return;
   }
   if (!existsSync(DIST)) {
@@ -56,6 +63,24 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
   });
   createReadStream(file).pipe(res);
+}
+
+function saveScreenshot(req: IncomingMessage, res: ServerResponse, url: URL): void {
+  const name = (url.searchParams.get('name') ?? 'shot').replace(/[^a-z0-9_-]/gi, '_').slice(0, 60);
+  const chunks: Buffer[] = [];
+  let size = 0;
+  req.on('data', (c: Buffer) => {
+    size += c.length;
+    if (size > 20_000_000) req.destroy();
+    else chunks.push(c);
+  });
+  req.on('end', () => {
+    mkdirSync(SHOTS, { recursive: true });
+    const file = join(SHOTS, `${name}.png`);
+    writeFileSync(file, Buffer.concat(chunks));
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end(file);
+  });
 }
 
 const server = createServer(serveStatic);

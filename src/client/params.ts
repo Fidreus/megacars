@@ -9,6 +9,7 @@ export interface Params {
   mpp: number | null;
   scanlines: boolean;
   mute: boolean;
+  mood: string | null;
 }
 
 export function readParams(search: string = location.search): Params {
@@ -29,5 +30,6 @@ export function readParams(search: string = location.search): Params {
     mpp: num('mpp'),
     scanlines: flag('scanlines'),
     mute: flag('mute'),
+    mood: q.get('mood'),
   };
 }

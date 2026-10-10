@@ -3,6 +3,9 @@
 
 import * as THREE from 'three';
 
+/** Shared animation clock (seconds) for waving flags, cheering crowds, water. */
+export const animTime = { value: 0 };
+
 let gradient: THREE.DataTexture | null = null;
 
 export function toonGradient(): THREE.DataTexture {

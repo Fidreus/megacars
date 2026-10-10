@@ -25,14 +25,19 @@ import { InputManager } from './input/inputManager.ts';
 import type { Params } from './params.ts';
 import { CarView } from './render/carMesh.ts';
 import { CAR_COLORS } from './render/materials.ts';
+import { MOODS, moodById, type Mood } from './render/mood.ts';
+import { PALETTE_MODE_NAMES, type PaletteModeId } from './render/palette.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
+import { buildProps } from './render/props.ts';
+import { animTime } from './render/materials.ts';
 import { SkidMarks } from './render/skidmarks.ts';
+import { Effects } from './render/effects.ts';
+import { Particles } from './render/particles.ts';
 import { buildTrackView } from './render/trackMesh.ts';
 import { PingProbe } from './session/pingProbe.ts';
 import { drawText } from './ui/font.ts';
 
-const SUN_OFFSET = new THREE.Vector3(-70, 140, 60);
 const SHADOW_HALF = 62;
 const SHADOW_MAP = 2048;
 const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
@@ -58,6 +63,8 @@ export class App {
   private readonly carViews: CarView[] = [];
   private readonly prev: Pose[] = [];
   private readonly skid = new SkidMarks();
+  private readonly particles = new Particles();
+  private readonly effects: Effects;
   private readonly sun = new THREE.DirectionalLight('#fff0d4', 2.4);
   private readonly debugView: THREE.Group;
   private readonly audio = new AudioSystem();
@@ -67,25 +74,36 @@ export class App {
   private tuningPanel: { toggle(): void } | null = null;
   private acc = 0;
   private last = -1;
-  private readonly camTarget = new THREE.Vector3();
-  private camInit = false;
+  private readonly camTargets = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly camInit = [false, false];
+  /** Which car each viewport follows. */
+  readonly viewCar = [0, 1];
+  private baseMpp = 0.19;
   private showTelemetry: boolean;
   private fpsTime = 0;
   private fpsFrames = 0;
   fps = 0;
+  /** Freeze the simulation (debug/screenshots); rendering continues. */
+  paused = false;
   private flash = '';
   private flashTime = 0;
   private padIndex = -1;
   private readonly sunRight = new THREE.Vector3();
   private readonly sunUp = new THREE.Vector3();
-  private readonly sunDir = SUN_OFFSET.clone().normalize();
+  private readonly sunDir = new THREE.Vector3(0, 1, 0);
+  private readonly hemi = new THREE.HemisphereLight('#ffffff', '#000000', 1);
+  private readonly nightLights: THREE.Object3D[] = [];
+  private lampBulbs: THREE.MeshBasicMaterial | null = null;
+  private lampPools: THREE.MeshBasicMaterial | null = null;
+  mood: Mood = MOODS[0];
 
   constructor(canvas: HTMLCanvasElement, params: Params) {
     this.params = params;
     this.renderer = new RetroRenderer(canvas, params.scale);
-    this.renderer.scanlines = params.scanlines ? 1 : 0;
+    this.renderer.crt = params.scanlines ? 1 : 0;
     const cam = this.renderer.viewports[0].cam;
     if (params.mpp) cam.metersPerPixel = params.mpp;
+    this.baseMpp = cam.metersPerPixel;
 
     this.tuning = cloneTuning(DEFAULT_TUNING);
     loadSavedTuning(this.tuning);
@@ -100,13 +118,15 @@ export class App {
         car.aiDriven = 1;
         car.aiSkill = 0.9 + 0.1 * ((i * 37) % 10) / 10;
       }
-      const view = new CarView(CAR_COLORS[i % CAR_COLORS.length]);
+      const view = new CarView(CAR_COLORS[i % CAR_COLORS.length], i + 1);
       this.carViews.push(view);
       this.scene.add(view.root);
       this.prev.push({ x: car.x, z: car.z, y: car.y, heading: car.heading });
     });
 
+    this.effects = new Effects(this.particles, this.track);
     this.buildScene();
+    this.setMood(moodById(params.mood));
     this.debugView = buildTrackDebugView(this.track, this.tuning);
     this.scene.add(this.debugView);
     this.showTelemetry = params.debug;
@@ -131,8 +151,7 @@ export class App {
   }
 
   private buildScene(): void {
-    this.scene.background = new THREE.Color('#4c8a3a');
-    this.scene.add(new THREE.HemisphereLight('#d2e6ff', '#4d5a3a', 1.5));
+    this.scene.add(this.hemi);
     const sun = this.sun;
     sun.castShadow = true;
     sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
@@ -146,13 +165,41 @@ export class App {
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.04;
     this.scene.add(sun, sun.target);
+
+    this.scene.add(buildTrackView(this.track));
+    const props = buildProps(this.track);
+    this.scene.add(props.group);
+    this.nightLights.push(...props.nightLights);
+    this.lampBulbs = props.bulbs;
+    this.lampPools = props.pools;
+    this.scene.add(buildScenery(this.track, props.keepOut));
+    this.scene.add(this.skid.mesh);
+    this.scene.add(this.particles.points);
+  }
+
+  setMood(mood: Mood): void {
+    this.mood = mood;
+    this.scene.background = new THREE.Color(mood.background);
+    this.hemi.color.set(mood.skyColor);
+    this.hemi.groundColor.set(mood.groundColor);
+    this.hemi.intensity = mood.hemiIntensity;
+    this.sun.color.set(mood.sunColor);
+    this.sun.intensity = mood.sunIntensity;
+    this.sunDir.copy(mood.sunDir);
     // Light-space basis matching the shadow camera's lookAt (world up = +y).
     this.sunRight.crossVectors(new THREE.Vector3(0, 1, 0), this.sunDir).normalize();
     this.sunUp.crossVectors(this.sunDir, this.sunRight).normalize();
-
-    this.scene.add(buildTrackView(this.track));
-    this.scene.add(buildScenery(this.track));
-    this.scene.add(this.skid.mesh);
+    const g = this.renderer.grade;
+    g.tint.copy(mood.tint);
+    g.lift.copy(mood.lift);
+    g.exposure = mood.exposure;
+    g.bloom = mood.bloom;
+    g.bloomThreshold = mood.bloomThreshold;
+    this.particles.light.value = mood.particleLight;
+    this.lampBulbs?.color.setRGB(mood.lights ? 5 : 0.55, mood.lights ? 4.4 : 0.55, mood.lights ? 3.2 : 0.5);
+    for (const o of this.nightLights) o.visible = mood.lights;
+    this.lampPools?.color.setRGB(0.95 * mood.lampLight, 0.8 * mood.lampLight, 0.56 * mood.lampLight);
+    for (const v of this.carViews) v.setLights(mood.lights, mood.headlight);
   }
 
   async openTuning(): Promise<void> {
@@ -178,7 +225,7 @@ export class App {
     const dt = Math.min(0.1, now - this.last);
     this.last = now;
     this.handleKeys();
-    this.acc += dt;
+    this.acc = this.paused ? 0 : this.acc + dt;
     let steps = 0;
     while (this.acc >= DT && steps < 6) {
       this.fixedStep();
@@ -208,7 +255,19 @@ export class App {
     if (kb.wasPressed('KeyR')) this.resetPlayer();
     if (kb.wasPressed('Digit1')) this.debugView.visible = !this.debugView.visible;
     if (kb.wasPressed('Digit2')) this.showTelemetry = !this.showTelemetry;
-    if (kb.wasPressed('Digit3')) this.renderer.scanlines = this.renderer.scanlines ? 0 : 1;
+    if (kb.wasPressed('Digit3')) {
+      this.renderer.crt = (this.renderer.crt + 1) % 3;
+      this.flashMessage(['CRT OFF', 'CRT SCANLINES', 'CRT FULL'][this.renderer.crt]);
+    }
+    if (kb.wasPressed('Digit4')) {
+      this.renderer.paletteMode = ((this.renderer.paletteMode + 1) % 3) as PaletteModeId;
+      this.flashMessage(PALETTE_MODE_NAMES[this.renderer.paletteMode]);
+    }
+    if (kb.wasPressed('KeyV')) this.toggleSplit();
+    if (kb.wasPressed('KeyM')) {
+      this.setMood(MOODS[(MOODS.indexOf(this.mood) + 1) % MOODS.length]);
+      this.flashMessage(this.mood.name);
+    }
     if (kb.wasPressed('Digit0')) void this.openTuning();
     if (kb.wasPressed('KeyP')) {
       this.player.aiDriven = this.player.aiDriven ? 0 : 1;
@@ -256,6 +315,7 @@ export class App {
       }
     }
     for (const car of cars) this.emitSkids(car);
+    this.effects.tick(this.world);
   }
 
   private emitSkids(car: CarState): void {
@@ -294,15 +354,32 @@ export class App {
         c.steer,
         c.latAccel,
         c.longAccel,
+        c.brakeTicks > 0 && Math.hypot(c.vx, c.vz) > 1,
         dt,
       );
     }
 
-    // Camera: follow the player with look-ahead in the direction of travel.
-    const vp = this.renderer.viewports[0];
+    const views = this.renderer.viewCount;
+    for (let v = 0; v < views; v++) this.updateCamera(v, dt);
+    this.particles.time.value = (this.world.tick + alpha) * DT;
+    animTime.value = performance.now() / 1000;
+    this.particles.flush();
+    this.updateAudio();
+    this.drawHud(dt);
+    for (let v = 0; v < views; v++) {
+      this.updateSun(this.camTargets[v]);
+      this.renderer.renderView(this.scene, v);
+    }
+    this.renderer.present();
+  }
+
+  /** Follow a car with look-ahead in its direction of travel. */
+  private updateCamera(v: number, dt: number): void {
+    const vp = this.renderer.viewports[v];
     const cam = vp.cam;
-    const car = this.player;
-    const view = this.carViews[0].root.position;
+    const idx = Math.min(this.viewCar[v], this.world.cars.length - 1);
+    const car = this.world.cars[idx];
+    const view = this.carViews[idx].root.position;
     const half = cam.footprint(vp.w, vp.h);
     const maxLead = Math.min(half.width, half.depth) * 0.3;
     let lx = car.vx * this.lookAhead.value;
@@ -314,21 +391,94 @@ export class App {
     }
     const tx = view.x + lx;
     const tz = view.z + lz;
-    if (!this.camInit) {
-      this.camTarget.set(tx, 0, tz);
-      this.camInit = true;
+    const target = this.camTargets[v];
+    if (!this.camInit[v]) {
+      target.set(tx, 0, tz);
+      this.camInit[v] = true;
     } else {
       const k = 1 - Math.exp(-7 * dt);
-      this.camTarget.x += (tx - this.camTarget.x) * k;
-      this.camTarget.z += (tz - this.camTarget.z) * k;
+      target.x += (tx - target.x) * k;
+      target.z += (tz - target.z) * k;
     }
-    cam.update(this.camTarget.x, 0, this.camTarget.z, vp.w, vp.h);
-    this.updateSun(this.camTarget);
+    cam.update(target.x, 0, target.z, vp.w, vp.h);
+  }
 
-    this.updateAudio();
-    this.drawHud(dt);
-    this.renderer.renderView(this.scene, 0);
-    this.renderer.present();
+  /** Debug split screen: the second view follows car 1. */
+  toggleSplit(): void {
+    const r = this.renderer;
+    r.setSplit(!r.isSplit);
+    const base = r.viewports[0].cam;
+    const mpp = r.isSplit ? this.baseMpp * 1.25 : this.baseMpp;
+    for (const vp of r.viewports) {
+      vp.cam.metersPerPixel = mpp;
+      vp.cam.tilt = base.tilt;
+    }
+    this.camInit[1] = false;
+  }
+
+  /**
+   * Pixel-crawl test: render, move the camera exactly k low-res pixels right
+   * (then up), render again and compare the overlapping static image. Cars,
+   * particles and animation are frozen/hidden. Returns the share of identical pixels.
+   */
+  crawlTest(k = 8): { horizontal: number; vertical: number } {
+    const wasPaused = this.paused;
+    this.paused = true;
+    const hidden: THREE.Object3D[] = [...this.carViews.map((c) => c.root), this.particles.points];
+    for (const o of hidden) o.visible = false;
+    const frozen = animTime.value;
+    const vp = this.renderer.viewports[0];
+    const cam = vp.cam;
+    const base = this.camTargets[0].clone();
+    const p = cam.metersPerPixel;
+    const shot = (tx: number, tz: number) => {
+      const t = new THREE.Vector3(tx, 0, tz);
+      cam.update(tx, 0, tz, vp.w, vp.h);
+      this.updateSun(t);
+      animTime.value = frozen;
+      this.renderer.renderView(this.scene, 0);
+      const out = vp.post.out;
+      const buf = new Uint8Array(out.width * out.height * 4);
+      this.renderer.gl.readRenderTargetPixels(out, 0, 0, out.width, out.height, buf);
+      return { buf, w: out.width, h: out.height };
+    };
+    const a = shot(base.x, base.z);
+    const b = shot(base.x + k * p, base.z);
+    const c = shot(base.x, base.z - (k * p) / Math.sin(cam.tilt));
+    const compare = (A: typeof a, B: typeof a, dx: number, dy: number) => {
+      let same = 0;
+      let total = 0;
+      for (let y = k + 2; y < A.h - k - 2; y++) {
+        for (let x = k + 2; x < A.w - k - 2; x++) {
+          const ia = ((y + dy) * A.w + (x + dx)) * 4;
+          const ib = (y * B.w + x) * 4;
+          total++;
+          if (A.buf[ia] === B.buf[ib] && A.buf[ia + 1] === B.buf[ib + 1] && A.buf[ia + 2] === B.buf[ib + 2]) same++;
+        }
+      }
+      return same / total;
+    };
+    const result = { horizontal: compare(a, b, k, 0), vertical: compare(a, c, 0, k) };
+    for (const o of hidden) o.visible = true;
+    this.paused = wasPaused;
+    return result;
+  }
+
+  /** Average milliseconds to simulate + render a frame (synchronised with the GPU). */
+  bench(frames = 120): { msPerFrame: number; lowRes: [number, number]; views: number } {
+    const gl = this.renderer.gl;
+    const px = new Uint8Array(4);
+    const t0 = performance.now();
+    for (let i = 0; i < frames; i++) {
+      this.fixedStep();
+      this.renderFrame(0, DT);
+    }
+    gl.readRenderTargetPixels(this.renderer.viewports[0].post.out, 0, 0, 1, 1, px);
+    return {
+      msPerFrame: +((performance.now() - t0) / frames).toFixed(2),
+      lowRes: [this.renderer.lowW, this.renderer.lowH],
+      views: this.renderer.viewCount,
+    };
   }
 
   /** Keep the shadow map centred on the view, snapped to whole shadow texels. */
@@ -388,9 +538,14 @@ export class App {
       drawText(ctx, this.flash, W / 2, 30, { scale: 2, color: yellow, align: 'center' });
     }
 
+    if (this.renderer.isSplit) {
+      const v1 = this.renderer.viewports[1];
+      ctx.fillStyle = '#000';
+      ctx.fillRect(v1.x - 2, 0, 2, H);
+    }
     if (this.showTelemetry) this.drawTelemetry(ctx, 10, 56);
     if (this.world.tick < 60 * 12 || this.showTelemetry) {
-      drawText(ctx, 'R:RESET 1:DEBUG 2:INFO 3:CRT 0:TUNE P:AUTO', W - 4, H - 10, {
+      drawText(ctx, 'R:RESET M:MOOD 3:CRT 4:COLOURS 2:INFO 0:TUNE', W - 4, H - 10, {
         color: '#d0d0d0', align: 'right', shadow: '#000',
       });
     }

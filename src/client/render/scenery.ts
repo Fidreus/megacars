@@ -6,8 +6,9 @@ import { distanceToCentreline } from '../../shared/track/builder.ts';
 import type { Track } from '../../shared/track/types.ts';
 import { makeRng } from '../../shared/math/rng.ts';
 import { toon } from './materials.ts';
+import type { KeepOut } from './props.ts';
 
-export function buildScenery(track: Track): THREE.Group {
+export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): THREE.Group {
   const group = new THREE.Group();
   group.name = 'scenery';
   const rnd = makeRng((track.def.seed ?? 1) * 7919);
@@ -19,7 +20,9 @@ export function buildScenery(track: Track): THREE.Group {
       const x = b.minX - pad + rnd() * (b.maxX - b.minX + pad * 2);
       const z = b.minZ - pad + rnd() * (b.maxZ - b.minZ + pad * 2);
       const d = distanceToCentreline(track, x, z);
-      if (d >= minDist && d <= maxDist) return [x, z];
+      if (d < minDist || d > maxDist) continue;
+      if (keepOut.some((k) => (x - k.x) ** 2 + (z - k.z) ** 2 < k.r * k.r)) continue;
+      return [x, z];
     }
     return null;
   };

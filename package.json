@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "concurrently -k -n vite,server -c cyan,magenta \"vite\" \"npm:dev:server\"",
     "dev:client": "vite",
-    "dev:server": "SERVER_PORT=8787 node --watch src/server/main.ts",
+    "dev:server": "SERVER_PORT=8787 MEGACARS_DEV=1 node --watch src/server/main.ts",
     "build": "vite build",
     "start": "node src/server/main.ts",
     "test": "vitest run",

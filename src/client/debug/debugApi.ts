@@ -4,6 +4,8 @@
 import type { CarTuning } from '../../shared/config/tuning.ts';
 import { neutralInput } from '../../shared/sim/input.ts';
 import type { App } from '../app.ts';
+import { moodById } from '../render/mood.ts';
+import type { PaletteModeId } from '../render/palette.ts';
 
 export function installDebugApi(app: App): void {
   const api = {
@@ -40,6 +42,32 @@ export function installDebugApi(app: App): void {
     advance(ticks = 60) {
       app.advance(ticks);
       return api.state();
+    },
+    debug: {
+      /** Share of identical static pixels after moving the camera k pixels (1 = no crawl). */
+      crawlTest: (k = 8) => app.crawlTest(k),
+      /** Average ms per simulated + rendered frame. */
+      bench: (frames = 120) => app.bench(frames),
+      split: () => app.toggleSplit(),
+      /** Change the look: mood id, palette mode (0 full, 1 12-bit, 2 32 colours), CRT level, outlines. */
+      look(o: { mood?: string; palette?: number; crt?: number; outlines?: boolean }) {
+        if (o.mood) app.setMood(moodById(o.mood));
+        if (o.palette !== undefined) app.renderer.paletteMode = o.palette as PaletteModeId;
+        if (o.crt !== undefined) app.renderer.crt = o.crt;
+        if (o.outlines !== undefined) app.renderer.outlines = o.outlines;
+      },
+      /** Render a frame and save it as screenshots/<name>.png (dev server only). */
+      async snap(name = 'shot'): Promise<string> {
+        app.advance(0);
+        const blob = await new Promise<Blob | null>((ok) => app.renderer.canvas.toBlob(ok, 'image/png'));
+        if (!blob) return 'no image';
+        const res = await fetch(`/dev/snap?name=${encodeURIComponent(name)}`, { method: 'POST', body: blob });
+        return res.ok ? res.text() : `failed: ${res.status}`;
+      },
+    },
+    /** Freeze or resume the simulation (rendering continues). */
+    pause(on = true) {
+      app.paused = on;
     },
     /** Let the AI drive the player car (demo / testing). */
     autopilot(on = true) {
