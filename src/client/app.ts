@@ -32,6 +32,10 @@ import { ControlsScreen } from './ui/screens/controls.ts';
 import { TouchControls } from './input/touch.ts';
 import { TextBridge } from './input/textBridge.ts';
 import { drawHelp } from './ui/screens/help.ts';
+import { RecordsScreen } from './ui/screens/records.ts';
+import { ReplayRecorder, specProblem } from '../shared/game/records.ts';
+import { loadLocalRecords, noteLap, noteRace, submitRecord } from './game/records.ts';
+import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
 import { VERSION } from './version.ts';
 import { InputManager, type LocalPlayerInput } from './input/inputManager.ts';
 import { Nav, type NavState } from './input/nav.ts';
@@ -51,7 +55,7 @@ import { themeOf } from './render/theme.ts';
 import { buildTrackView } from './render/trackMesh.ts';
 import { drawText, LINE_H } from './ui/font.ts';
 import { Menu } from './ui/menu.ts';
-import { drawCountdown, drawPlayerHud, Minimap } from './ui/screens/hud.ts';
+import { drawCountdown, drawPlayerHud, formatTime, Minimap } from './ui/screens/hud.ts';
 import { drawResults } from './ui/screens/results.ts';
 import { connText, drawLobby, inviteLink, pingColor } from './ui/screens/lobby.ts';
 import { drawLogo } from './ui/screens/title.ts';
@@ -92,7 +96,7 @@ const FAR_RANGE = 45;
 const VIEW_HEIGHT = 51.3;
 
 /** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
-type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'controls' | 'help' | 'credits';
+type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'controls' | 'help' | 'records' | 'credits';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -155,6 +159,14 @@ export class App {
   private readonly textBridge: TextBridge;
   /** The touch BACK button (UI pixels), when shown. */
   private backRect: { x: number; y: number; w: number; h: number } | null = null;
+  private readonly recordsScreen: RecordsScreen;
+  private readonly localRecords = loadLocalRecords();
+  /** The player's inputs this race, for a verified lap record (stock single-player races). */
+  private replay: ReplayRecorder | null = null;
+  /** A new personal best lap this race that hasn't been sent yet. */
+  private recordPending = false;
+  /** What happened to the last lap sent to the boards (shown with the results). */
+  private recordNote = '';
   readonly music: Music;
   private songToast = 0;
   private cupRace = false;
@@ -286,6 +298,7 @@ export class App {
     this.audio.volume = (this.settings.soundVolume / 10) * 0.9;
     this.music.onSong = () => (this.songToast = 4);
     this.optionsMenu = new Menu(this.buildOptionItems(), { onMove: beep, onChange: change });
+    this.recordsScreen = new RecordsScreen(() => this.toTitle(), () => playUi(this.audio, 'move'));
     this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'options'), (k) => playUi(this.audio, k));
     // Music on/off, volumes and next song are also in the pause menu (Esc).
     this.pauseMenu.items.splice(2, 0, ...this.buildOptionItems().slice(0, 4));
@@ -418,6 +431,14 @@ export class App {
       { label: () => `WEAPONS: ${s.weapons ? 'ON' : 'OFF'}`, change: () => { s.weapons = !s.weapons; changed(); } },
       { label: () => 'OPTIONS', select: () => { this.mode = 'options'; this.optionsMenu.index = 0; } },
       { label: () => 'HOW TO PLAY', select: () => (this.mode = 'help') },
+      {
+        label: () => 'RECORDS',
+        select: () => {
+          this.mode = 'records';
+          this.recordsScreen.me = cleanName(this.online.name);
+          this.recordsScreen.open(this.settings.track);
+        },
+      },
       { label: () => 'FREE PRACTICE', select: () => this.startRace({ ...s, practice: true, players: 1, opponents: 0 }) },
     ];
   }
@@ -630,7 +651,7 @@ export class App {
 
   /** What the music should be doing for the current screen. */
   private musicScene(): MusicScene {
-    if (this.mode === 'title' || this.mode === 'options' || this.mode === 'controls' || this.mode === 'help' || this.mode === 'credits') return { kind: 'title' };
+    if (this.mode === 'title' || this.mode === 'options' || this.mode === 'controls' || this.mode === 'help' || this.mode === 'records' || this.mode === 'credits') return { kind: 'title' };
     if (this.mode === 'seasonEnd' || this.mode === 'standings' || this.showingResults) return { kind: 'results' };
     if (this.mode === 'race') return { kind: 'race', track: this.session.track.def.id };
     return { kind: 'menu' };
@@ -655,6 +676,11 @@ export class App {
     this.cupRace = !!spec;
     this.qualityWatch.grace = 4;
     this.setSession(new RaceSession({ ...settings }, this.tuning, spec?.seed, spec));
+    // Quick races and practice with one person and a stock car can set verified records.
+    const rs = this.session as RaceSession;
+    this.replay = !spec && rs.playerCars.length === 1 && specProblem(rs.spec) === null ? new ReplayRecorder() : null;
+    this.recordPending = false;
+    this.recordNote = '';
   }
 
   private restartRace(): void {
@@ -724,6 +750,8 @@ export class App {
   }
 
   private setSession(session: GameSession): void {
+    this.sendRecord();
+    this.replay = null;
     if (this.view) this.view.dispose();
     if (this.track !== session.track) this.setTrack(session.track);
     this.session = session;
@@ -1009,6 +1037,10 @@ export class App {
       this.controlsScreen.handle(nav);
       return;
     }
+    if (this.mode === 'records') {
+      this.recordsScreen.handle(nav);
+      return;
+    }
     if (this.mode === 'help') {
       if (nav.back || nav.confirm || nav.click || nav.left || nav.right) this.mode = 'title';
       return;
@@ -1066,9 +1098,30 @@ export class App {
     }
   }
 
+  /** Send a new personal best lap to the world boards (the server replays the race to check it). */
+  private sendRecord(): void {
+    const rec = this.replay;
+    const s = this.session;
+    if (!rec || !this.recordPending || !(s instanceof RaceSession)) return;
+    this.recordPending = false;
+    // The tuning panel changes the physics: such laps can't be checked.
+    if (rec.spoiled || JSON.stringify(this.tuning) !== JSON.stringify(DEFAULT_TUNING)) return;
+    const track = s.track.def.name.toUpperCase();
+    const note = (text: string) => {
+      this.recordNote = text;
+      this.flashMessage(text, 3.5);
+    };
+    void submitRecord({ v: PROTOCOL_VERSION, name: this.online.name, spec: s.spec, replay: rec.encode() }).then((r) => {
+      if (r.ok && r.rank) note(`WORLD TOP 10: #${r.rank} ON ${track}!`);
+      else if (r.ok) note('LAP CHECKED - NOT IN THE WORLD TOP 10 YET');
+      else note(r.error === 'offline' ? 'OFFLINE - LAP NOT SENT' : `LAP NOT ACCEPTED (${(r.error ?? '').toUpperCase()})`);
+    });
+  }
+
   /** Put a local player's car back on the track. */
   resetCar(id: number | undefined): void {
     if (id === undefined || this.world.race.phase === RacePhase.Countdown) return;
+    if (this.replay) this.replay.spoiled = true;
     const car = this.world.cars[id];
     respawnCar(car, this.track, car.trackS);
     resetProgress(car, this.track);
@@ -1093,7 +1146,10 @@ export class App {
     // Online races are stepped by their own clock (see frame()).
     if (!(s instanceof RaceSession)) return;
     const players = this.playerInputs();
+    // Debug driving aids would make the recorded race unreproducible.
+    if (this.replay && (this.input.overrideTicks > 0 || this.player.aiDriven)) this.replay.spoiled = true;
     s.playerCars.forEach((id, p) => this.input.sample(players[p], s.inputs[id], p === 0));
+    this.replay?.add(s.inputs[s.playerCars[0]]);
     this.view.beforeStep();
     s.step();
     this.view.afterStep();
@@ -1122,13 +1178,26 @@ export class App {
       } else if (e.kind === Ev.Lap && players.includes(e.car) && this.mode === 'race') {
         const car = w.cars[e.car];
         const best = car.bestLapTicks === e.value;
-        if (w.race.laps === 0 || car.lap <= w.race.laps) {
+        const record = !!this.replay && !this.replay.spoiled && noteLap(this.localRecords, this.session.track.def.id, e.value);
+        if (record) this.recordPending = true;
+        if (record) {
+          this.flashMessage(`NEW LAP RECORD ${formatTime(e.value * DT)}`, 3);
+          playUi(this.audio, 'buy');
+          this.crowd?.cheer(0.8, 2);
+        } else if (w.race.laps === 0 || car.lap <= w.race.laps) {
           this.flashMessage(`${best ? 'BEST LAP ' : 'LAP '}${(e.value * DT).toFixed(2)}`, 2.2);
           playUi(this.audio, best ? 'buy' : 'select');
           this.crowd?.cheer(this.crowdCloseness(car) * 0.8 + 0.1, 1.6);
         }
       } else if (e.kind === Ev.Finish && players.includes(e.car)) {
         playFanfare(this.audio, e.other <= 3);
+        if (this.replay && !this.replay.spoiled && this.mode === 'race') {
+          const car = w.cars[e.car];
+          if (noteRace(this.localRecords, this.session.track.def.id, w.race.laps, car.finishTick - w.race.startTick)) {
+            this.recordNote = `NEW BEST RACE TIME ${formatTime((car.finishTick - w.race.startTick) * DT)}`;
+          }
+          this.sendRecord();
+        }
         this.crowd?.cheer(e.other <= 3 ? 1 : 0.5, 3.2);
         if (e.other === 1 && this.mode === 'race') this.fireworks = 6;
       } else if (e.kind === Ev.Land) {
@@ -1401,6 +1470,8 @@ export class App {
       drawText(ctx, 'TIP: DRAG YOUR OWN .MOD / .XM FILES ONTO THE GAME TO ADD THEM - THEY STAY ON YOUR COMPUTER', W / 2, H - 11, { color: '#8090a8', align: 'center' });
     } else if (this.mode === 'help') {
       drawHelp(ctx, W, H, this.controls);
+    } else if (this.mode === 'records') {
+      this.recordsScreen.draw(ctx, W, H);
     } else if (this.mode === 'controls') {
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(0, 0, W, H);
@@ -1459,7 +1530,7 @@ export class App {
   private drawTouchExtras(ctx: CanvasRenderingContext2D, W: number, H: number): void {
     this.backRect = null;
     if (!this.touch.enabled) return;
-    const backModes: Mode[] = ['online', 'cup', 'shop', 'options', 'controls', 'help', 'credits', 'career'];
+    const backModes: Mode[] = ['online', 'cup', 'shop', 'options', 'controls', 'help', 'records', 'credits', 'career'];
     if (backModes.includes(this.mode) && !(this.mode === 'controls' && this.controlsScreen.capturing)) {
       const r = { x: 4, y: 4, w: 52, h: 20 };
       ctx.fillStyle = 'rgba(10,12,26,0.75)';
@@ -1523,6 +1594,7 @@ export class App {
     if (this.showingResults) {
       this.firstRace = false;
       drawResults(ctx, W, H, w, s.names, s.colors, s.playerCars, this.time);
+      if (this.recordNote) drawText(ctx, this.recordNote, W / 2, H - 34, { scale: 2, color: '#ffd84a', align: 'center' });
     } else if (this.paused) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(0, 0, W, H);

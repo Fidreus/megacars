@@ -8,11 +8,19 @@ import { brotliCompress, constants as zlibConstants, gzipSync } from 'node:zlib'
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TICK_RATE } from '../shared/config/constants.ts';
 import { Client, GameServer } from './gameServer.ts';
+import { RecordStore } from './records.ts';
+import type { RecordSubmission } from '../shared/game/records.ts';
 
 // SERVER_PORT wins in development (PORT may be set for the Vite dev server).
 const PORT = Number(process.env.SERVER_PORT ?? process.env.PORT ?? 8787);
 const DIST = resolve(import.meta.dirname, '../../dist');
 const SHOTS = resolve(import.meta.dirname, '../../screenshots');
+/** Lap record boards live here (a persistent volume in production). */
+const DATA_DIR = process.env.DATA_DIR ?? resolve(import.meta.dirname, '../../data');
+const records = new RecordStore(DATA_DIR);
+/** Record submissions per address per minute. */
+const SUBMIT_LIMIT = 6;
+const submits = new Map<string, number[]>();
 /** Development helpers (screenshot upload) are only enabled by `npm run dev`. */
 const DEV = process.env.MEGACARS_DEV === '1' || (process.env.SERVER_PORT !== undefined && process.env.NODE_ENV !== 'production');
 
@@ -62,6 +70,10 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   if (url.pathname === '/healthz') {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.end('ok');
+    return;
+  }
+  if (url.pathname === '/api/records') {
+    handleRecords(req, res);
     return;
   }
   if (DEV && url.pathname === '/dev/snap' && req.method === 'POST') {
@@ -121,6 +133,50 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   res.writeHead(200, headers);
   if (req.method === 'HEAD') res.end();
   else createReadStream(file).pipe(res);
+}
+
+function json(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.end(JSON.stringify(body));
+}
+
+/** GET: all boards. POST: a race to check (spec + the player's inputs). */
+function handleRecords(req: IncomingMessage, res: ServerResponse): void {
+  if (req.method === 'GET') {
+    json(res, 200, records.boards);
+    return;
+  }
+  if (req.method !== 'POST') {
+    json(res, 405, { ok: false, error: 'method' });
+    return;
+  }
+  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim();
+  const now = Date.now();
+  const recent = (submits.get(ip) ?? []).filter((t) => now - t < 60_000);
+  if (recent.length >= SUBMIT_LIMIT) {
+    json(res, 429, { ok: false, error: 'slow down' });
+    return;
+  }
+  recent.push(now);
+  submits.set(ip, recent);
+  if (submits.size > 10_000) submits.clear();
+  const chunks: Buffer[] = [];
+  let size = 0;
+  req.on('data', (c: Buffer) => {
+    size += c.length;
+    if (size > 400_000) req.destroy();
+    else chunks.push(c);
+  });
+  req.on('end', () => {
+    let sub: RecordSubmission;
+    try {
+      sub = JSON.parse(Buffer.concat(chunks).toString('utf8')) as RecordSubmission;
+    } catch {
+      json(res, 400, { ok: false, error: 'bad request' });
+      return;
+    }
+    void records.submit(sub).then((r) => json(res, r.ok ? 200 : 400, r));
+  });
 }
 
 function saveScreenshot(req: IncomingMessage, res: ServerResponse, url: URL): void {

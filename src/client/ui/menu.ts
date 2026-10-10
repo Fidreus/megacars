@@ -28,6 +28,8 @@ export class Menu {
   private rects: { x: number; y: number; w: number; h: number; item: number }[] = [];
   /** First item shown when the list is taller than the screen (scrolled). */
   private first = 0;
+  /** Items shown at once when scrolled (0 = all fit). */
+  private window = 0;
   private readonly events: MenuEvents;
   private blink = 0;
 
@@ -76,9 +78,12 @@ export class Menu {
       const hit = this.rects.findIndex((r) => nav.pointerX >= r.x && nav.pointerX < r.x + r.w && nav.pointerY >= r.y && nav.pointerY < r.y + r.h);
       const item = hit >= 0 ? this.rects[hit].item : -1;
       if (item < 0 && hit >= 0 && nav.click) {
-        // A scroll arrow: page up or down.
-        const page = Math.max(1, this.rects.filter((r) => r.item >= 0).length - 1);
-        this.index = Math.max(0, Math.min(this.items.length - 1, this.index + (item === -1 ? -page : page)));
+        // A scroll arrow: show the previous/next page (keeping one row of overlap)
+        // and keep the selection inside what is shown.
+        const rows = Math.max(1, this.window);
+        const n = this.items.length;
+        this.first = Math.max(0, Math.min(n - rows, this.first + (item === -1 ? -(rows - 1) : rows - 1)));
+        this.index = Math.max(this.first, Math.min(this.first + rows - 1, this.index));
         this.events.onMove?.();
         return;
       }
@@ -125,6 +130,7 @@ export class Menu {
       this.first = 0;
       rows = n;
     }
+    this.window = scroll ? rows : 0;
     const shown = scroll ? rows + 2 : n;
     if (panel) {
       const pw = widest + 24;

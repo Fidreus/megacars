@@ -3,7 +3,12 @@
 
 import type * as THREE from 'three';
 import type { CarTuning } from '../../shared/config/tuning.ts';
-import { neutralInput } from '../../shared/sim/input.ts';
+import { neutralInput, quantizeInput, type CarInput } from '../../shared/sim/input.ts';
+import { createRaceWorld } from '../../shared/game/raceSetup.ts';
+import { ReplayRecorder } from '../../shared/game/records.ts';
+import { stepWorld } from '../../shared/sim/step.ts';
+import { PROTOCOL_VERSION, type RaceSpec } from '../../shared/net/protocol.ts';
+import { DEFAULT_TUNING } from '../../shared/config/tuning.ts';
 import type { App } from '../app.ts';
 import { moodById } from '../render/mood.ts';
 import type { PaletteModeId } from '../render/palette.ts';
@@ -31,6 +36,8 @@ export function installDebugApi(app: App): void {
           y: +c.y.toFixed(2),
           heading: +c.heading.toFixed(3),
           steer: +c.steer.toFixed(2),
+          /** A point on the centreline a little ahead (for scripted test driving). */
+          ahead: [+app.track.px[(c.trackIdx + 14) % app.track.n].toFixed(1), +app.track.pz[(c.trackIdx + 14) % app.track.n].toFixed(1)],
           slipDeg: +((c.slip * 180) / Math.PI).toFixed(1),
           sliding: c.sliding,
           lap: c.lap,
@@ -130,6 +137,32 @@ export function installDebugApi(app: App): void {
       return +app.audio.level().toFixed(4);
     },
     /** Open the controls screen; read the current bindings. */
+    /**
+     * Determinism check for the record boards: drive a race in this browser
+     * with a simple line follower and return what the server should measure.
+     */
+    recordSelfTest(track = 'frostring', seconds = 120) {
+      const spec: RaceSpec = {
+        id: 0, track, laps: 0, seed: 4242, countdownTicks: 0, weapons: false,
+        entrants: [{ name: 'AI', color: '#fff', playerId: -1, skill: 0.95 }, { name: 'YOU', color: '#f00', playerId: 0, skill: 0.9 }],
+      };
+      const { track: t, world, tunings } = createRaceWorld(spec, DEFAULT_TUNING);
+      const car = world.cars[1];
+      const inputs: CarInput[] = world.cars.map(() => neutralInput());
+      const rec = new ReplayRecorder();
+      for (let n = 0; n < seconds * 60; n++) {
+        const j = (car.trackIdx + 14) % t.n;
+        let d = Math.atan2(t.px[j] - car.x, -(t.pz[j] - car.z)) - car.heading;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        inputs[1].steer = Math.max(-1, Math.min(1, d * 2.5));
+        inputs[1].throttle = Math.abs(d) > 0.5 ? 0.5 : 1;
+        quantizeInput(inputs[1]);
+        rec.add(inputs[1]);
+        stepWorld(world, t, inputs, tunings);
+      }
+      return { best: car.bestLapTicks, sub: { v: PROTOCOL_VERSION, name: 'SELFTEST', spec, replay: rec.encode() } };
+    },
     /** The active menu: labels and where to tap each row (CSS pixels). */
     menu() {
       const m = app.activeMenu;
@@ -141,6 +174,9 @@ export function installDebugApi(app: App): void {
         index: m.index,
         rows: m.hitRects.map((r) => ({ item: r.item, label: r.item >= 0 ? m.items[r.item].label() : r.item === -1 ? 'UP' : 'DOWN', x: rect.left + (r.x + r.w / 2) * k, y: rect.top + (r.y + r.h / 2) * k })),
       };
+    },
+    recordNote() {
+      return (app as unknown as { recordNote: string }).recordNote;
     },
     focused() {
       const el = document.activeElement;

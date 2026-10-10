@@ -135,6 +135,18 @@ tryck går till helskärm (Android); installerat som app (Lägg till på
 hemskärmen) körs det i helskärm även på iPhone. Telefoner startar på
 grafiknivå MEDIUM i AUTO.
 
+## Rekord och topplistor
+
+**RECORDS** i titelmenyn visar per bana ditt bästa varv och dina bästa
+racetider (sparas i webbläsaren) och världens topp 10 bästa varv. Slår du
+ditt rekord i ett snabbrace eller i träning med serienbil skickas racet till
+servern: din inmatning tick för tick (komprimerad, typiskt 30–50 kB) och
+racets uppsättning. Eftersom simuleringen är deterministisk spelar servern
+upp racet igen i en egen tråd (≈1 s för 3 minuter med 8 bilar) och mäter
+varven själv – en påhittad tid kan alltså inte komma in. Topplistan sparas i
+`$DATA_DIR/records.json` (standard `./data`); i produktion bör `DATA_DIR`
+peka på en beständig volym.
+
 ## Grafik och prestanda
 
 **OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM eller LOW. AUTO börjar på HIGH och
