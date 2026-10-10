@@ -11,7 +11,7 @@ import { CarView } from '../render/carMesh.ts';
 import { Effects } from '../render/effects.ts';
 import { Particles } from '../render/particles.ts';
 import { SkidMarks } from '../render/skidmarks.ts';
-import type { RaceSession } from './raceSession.ts';
+import type { GameSession } from './session.ts';
 
 const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
 
@@ -23,17 +23,19 @@ interface Pose {
 }
 
 export class RaceView {
-  readonly session: RaceSession;
+  readonly session: GameSession;
   readonly cars: CarView[] = [];
   readonly particles = new Particles();
   private readonly skid = new SkidMarks();
   private readonly effects: Effects;
   private readonly prev: Pose[] = [];
+  /** Visual offset left over from network corrections; decays to zero. */
+  private readonly offset: Pose[] = [];
   private readonly group = new THREE.Group();
   private readonly scene: THREE.Scene;
   private readonly lamps: THREE.MeshBasicMaterial[] = [];
 
-  constructor(scene: THREE.Scene, session: RaceSession, lightsOn: boolean, headlight: number) {
+  constructor(scene: THREE.Scene, session: GameSession, lightsOn: boolean, headlight: number) {
     this.scene = scene;
     this.session = session;
     this.effects = new Effects(this.particles, session.track);
@@ -43,6 +45,7 @@ export class RaceView {
       this.cars.push(view);
       this.group.add(view.root);
       this.prev.push({ x: car.x, z: car.z, y: car.y, heading: car.heading });
+      this.offset.push({ x: 0, z: 0, y: 0, heading: 0 });
     }
     this.group.add(this.skid.mesh, this.particles.points);
     scene.add(this.group);
@@ -87,21 +90,51 @@ export class RaceView {
     for (let w = 0; w < 4; w++) this.skid.mark(id * 4 + w, c.x, c.z, false);
   }
 
+  /**
+   * The simulation state of cars jumped (a server correction): keep drawing
+   * them where they were and glide to the corrected pose. Big jumps snap.
+   */
+  correct(drift: readonly { dx: number; dz: number; dh: number }[]): void {
+    for (let i = 0; i < drift.length && i < this.prev.length; i++) {
+      const d = drift[i];
+      if (d.dx === 0 && d.dz === 0 && d.dh === 0) continue;
+      const o = this.offset[i];
+      if (Math.hypot(d.dx + o.x, d.dz + o.z) > 6) {
+        o.x = o.z = o.heading = 0;
+        this.snap(i);
+        continue;
+      }
+      o.x += d.dx;
+      o.z += d.dz;
+      o.heading += d.dh;
+      const p = this.prev[i];
+      p.x -= d.dx;
+      p.z -= d.dz;
+      p.heading -= d.dh;
+    }
+  }
+
   update(alpha: number, dt: number, pxScale: number, particleDither: boolean): void {
     const world = this.session.world;
     const cars = world.cars;
+    // Corrections fade out over ~0.1-0.2 s.
+    const fade = Math.exp(-dt * 12);
     for (let i = 0; i < cars.length; i++) {
       const c = cars[i];
       const p = this.prev[i];
+      const o = this.offset[i];
+      o.x *= fade;
+      o.z *= fade;
+      o.heading *= fade;
       let dh = c.heading - p.heading;
       if (dh > Math.PI) dh -= Math.PI * 2;
       else if (dh < -Math.PI) dh += Math.PI * 2;
       const speed = Math.hypot(c.vx, c.vz);
       this.cars[i].update(
-        p.x + (c.x - p.x) * alpha,
+        p.x + (c.x - p.x) * alpha + o.x,
         p.y + (c.y - p.y) * alpha,
-        p.z + (c.z - p.z) * alpha,
-        p.heading + dh * alpha,
+        p.z + (c.z - p.z) * alpha + o.z,
+        p.heading + dh * alpha + o.heading,
         c.steer,
         c.latAccel,
         c.longAccel,

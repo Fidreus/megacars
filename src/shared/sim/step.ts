@@ -10,8 +10,8 @@ import type { Track } from '../track/types.ts';
 import { stepCarDynamics, type CarState } from './car.ts';
 import { clampSpeed, collideCarWithWalls, collideCars } from './collision.ts';
 import { Ev, pushEvent } from './events.ts';
-import { NEUTRAL_INPUT, neutralInput, type CarInput } from './input.ts';
-import { updateProgress } from './race.ts';
+import { Btn, NEUTRAL_INPUT, neutralInput, type CarInput } from './input.ts';
+import { resetProgress, updateProgress } from './race.ts';
 import { RacePhase, respawnCar, standings, type World } from './world.ts';
 
 const aiInput = neutralInput();
@@ -61,6 +61,11 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     if (car.aiDriven) {
       aiDrive(car, track, t, surfMix, cars, aiInput);
       inp = aiInput;
+    } else if (inp.buttons & Btn.Reset && !(car.prevButtons & Btn.Reset) && race.phase === RacePhase.Racing && !car.finished) {
+      // The driver asked to be put back on the track.
+      respawnCar(car, track, car.trackS);
+      resetProgress(car, track);
+      pushEvent(w.events, Ev.Respawn, car.id, -1, 1, car.x, car.z);
     }
     stepCarDynamics(car, inp, t, surfMix, DT);
     car.prevButtons = inp.buttons;

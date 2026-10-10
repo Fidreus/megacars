@@ -37,12 +37,34 @@ eller motstyr för att räta upp. Is, olja och snö sladdar av sig själva.
 | ↑ / W | Gas (släpp + tryck igen medan du styr = drift) |
 | ↓ / S | Broms / back |
 | ← → / A D | Styr |
-| R | Sätt tillbaka bilen på banan |
+| R | Sätt tillbaka bilen på banan (P2 i delad skärm: Enter) |
 | Esc / P | Paus |
 
 Delad skärm: **P1** WASD (vapentangenter G/F/H kommer i M5), **P2**
 piltangenter (. , -). Handkontroller: vänster spak styr, RT gas, LT broms;
 handkontroll 1 = P1, handkontroll 2 = P2.
+
+## Spela online
+
+Välj **PLAY ONLINE** i titelmenyn, skriv ditt namn och välj **CREATE ROOM**.
+Du får en rumskod på fyra bokstäver och en inbjudningslänk
+(`https://…/?room=KODE`) – **COPY INVITE LINK** kopierar den. Kompisar skriver
+in koden under **JOIN ROOM** eller öppnar länken. Upp till åtta personer per
+rum; värden väljer bana, varv, antal datorbilar och svårighetsgrad, de andra
+markerar sig som redo och värden startar. Efter målgång är alla tillbaka i
+lobbyn för nästa lopp. Den som kommer in mitt i ett lopp tittar på tills nästa.
+
+Servern räknar loppet (60 tick/s) och skickar läget 20 gånger i sekunden.
+Din egen bil svarar direkt: klienten kör simuleringen några tick före servern
+med dina knapptryck och spolar om från varje serverbild, så du hamnar exakt där
+servern säger utan att känna fördröjningen. Datorbilarna förutsägs exakt
+(samma deterministiska kod på båda sidor); andra människors bilar gissas utifrån
+deras senaste kända inmatning och glider mjukt till rätta. Tappar du
+anslutningen kör datorn din bil tills du är tillbaka (samma flik återansluter
+automatiskt inom en minut).
+
+`npm run soak -- --url ws://localhost:8787/ws --clients 3` kör huvudlösa botar
+över riktiga WebSockets mot en körande server och rapporterar synkhälsa.
 
 | Överallt | Funktion |
 |---|---|
@@ -53,18 +75,23 @@ handkontroll 1 = P1, handkontroll 2 = P2.
 
 URL-parametrar: `?mode=quick` (direkt till lopp), `?mode=practice`, `?p2=1`,
 `?laps=N`, `?ai=N` (motståndare), `?difficulty=0..2`,
-`?mood=day|sunset|night`, `?debug=1`, `?scale=N`, `?scanlines=1`, `?mute=1`.
+`?mood=day|sunset|night`, `?debug=1`, `?scale=N`, `?scanlines=1`, `?mute=1`,
+`?room=KODE` (gå direkt med i ett onlinerum).
 
 `npm run sim -- --seeds 20 --laps 3` kör headless AI-lopp och kontrollerar
 att alla bilar går i mål.
 
 Felsökning i konsolen: `__megacars.state()`, `.startRace({ players: 2 })`,
 `.advance(ticks)`, `.pause()`, `.autopilot()`, `.debug.crawlTest()`,
-`.debug.bench()`, `.debug.look({ mood, palette, crt })`, `.debug.snap(namn)`.
+`.debug.bench()`, `.debug.look({ mood, palette, crt })`, `.debug.snap(namn)`,
+`.online()` (anslutning, rum, förutsägelsens lead/takt).
 
 ## Struktur
 
 - `src/shared` – simulering som körs identiskt på server och klient (fysik,
   banor, AI, protokoll). Ingen DOM, ingen Node.
 - `src/client` – rendering (Three.js), ljud, inmatning, UI.
-- `src/server` – Node-server: statiska filer + WebSocket (`/ws`).
+- `src/server` – Node-server: statiska filer + WebSocket (`/ws`), rum och
+  lopp (`gameServer.ts`, `room.ts`).
+- `src/shared/net` – protokoll, binära ögonblicksbilder, klientförutsägelse
+  (`predictor.ts`) och klientens loppklocka (`netRace.ts`).

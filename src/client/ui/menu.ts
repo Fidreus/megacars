@@ -10,6 +10,10 @@ export interface MenuItem {
   /** Called with -1 / +1 for left / right. Items without it are buttons. */
   change?: (dir: number) => void;
   select?: () => void;
+  /** Greyed out and inactive (e.g. settings only the host may change). */
+  disabled?: () => boolean;
+  /** A text field: typing edits the value. */
+  text?: { get(): string; set(v: string): void; max: number; allowed: RegExp };
 }
 
 export interface MenuEvents {
@@ -30,8 +34,23 @@ export class Menu {
     this.events = events;
   }
 
+  /** The selected item is a text field (letters should type, not navigate). */
+  get typing(): boolean {
+    const it = this.items[this.index];
+    return !!it?.text && !it.disabled?.();
+  }
+
   handle(nav: NavState): void {
     const n = this.items.length;
+    if (this.index >= n) this.index = 0;
+    const field = this.typing ? this.items[this.index].text : undefined;
+    if (field && (nav.typed || nav.erase)) {
+      let v = field.get();
+      if (nav.erase) v = v.slice(0, -1);
+      for (const ch of nav.typed.toUpperCase()) if (field.allowed.test(ch) && v.length < field.max) v += ch;
+      field.set(v);
+      this.events.onChange?.();
+    }
     if (nav.up) {
       this.index = (this.index - 1 + n) % n;
       this.events.onMove?.();
@@ -41,7 +60,7 @@ export class Menu {
       this.events.onMove?.();
     }
     const item = this.items[this.index];
-    if ((nav.left || nav.right) && item.change) {
+    if ((nav.left || nav.right) && item.change && !item.disabled?.()) {
       item.change(nav.left ? -1 : 1);
       this.events.onChange?.();
     }
@@ -62,6 +81,7 @@ export class Menu {
   }
 
   private activate(item: MenuItem, dir: number): void {
+    if (item.disabled?.()) return;
     if (item.select) {
       item.select();
       this.events.onSelect?.();
@@ -88,21 +108,26 @@ export class Menu {
     }
     this.items.forEach((it, i) => {
       const y = top + i * rowH;
-      const label = it.label();
+      const off = it.disabled?.() ?? false;
+      let label = it.label();
       const selected = i === this.index;
+      if (it.text && selected && !off && Math.sin(this.blink * 8) > 0) label += '_';
+      else if (it.text) label += ' ';
       if (selected) {
         ctx.fillStyle = 'rgba(0,0,0,0.55)';
         ctx.fillRect(Math.round(cx - widest / 2), y - 3, Math.round(widest), rowH - 1);
         const pulse = Math.sin(this.blink * 8) > -0.3;
         const color = pulse ? '#ffd84a' : '#ffb000';
-        if (it.change) {
+        if (off) {
+          // No arrows on inactive items.
+        } else if (it.change) {
           drawText(ctx, '←', cx - widest / 2 + 4, y, { scale, color });
           drawText(ctx, '→', cx + widest / 2 - 4 - 5 * scale, y, { scale, color });
         } else {
           drawText(ctx, '>', cx - widest / 2 + 4, y, { scale, color });
         }
       }
-      drawText(ctx, label, cx, y, { scale, color: selected ? '#ffffff' : '#c8d0dc', align: 'center' });
+      drawText(ctx, label, cx, y, { scale, color: off ? '#6a7488' : selected ? '#ffffff' : '#c8d0dc', align: 'center' });
       this.rects.push({ x: cx - widest / 2, y: y - 3, w: widest, h: rowH });
     });
   }

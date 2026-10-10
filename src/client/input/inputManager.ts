@@ -45,6 +45,7 @@ export class InputManager {
       if (kb.anyDown(k.fireFront)) buttons |= Btn.FireFront;
       if (kb.anyDown(k.fireRear)) buttons |= Btn.FireRear;
       if (kb.anyDown(k.turbo)) buttons |= Btn.Turbo;
+      if (kb.anyDown(k.reset)) buttons |= Btn.Reset;
     }
     if (player.pad >= 0) {
       const p = readPad(player.pad, this.pad);

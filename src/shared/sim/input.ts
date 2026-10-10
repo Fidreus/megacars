@@ -6,6 +6,8 @@ export const Btn = {
   FireRear: 2,
   Turbo: 4,
   Switch: 8,
+  /** Put the car back on the track (acts on the press). */
+  Reset: 16,
   /** Set when steering comes from an analog stick (no keyboard ramp). */
   Analog: 128,
 } as const;

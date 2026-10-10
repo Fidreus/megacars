@@ -9,11 +9,8 @@ import type { Track } from '../../shared/track/types.ts';
 import { neutralInput, type CarInput } from '../../shared/sim/input.ts';
 import { stepWorld } from '../../shared/sim/step.ts';
 import { COUNTDOWN_TICKS, createWorld, type World } from '../../shared/sim/world.ts';
-import { CAR_COLORS } from '../render/materials.ts';
-import { AI_NAMES } from './names.ts';
+import { AI_NAMES, AI_SKILL, CAR_COLORS } from '../../shared/game/roster.ts';
 import type { RaceSettings } from './settings.ts';
-
-const SKILL = [0.86, 0.93, 1.0];
 
 export class RaceSession {
   readonly settings: RaceSettings;
@@ -54,7 +51,7 @@ export class RaceSession {
         this.colors.push(CAR_COLORS[p]);
       } else {
         car.aiDriven = 1;
-        car.aiSkill = SKILL[settings.difficulty] + (rnd() - 0.5) * 0.06;
+        car.aiSkill = AI_SKILL[settings.difficulty] + (rnd() - 0.5) * 0.06;
         this.names.push(names[car.id % names.length]);
         this.colors.push(CAR_COLORS[aiColor++ % CAR_COLORS.length]);
       }

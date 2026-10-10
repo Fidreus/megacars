@@ -6,7 +6,7 @@ import { drawText } from '../font.ts';
 import { formatTime, ordinal } from './hud.ts';
 
 export function drawResults(
-  ctx: CanvasRenderingContext2D, W: number, H: number, world: World, names: string[], colors: string[], players: number[], time: number,
+  ctx: CanvasRenderingContext2D, W: number, H: number, world: World, names: readonly string[], colors: readonly string[], players: readonly number[], time: number,
 ): void {
   const order = standings(world);
   const rowH = 12;

@@ -15,6 +15,9 @@ export interface NavState {
   pointerY: number;
   pointerMoved: boolean;
   click: boolean;
+  /** Text typed this frame and Backspace (only in text mode). */
+  typed: string;
+  erase: boolean;
 }
 
 const REPEAT_DELAY = 0.35;
@@ -23,8 +26,10 @@ const REPEAT_RATE = 0.09;
 export class Nav {
   readonly state: NavState = {
     up: false, down: false, left: false, right: false, confirm: false, back: false,
-    pointerX: -1, pointerY: -1, pointerMoved: false, click: false,
+    pointerX: -1, pointerY: -1, pointerMoved: false, click: false, typed: '', erase: false,
   };
+  /** A text field has focus: letters type instead of navigating. */
+  textMode = false;
   private readonly keyboard: Keyboard;
   private readonly held = new Map<string, number>();
   private padButtons: boolean[] = [];
@@ -49,12 +54,15 @@ export class Nav {
   poll(dt: number): NavState {
     const kb = this.keyboard;
     const s = this.state;
-    s.up = kb.wasPressed('ArrowUp') || kb.wasPressed('KeyW');
-    s.down = kb.wasPressed('ArrowDown') || kb.wasPressed('KeyS');
-    s.left = kb.wasPressed('ArrowLeft') || kb.wasPressed('KeyA');
-    s.right = kb.wasPressed('ArrowRight') || kb.wasPressed('KeyD');
-    s.confirm = kb.wasPressed('Enter') || kb.wasPressed('Space') || kb.wasPressed('NumpadEnter');
-    s.back = kb.wasPressed('Escape') || kb.wasPressed('Backspace');
+    const letters = !this.textMode;
+    s.up = kb.wasPressed('ArrowUp') || (letters && kb.wasPressed('KeyW'));
+    s.down = kb.wasPressed('ArrowDown') || (letters && kb.wasPressed('KeyS'));
+    s.left = kb.wasPressed('ArrowLeft') || (letters && kb.wasPressed('KeyA'));
+    s.right = kb.wasPressed('ArrowRight') || (letters && kb.wasPressed('KeyD'));
+    s.confirm = kb.wasPressed('Enter') || (letters && kb.wasPressed('Space')) || kb.wasPressed('NumpadEnter');
+    s.back = kb.wasPressed('Escape') || (letters && kb.wasPressed('Backspace'));
+    s.typed = this.textMode ? kb.typed : '';
+    s.erase = this.textMode && kb.wasPressed('Backspace');
     s.click = this.clicked;
     s.pointerMoved = this.moved;
     this.clicked = false;

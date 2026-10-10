@@ -27,8 +27,7 @@ export function vertexToon(opts: THREE.MeshToonMaterialParameters = {}): THREE.M
   return new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient(), ...opts });
 }
 
-/** Car paint colours, one per grid slot. */
-export const CAR_COLORS = ['#e8322a', '#2f6fe0', '#f2c230', '#2fae4e', '#f07a1a', '#9a45d8', '#28c4d0', '#e8e8e8'];
+export { CAR_COLORS } from '../../shared/game/roster.ts';
 
 /** Linear-space colour from an sRGB hex string. */
 export function linear(hex: string): THREE.Color {

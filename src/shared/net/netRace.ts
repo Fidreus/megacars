@@ -1,0 +1,164 @@
+// The client's side of an online race, without any browser APIs: builds the
+// world from the race spec, runs the predicted clock, sends inputs and folds
+// in server snapshots. The browser session and the tests both drive this.
+
+import { DT } from '../config/constants.ts';
+import { cloneTuning, DEFAULT_TUNING } from '../config/tuning.ts';
+import { createRaceWorld } from '../game/raceSetup.ts';
+import { neutralInput, quantizeInput, type CarInput } from '../sim/input.ts';
+import type { World } from '../sim/world.ts';
+import type { Track } from '../track/types.ts';
+import { Predictor, LeadControl } from './predictor.ts';
+import { encodeInput, INPUT_SIZE, type RaceSpec } from './protocol.ts';
+
+export interface StepHooks {
+  /** Fill the input of local player p for the coming tick. */
+  sample(p: number, out: CarInput): CarInput | void;
+  before?(): void;
+  after?(): void;
+  /** A snapshot moved cars; `drift` holds the jumps (old minus new pose). */
+  corrected?(drift: NetRace['drift']): void;
+}
+
+/**
+ * At most this many predicted ticks per update. Online the clock must not
+ * lose time on slow frames (the server keeps going), so this is generous.
+ */
+const MAX_STEPS = 40;
+
+export class NetRace {
+  readonly spec: RaceSpec;
+  readonly track: Track;
+  readonly world: World;
+  readonly predictor: Predictor;
+  readonly localCars: number[];
+  readonly names: string[];
+  readonly colors: string[];
+  readonly lead = new LeadControl();
+  /** Round-trip time to the server in ms (kept up to date by the caller). */
+  rttMs = 100;
+  /** Current clock rate (1 = real time). */
+  rate = 1;
+  /** Corrections accumulated since the view last took them (per car). */
+  readonly drift: { dx: number; dz: number; dh: number }[];
+  private pending: Uint8Array | null = null;
+  private acc = 0;
+  private readonly local: CarInput[];
+  private readonly packet = new Uint8Array(INPUT_SIZE);
+  private readonly send: (data: Uint8Array) => void;
+
+  constructor(spec: RaceSpec, playerId: number, send: (data: Uint8Array) => void) {
+    this.spec = spec;
+    this.send = send;
+    const { track, world } = createRaceWorld(spec);
+    this.track = track;
+    this.world = world;
+    this.localCars = [];
+    spec.entrants.forEach((e, i) => {
+      if (e.playerId === playerId) this.localCars.push(i);
+    });
+    this.names = spec.entrants.map((e) => e.name);
+    this.colors = spec.entrants.map((e) => e.color);
+    this.predictor = new Predictor(world, track, [cloneTuning(DEFAULT_TUNING)], this.localCars);
+    this.local = this.localCars.map(() => neutralInput());
+    this.drift = world.cars.map(() => ({ dx: 0, dz: 0, dh: 0 }));
+  }
+
+  get spectating(): boolean {
+    return this.localCars.length === 0;
+  }
+
+  get synced(): boolean {
+    return this.predictor.synced;
+  }
+
+  /** The latest input this client used for local player p. */
+  input(p: number): CarInput {
+    return this.local[p];
+  }
+
+  /** A snapshot arrived; it is applied at the next update. Only the newest matters. */
+  snapshot(data: Uint8Array): void {
+    this.pending = data;
+  }
+
+  private get rttTicks(): number {
+    return this.rttMs / 1000 / DT;
+  }
+
+  /** Advance by `dt` seconds of real time. Returns the number of new ticks simulated. */
+  update(dt: number, hooks: StepHooks): number {
+    if (this.pending) {
+      this.applyPending();
+      if (hooks.corrected) {
+        hooks.corrected(this.drift);
+        for (const d of this.drift) d.dx = d.dz = d.dh = 0;
+      }
+    }
+    if (!this.synced) return 0;
+    let extra = 0;
+    if (this.lead.jump > 0) extra = Math.min(this.lead.jump, 120);
+    else if (this.lead.jump < 0) this.acc += this.lead.jump * DT;
+    this.lead.jump = 0;
+    this.acc += dt * this.rate;
+    let steps = 0;
+    while (extra > 0) {
+      this.stepOnce(hooks);
+      extra--;
+      steps++;
+    }
+    while (this.acc >= DT && steps < MAX_STEPS) {
+      this.stepOnce(hooks);
+      this.acc -= DT;
+      steps++;
+    }
+    if (this.acc > DT * MAX_STEPS) this.acc = DT * MAX_STEPS;
+    return steps;
+  }
+
+  /** Fraction of a tick elapsed since the last step (for interpolation). */
+  get alpha(): number {
+    return Math.max(0, Math.min(1, this.acc / DT));
+  }
+
+  private stepOnce(hooks: StepHooks): void {
+    const t = this.world.tick;
+    for (let p = 0; p < this.local.length; p++) {
+      quantizeInput(hooks.sample(p, this.local[p]) ?? this.local[p]);
+      this.send(encodeInput(t, this.local[p], this.packet));
+    }
+    hooks.before?.();
+    this.predictor.step(this.local);
+    hooks.after?.();
+  }
+
+  private applyPending(): void {
+    const data = this.pending!;
+    this.pending = null;
+    const p = this.predictor;
+    const first = !p.synced;
+    const ahead = Math.ceil(this.rttTicks / 2) + this.lead.target + 1;
+    const ok = first ? p.reconcile(data, this.serverTickOf(data) + (this.spectating ? 0 : ahead)) : p.reconcile(data);
+    if (!ok) return;
+    if (first) this.lead.hold(this.rttTicks);
+    for (let i = 0; i < this.drift.length; i++) {
+      const c = p.corrections[i];
+      const d = this.drift[i];
+      d.dx += c.dx;
+      d.dz += c.dz;
+      d.dh += c.dh;
+    }
+    if (this.spectating) {
+      // Show the race about where the server is now.
+      const err = p.serverTick + Math.round(this.rttTicks / 2) - this.world.tick;
+      if (Math.abs(err) > 20) this.lead.jump = err;
+      this.rate = 1 + Math.max(-0.05, Math.min(0.05, err * 0.01));
+    } else if (!first) {
+      this.rate = this.lead.update(p.lead, this.rttTicks);
+    }
+  }
+
+  private serverTickOf(data: Uint8Array): number {
+    return new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(1, true);
+  }
+}

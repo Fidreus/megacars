@@ -1,0 +1,141 @@
+// Binary world snapshots. The server sends the complete simulation state; the
+// client restores it exactly and re-simulates its own inputs on top. Floats go
+// as float64 so a restored world steps bit-for-bit like the server's.
+
+import { createCar, type CarState } from '../sim/car.ts';
+import { copyInput, neutralInput, type CarInput } from '../sim/input.ts';
+import type { World } from '../sim/world.ts';
+import { MsgType } from './protocol.ts';
+
+type CarKey = keyof CarState;
+
+/** Continuous car state. */
+const F64: readonly CarKey[] = [
+  'x', 'z', 'y', 'vx', 'vz', 'vy', 'heading', 'angVel', 'steer', 'damage', 'aiSkill', 'trackS', 'raceDist',
+  'slip', 'latAccel', 'longAccel',
+];
+
+/** Counters, flags and indices. */
+const I32: readonly CarKey[] = [
+  'sliding', 'modeTicks', 'spinTicks', 'spinCool', 'airborne', 'prevButtons', 'brakeTicks', 'liftTicks',
+  'driftArm', 'aiDriven', 'aiMode', 'aiReverseTicks', 'human', 'trackIdx', 'lap', 'nextCp', 'lapStartTick',
+  'lastLapTicks', 'bestLapTicks', 'wrongWayTicks', 'finished', 'finishTick', 'place', 'stuckTicks', 'ghostTicks',
+  'respawns', 'surfFront', 'surfRear',
+];
+
+/** Every CarState key except `id` must be listed above (checked by tests). */
+export const SNAPSHOT_CAR_KEYS: readonly CarKey[] = [...F64, ...I32];
+
+const HEADER = 1 + 4 + 2 + 4 + 1 + 1 + 1 + 4 + 4 + 4 + 4 + 1;
+const PER_CAR = F64.length * 8 + I32.length * 4 + 4;
+
+export interface SnapshotMeta {
+  /** How many ticks early this client's inputs arrive (minimum over the last half second). */
+  lead: number;
+  /** Last input tick the server has received from this client. */
+  lastInputTick: number;
+}
+
+export function snapshotSize(cars: number): number {
+  return HEADER + cars * (PER_CAR + 1);
+}
+
+/**
+ * Encode `w` (state at the start of tick w.tick) with each car's most recent
+ * input, which the client uses to predict cars driven by other people.
+ */
+export function encodeSnapshot(w: World, lastInputs: readonly CarInput[], meta: SnapshotMeta): Uint8Array {
+  const n = w.cars.length;
+  const buf = new ArrayBuffer(snapshotSize(n));
+  const v = new DataView(buf);
+  let o = 0;
+  v.setUint8(o, MsgType.Snapshot); o += 1;
+  v.setUint32(o, w.tick, true); o += 4;
+  v.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(meta.lead))), true); o += 2;
+  v.setUint32(o, Math.max(0, meta.lastInputTick), true); o += 4;
+  v.setUint8(o, n); o += 1;
+  v.setUint8(o, w.race.phase); o += 1;
+  v.setUint8(o, w.race.laps); o += 1;
+  v.setUint32(o, w.race.startTick, true); o += 4;
+  v.setUint32(o, w.race.firstFinishTick, true); o += 4;
+  v.setUint32(o, w.race.endTick, true); o += 4;
+  v.setInt32(o, w.rng, true); o += 4;
+  v.setUint8(o, w.race.finishOrder.length); o += 1;
+  // finishOrder lives after the cars (fixed-size area of one byte per car).
+  for (const car of w.cars) {
+    for (const k of F64) { v.setFloat64(o, car[k], true); o += 8; }
+    for (const k of I32) { v.setInt32(o, car[k], true); o += 4; }
+    const inp = lastInputs[car.id];
+    v.setInt8(o, Math.round((inp?.steer ?? 0) * 127)); o += 1;
+    v.setUint8(o, Math.round((inp?.throttle ?? 0) * 255)); o += 1;
+    v.setUint8(o, Math.round((inp?.brake ?? 0) * 255)); o += 1;
+    v.setUint8(o, (inp?.buttons ?? 0) & 0xff); o += 1;
+  }
+  for (let i = 0; i < n; i++) v.setUint8(o + i, w.race.finishOrder[i] ?? 0xff);
+  return new Uint8Array(buf);
+}
+
+export interface DecodedSnapshot {
+  tick: number;
+  meta: SnapshotMeta;
+  carCount: number;
+}
+
+/** Read the header without touching a world. Returns null for malformed data. */
+export function peekSnapshot(data: Uint8Array): DecodedSnapshot | null {
+  if (data.byteLength < HEADER || data[0] !== MsgType.Snapshot) return null;
+  const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const carCount = v.getUint8(11);
+  if (data.byteLength !== snapshotSize(carCount)) return null;
+  return { tick: v.getUint32(1, true), meta: { lead: v.getInt16(5, true), lastInputTick: v.getUint32(7, true) }, carCount };
+}
+
+/**
+ * Overwrite `w` with the snapshot (car objects are reused) and fill
+ * `lastInputs[i]` with car i's latest input. The world must have the same
+ * number of cars. Returns the snapshot tick, or -1 if it does not fit.
+ */
+export function applySnapshot(data: Uint8Array, w: World, lastInputs: CarInput[]): number {
+  const head = peekSnapshot(data);
+  if (!head || head.carCount !== w.cars.length) return -1;
+  const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  let o = 12;
+  w.tick = head.tick;
+  w.race.phase = v.getUint8(o); o += 1;
+  w.race.laps = v.getUint8(o); o += 1;
+  w.race.startTick = v.getUint32(o, true); o += 4;
+  w.race.firstFinishTick = v.getUint32(o, true); o += 4;
+  w.race.endTick = v.getUint32(o, true); o += 4;
+  w.rng = v.getInt32(o, true); o += 4;
+  const finished = v.getUint8(o); o += 1;
+  for (const car of w.cars) {
+    const c = car as unknown as Record<CarKey, number>;
+    for (const k of F64) { c[k] = v.getFloat64(o, true); o += 8; }
+    for (const k of I32) { c[k] = v.getInt32(o, true); o += 4; }
+    const inp = (lastInputs[car.id] ??= neutralInput());
+    inp.steer = v.getInt8(o) / 127; o += 1;
+    inp.throttle = v.getUint8(o) / 255; o += 1;
+    inp.brake = v.getUint8(o) / 255; o += 1;
+    inp.buttons = v.getUint8(o); o += 1;
+  }
+  w.race.finishOrder.length = 0;
+  for (let i = 0; i < finished; i++) w.race.finishOrder.push(v.getUint8(o + i));
+  w.events.count = 0;
+  return head.tick;
+}
+
+/** Deep copy of the simulation state of `src` into `dst` (same car count). */
+export function copyWorld(dst: World, src: World): void {
+  dst.tick = src.tick;
+  dst.rng = src.rng;
+  Object.assign(dst.race, src.race, { finishOrder: [...src.race.finishOrder] });
+  for (let i = 0; i < src.cars.length; i++) {
+    if (!dst.cars[i]) dst.cars[i] = createCar(i, 0, 0, 0);
+    Object.assign(dst.cars[i], src.cars[i]);
+  }
+  dst.cars.length = src.cars.length;
+}
+
+export function cloneInputs(src: readonly CarInput[]): CarInput[] {
+  return src.map((i) => copyInput(neutralInput(), i));
+}

@@ -8,6 +8,7 @@ import { cloneTuning, DEFAULT_TUNING, type CarTuning } from '../shared/config/tu
 import { TRACKS, TRACK_LIST } from '../shared/track/defs/index.ts';
 import type { Track } from '../shared/track/types.ts';
 import { Ev } from '../shared/sim/events.ts';
+import { copyInput, NEUTRAL_INPUT, type CarInput } from '../shared/sim/input.ts';
 import { resetProgress } from '../shared/sim/race.ts';
 import { RacePhase, respawnCar, standings } from '../shared/sim/world.ts';
 import { AudioSystem } from './audio/audio.ts';
@@ -16,12 +17,14 @@ import { playFanfare, playImpact, playTone, SkidSound } from './audio/sfx.ts';
 import { installDebugApi } from './debug/debugApi.ts';
 import { buildTrackDebugView } from './debug/trackDebugView.ts';
 import { loadSavedTuning, openTuningPanel } from './debug/tuningPanel.ts';
+import { Online, OnlineSession } from './game/online.ts';
 import { attractSession, RaceSession } from './game/raceSession.ts';
+import type { GameSession } from './game/session.ts';
 import { lightsOn, RaceView } from './game/raceView.ts';
 import { DIFFICULTIES, loadSettings, saveSettings, type RaceSettings } from './game/settings.ts';
 import { P1_KEYS, P2_KEYS, SOLO_KEYS } from './input/bindings.ts';
 import { InputManager, type LocalPlayerInput } from './input/inputManager.ts';
-import { Nav } from './input/nav.ts';
+import { Nav, type NavState } from './input/nav.ts';
 import type { Params } from './params.ts';
 import { animTime } from './render/materials.ts';
 import { MOODS, moodById, type Mood } from './render/mood.ts';
@@ -30,11 +33,11 @@ import { buildProps } from './render/props.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
 import { buildTrackView } from './render/trackMesh.ts';
-import { PingProbe } from './session/pingProbe.ts';
 import { drawText } from './ui/font.ts';
 import { Menu } from './ui/menu.ts';
 import { drawCountdown, drawPlayerHud, Minimap } from './ui/screens/hud.ts';
 import { drawResults } from './ui/screens/results.ts';
+import { connText, drawLobby, inviteLink, pingColor } from './ui/screens/lobby.ts';
 import { drawLogo } from './ui/screens/title.ts';
 
 const SHADOW_HALF = 62;
@@ -43,7 +46,8 @@ const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
 /** Visible height of a full-screen view, metres. Split screen zooms out a little. */
 const VIEW_HEIGHT = 51.3;
 
-type Mode = 'title' | 'race';
+/** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
+type Mode = 'title' | 'online' | 'lobby' | 'race';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -53,7 +57,9 @@ export class App {
   readonly lookAhead = { value: 0.3 };
   readonly settings: RaceSettings;
   mode: Mode = 'title';
-  session!: RaceSession;
+  session!: GameSession;
+  /** Online play (connection, room, races). */
+  readonly online: Online;
   view!: RaceView;
   track!: Track;
   mood: Mood = MOODS[0];
@@ -70,7 +76,6 @@ export class App {
   private readonly sunUp = new THREE.Vector3();
   private readonly sunDir = new THREE.Vector3(0, 1, 0);
   private readonly audio = new AudioSystem();
-  private readonly ping = new PingProbe();
   private readonly minimap = new Minimap();
   private trackGroup: THREE.Group | null = null;
   private debugView: THREE.Group | null = null;
@@ -82,8 +87,11 @@ export class App {
   private tuningPanel: { toggle(): void } | null = null;
   private readonly titleMenu: Menu;
   private readonly pauseMenu: Menu;
+  private readonly onlineMenu: Menu;
+  private readonly lobbyMenu: Menu;
   private readonly camTargets = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly camInit = [false, false];
+  private readonly tagPos = new THREE.Vector3();
   private acc = 0;
   private last = -1;
   private time = 0;
@@ -136,12 +144,34 @@ export class App {
     this.titleMenu = new Menu(this.buildTitleItems(), { onMove: beep, onChange: beep });
     this.pauseMenu = new Menu([
       { label: () => 'RESUME', select: () => (this.paused = false) },
-      { label: () => 'RESTART RACE', select: () => this.startRace(this.session.settings) },
-      { label: () => 'QUIT TO MENU', select: () => this.toTitle() },
+      {
+        label: () => 'RESTART RACE',
+        disabled: () => !(this.session instanceof RaceSession),
+        select: () => this.session instanceof RaceSession && this.startRace(this.session.settings),
+      },
+      {
+        label: () => (this.netRace ? 'LEAVE ROOM' : 'QUIT TO MENU'),
+        select: () => (this.netRace ? this.leaveRoom() : this.toTitle()),
+      },
     ], { onMove: beep });
+    this.online = new Online({
+      race: (s) => this.startOnlineRace(s),
+      room: (room) => {
+        if (room && this.mode === 'online') this.toLobby();
+        else if (!room && this.mode === 'lobby') this.mode = 'online';
+      },
+      notice: (text) => this.flashMessage(text, 2.5),
+    });
+    this.onlineMenu = new Menu(this.buildOnlineItems(), { onMove: beep, onChange: beep });
+    this.lobbyMenu = new Menu(this.buildLobbyItems(), { onMove: beep, onChange: beep });
 
     this.setMood(moodById(this.settings.mood));
-    if (params.mode === 'quick') this.startRace(this.settings);
+    if (params.room) {
+      this.toTitle();
+      this.mode = 'online';
+      this.online.code = params.room;
+      this.online.join(params.room);
+    } else if (params.mode === 'quick') this.startRace(this.settings);
     else if (params.mode === 'practice') this.startRace({ ...this.settings, practice: true, opponents: params.aiSet ? params.ai : 0 });
     else this.toTitle();
     if (params.debug) {
@@ -149,7 +179,6 @@ export class App {
       if (this.debugView) this.debugView.visible = true;
       void this.openTuning();
     }
-    this.ping.start();
     installDebugApi(this);
 
     const unlock = () => {
@@ -173,6 +202,7 @@ export class App {
     const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
     return [
       { label: () => 'START RACE', select: () => this.startRace(s) },
+      { label: () => 'PLAY ONLINE', select: () => this.toOnline() },
       {
         label: () => (s.players === 1 ? 'PLAYERS: 1' : 'PLAYERS: 2 SPLIT SCREEN'),
         change: () => {
@@ -209,9 +239,115 @@ export class App {
     ];
   }
 
+  private buildOnlineItems() {
+    const o = () => this.online;
+    const joinable = () => o().code.length === 4;
+    return [
+      {
+        label: () => `NAME: ${o().name}`,
+        text: { get: () => o().name, set: (v: string) => (o().name = v), max: 12, allowed: /[A-Z0-9 ._-]/ },
+        select: () => o().commitName(),
+      },
+      { label: () => 'CREATE ROOM', select: () => { o().commitName(); o().create(); } },
+      {
+        label: () => `JOIN ROOM: ${o().code || '----'}`,
+        text: { get: () => o().code, set: (v: string) => (o().code = v), max: 4, allowed: /[A-Z]/ },
+        select: () => {
+          if (!joinable()) {
+            this.flashMessage('TYPE THE 4-LETTER ROOM CODE');
+            return;
+          }
+          o().commitName();
+          o().join(o().code);
+        },
+      },
+      { label: () => 'BACK', select: () => this.toTitle() },
+    ];
+  }
+
+  private buildLobbyItems() {
+    const o = () => this.online;
+    const cfg = () => o().room?.config;
+    const notHost = () => !o().isHost;
+    const busy = () => o().room?.state === 'race';
+    const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
+    const everyoneReady = () => !!o().room?.players.every((p) => p.ready || !p.connected);
+    return [
+      {
+        label: () => {
+          if (busy()) return 'RACE IN PROGRESS';
+          if (o().isHost) return everyoneReady() ? 'START RACE' : 'START RACE (WAITING)';
+          return o().myInfo?.ready ? 'READY: YES' : 'READY: NO';
+        },
+        disabled: () => busy() || (o().isHost && !everyoneReady()),
+        select: () => (o().isHost ? o().start() : o().setReady(!o().myInfo?.ready)),
+      },
+      {
+        label: () => `TRACK: ${TRACKS[cfg()?.track ?? '']?.name.toUpperCase() ?? '?'}`,
+        disabled: notHost,
+        change: (d: number) => {
+          const i = TRACK_LIST.findIndex((t) => t.id === cfg()?.track);
+          o().configure({ track: TRACK_LIST[cycle(i, TRACK_LIST.length, d)].id });
+        },
+      },
+      { label: () => `LAPS: ${cfg()?.laps ?? 3}`, disabled: notHost, change: (d: number) => o().configure({ laps: 1 + cycle((cfg()?.laps ?? 3) - 1, 9, d) }) },
+      { label: () => `COMPUTER CARS: ${cfg()?.ai ?? 0}`, disabled: notHost, change: (d: number) => o().configure({ ai: cycle(cfg()?.ai ?? 0, 8, d) }) },
+      {
+        label: () => `DIFFICULTY: ${DIFFICULTIES[cfg()?.difficulty ?? 1]}`,
+        disabled: notHost,
+        change: (d: number) => o().configure({ difficulty: cycle(cfg()?.difficulty ?? 1, 3, d) }),
+      },
+      { label: () => 'COPY INVITE LINK', select: () => this.copyInvite() },
+      { label: () => 'LEAVE ROOM', select: () => this.leaveRoom() },
+    ];
+  }
+
+  private copyInvite(): void {
+    const code = this.online.room?.code;
+    if (!code) return;
+    const link = inviteLink(code);
+    navigator.clipboard?.writeText(link).then(
+      () => this.flashMessage('INVITE LINK COPIED'),
+      () => this.flashMessage(link, 4),
+    ) ?? this.flashMessage(link, 4);
+  }
+
+  /** The current race if it is an online one. */
+  get netRace(): OnlineSession | null {
+    return this.session instanceof OnlineSession ? this.session : null;
+  }
+
+  toOnline(): void {
+    if (this.mode === 'race') this.toTitle();
+    this.mode = this.online.room ? 'lobby' : 'online';
+    this.online.connect();
+  }
+
+  private toLobby(): void {
+    this.showAttract('lobby');
+    this.lobbyMenu.index = 0;
+  }
+
+  leaveRoom(): void {
+    this.online.leave();
+    this.showAttract('online');
+  }
+
+  private startOnlineRace(s: OnlineSession): void {
+    this.mode = 'race';
+    this.paused = false;
+    this.lastLights = 0;
+    this.setSession(s);
+  }
+
   /** Back to the title screen with an all-AI race running behind the menu. */
   toTitle(): void {
-    this.mode = 'title';
+    this.showAttract('title');
+  }
+
+  /** A menu screen over the attract-mode race. */
+  private showAttract(mode: Mode): void {
+    this.mode = mode;
     this.paused = false;
     this.setSession(attractSession(this.settings, this.tuning));
   }
@@ -223,7 +359,7 @@ export class App {
     this.setSession(new RaceSession({ ...settings }, this.tuning));
   }
 
-  private setSession(session: RaceSession): void {
+  private setSession(session: GameSession): void {
     if (this.view) this.view.dispose();
     if (this.track !== session.track) this.setTrack(session.track);
     this.session = session;
@@ -317,15 +453,25 @@ export class App {
     this.last = now;
     this.time += dt;
     this.handleKeys(dt);
-    this.acc = this.paused ? 0 : this.acc + dt;
-    let steps = 0;
-    while (this.acc >= DT && steps < 6) {
-      this.fixedStep();
-      this.acc -= DT;
-      steps++;
+    const net = this.netRace;
+    let alpha: number;
+    if (net) {
+      // Online the race never pauses; the server's clock rules.
+      this.online.update();
+      net.net.update(dt, this.netHooks);
+      alpha = net.net.alpha;
+    } else {
+      this.acc = this.paused ? 0 : this.acc + dt;
+      let steps = 0;
+      while (this.acc >= DT && steps < 6) {
+        this.fixedStep();
+        this.acc -= DT;
+        steps++;
+      }
+      if (steps === 6) this.acc = 0;
+      alpha = this.acc / DT;
     }
-    if (steps === 6) this.acc = 0;
-    this.renderFrame(this.acc / DT, dt);
+    this.renderFrame(alpha, dt);
     this.input.keyboard.endFrame();
     this.fpsFrames++;
     this.fpsTime += dt;
@@ -336,9 +482,36 @@ export class App {
     }
   };
 
+  private readonly netHooks = {
+    sample: (p: number, out: CarInput) => {
+      if (this.paused) return copyInput(out, NEUTRAL_INPUT);
+      return this.input.sample(this.playerInputs()[p], out, p === 0);
+    },
+    before: () => this.view.beforeStep(),
+    after: () => {
+      this.view.afterStep();
+      this.handleEvents();
+    },
+    corrected: (drift: { dx: number; dz: number; dh: number }[]) => this.view.correct(drift),
+  };
+
+  /** The menu that has the keyboard on the current screen. */
+  private get activeMenu(): Menu | null {
+    if (this.mode === 'title') return this.titleMenu;
+    if (this.mode === 'online') return this.onlineMenu;
+    if (this.mode === 'lobby') return this.lobbyMenu;
+    return this.paused ? this.pauseMenu : null;
+  }
+
   private handleKeys(dt: number): void {
     const kb = this.input.keyboard;
+    this.nav.textMode = this.activeMenu?.typing ?? false;
     const nav = this.nav.poll(dt);
+    if (this.nav.textMode) {
+      // Letters and digits go into the text field.
+      this.handleMenus(nav);
+      return;
+    }
     if (kb.wasPressed('Digit1') && this.debugView) this.debugView.visible = !this.debugView.visible;
     if (kb.wasPressed('Digit2')) this.showTelemetry = !this.showTelemetry;
     if (kb.wasPressed('Digit3')) {
@@ -357,12 +530,30 @@ export class App {
     const pad = this.input.firstActivePad();
     if (pad >= 0) this.padIndex = pad;
 
+    this.handleMenus(nav);
+  }
+
+  private handleMenus(nav: NavState): void {
+    const kb = this.input.keyboard;
     if (this.mode === 'title') {
       this.titleMenu.handle(nav);
       return;
     }
+    if (this.mode === 'online') {
+      if (nav.back) this.toTitle();
+      else this.onlineMenu.handle(nav);
+      return;
+    }
+    if (this.mode === 'lobby') {
+      this.lobbyMenu.handle(nav);
+      return;
+    }
     if (this.showingResults) {
-      if (nav.confirm || nav.click || nav.back) this.toTitle();
+      if (nav.confirm || nav.click || nav.back) {
+        if (this.netRace && this.online.room) this.toLobby();
+        else if (this.netRace) this.showAttract('online');
+        else this.toTitle();
+      }
       return;
     }
     if (this.paused) {
@@ -373,9 +564,7 @@ export class App {
     if (nav.back || kb.wasPressed('KeyP')) {
       this.paused = true;
       this.pauseMenu.index = 0;
-      return;
     }
-    if (kb.wasPressed('KeyR')) this.resetCar(this.session.playerCars[0]);
   }
 
   /** Put a local player's car back on the track. */
@@ -401,6 +590,8 @@ export class App {
 
   private fixedStep(): void {
     const s = this.session;
+    // Online races are stepped by their own clock (see frame()).
+    if (!(s instanceof RaceSession)) return;
     const players = this.playerInputs();
     s.playerCars.forEach((id, p) => this.input.sample(players[p], s.inputs[id], p === 0));
     this.view.beforeStep();
@@ -422,6 +613,7 @@ export class App {
         if (dist < 60) playImpact(this.audio, e.value * (1 - dist / 60), dx / 30);
       } else if (e.kind === Ev.Respawn) {
         this.view.snap(e.car);
+        if (e.value === 1 && players.includes(e.car)) this.flashMessage('RESET');
       } else if (e.kind === Ev.Lap && players.includes(e.car) && this.mode === 'race') {
         const car = w.cars[e.car];
         const best = car.bestLapTicks === e.value;
@@ -446,8 +638,8 @@ export class App {
   // ------------------------------------------------------------- rendering
 
   private renderFrame(alpha: number, dt: number): void {
-    if (this.mode === 'title') {
-      // Attract mode: follow the race leader, switching cars now and then.
+    if (this.mode !== 'race' || this.session.playerCars.length === 0) {
+      // Attract mode and spectators: follow the leaders, switching cars now and then.
       const order = standings(this.world);
       this.viewCar[0] = order[Math.floor(this.time / 9) % Math.min(3, order.length)];
     }
@@ -555,7 +747,26 @@ export class App {
         : 'ARROWS/WASD DRIVE   LIFT OFF + GAS AGAIN WHILE TURNING = DRIFT';
       drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
       drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
-    } else {
+    } else if (this.mode === 'online') {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, 0, W, H);
+      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
+      drawText(ctx, 'PLAY ONLINE', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
+      this.onlineMenu.draw(ctx, W / 2, top + 30, H >= 330 ? 2 : 1, dt);
+      const st = connText(this.online.state, this.online.conn.rtt);
+      drawText(ctx, st.text, W / 2, H - 34, { align: 'center', color: st.color });
+      drawText(ctx, 'CREATE A ROOM AND SEND THE CODE TO YOUR FRIENDS, OR TYPE THEIR CODE', W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
+      drawText(ctx, 'ENTER SELECT   TYPE TO EDIT   ESC BACK', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+    } else if (this.mode === 'lobby' && this.online.room) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, 0, W, H);
+      const top = drawLobby(ctx, W, H, this.online.room, this.online.me, this.time);
+      this.lobbyMenu.draw(ctx, W / 2, top, H >= 330 && top < H * 0.5 ? 2 : 1, dt);
+      const st = connText(this.online.state, this.online.conn.rtt);
+      drawText(ctx, st.text, 6, H - 11, { color: st.color });
+      const hint = this.online.isHost ? 'YOU ARE THE HOST: PICK THE RACE AND START WHEN EVERYONE IS READY' : 'MARK YOURSELF READY - THE HOST STARTS THE RACE';
+      drawText(ctx, hint, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
+    } else if (this.mode === 'race') {
       this.drawRaceUi(ctx, W, H);
     }
     if (this.flashTime > 0) {
@@ -563,7 +774,10 @@ export class App {
       drawText(ctx, this.flash, W / 2, Math.round(H * 0.18), { scale: 2, color: '#ffd84a', align: 'center' });
     }
     if (this.params.debug) {
-      const rtt = this.ping.rtt >= 0 ? ` RTT ${this.ping.rtt.toFixed(0)}MS` : this.ping.connected ? '' : ' OFFLINE';
+      const c = this.online.conn;
+      const n = this.netRace?.net;
+      const sync = n ? ` LEAD ${n.predictor.lead} RESIM ${n.predictor.lastResim} RATE ${n.rate.toFixed(2)}` : '';
+      const rtt = (c.rtt >= 0 ? ` RTT ${c.rtt.toFixed(0)}MS` : '') + sync;
       drawText(ctx, `${this.fps.toFixed(0)} FPS ${this.renderer.lowW}X${this.renderer.lowH} X${this.renderer.scale}${rtt}`, W - 4, H - 10, {
         color: '#9cff9c', align: 'right',
       });
@@ -594,6 +808,7 @@ export class App {
       drawText(ctx, 'DRIFT: LET GO OF GAS + PRESS AGAIN WHILE TURNING', W / 2, hintY, { color: '#ffd84a', align: 'center' });
     }
     if (this.showTelemetry && s.playerCars.length) this.drawTelemetry(ctx, 8, 92);
+    if (this.netRace) this.drawOnlineRaceUi(ctx, W, H);
     if (this.showingResults) {
       this.firstRace = false;
       drawResults(ctx, W, H, w, s.names, s.colors, s.playerCars, this.time);
@@ -602,6 +817,35 @@ export class App {
       ctx.fillRect(0, 0, W, H);
       drawText(ctx, 'PAUSED', W / 2, Math.round(H * 0.3), { scale: 4, color: '#ffd84a', align: 'center' });
       this.pauseMenu.draw(ctx, W / 2, Math.round(H * 0.3) + 44, 2);
+    }
+  }
+
+  /** Name tags over other people's cars, ping, connection trouble. */
+  private drawOnlineRaceUi(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+    const net = this.netRace!.net;
+    const vp = this.renderer.viewports[0];
+    const p = this.tagPos;
+    net.spec.entrants.forEach((e, i) => {
+      if (e.playerId < 0 || e.playerId === this.online.me) return;
+      p.copy(this.view.cars[i].root.position);
+      p.y += 2.4;
+      p.project(vp.cam.camera);
+      if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1) return;
+      const x = vp.x + ((p.x + 1) / 2) * vp.w;
+      const y = ((1 - p.y) / 2) * vp.h - 10;
+      drawText(ctx, e.name, x, y, { align: 'center', color: e.color });
+    });
+    const conn = this.online.conn;
+    if (conn.state !== 'open') {
+      const st = connText(conn.state, conn.rtt);
+      drawText(ctx, st.text, W / 2, Math.round(H * 0.4), { scale: 2, color: st.color, align: 'center' });
+    } else if (conn.rtt >= 0) {
+      // Under the minimap (same layout as drawRaceUi).
+      const mh = Math.round(Math.round(Math.min(110, W * 0.2)) * 0.75);
+      drawText(ctx, `PING ${Math.round(conn.rtt)}`, W - 8, 8 + mh + 4, { color: pingColor(conn.rtt), align: 'right' });
+    }
+    if (net.spectating && !this.showingResults) {
+      drawText(ctx, 'WATCHING - YOU JOIN THE NEXT RACE', W / 2, H - 24, { color: '#ffd84a', align: 'center' });
     }
   }
 

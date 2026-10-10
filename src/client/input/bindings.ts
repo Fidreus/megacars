@@ -8,6 +8,7 @@ export interface KeyBinding {
   fireFront: readonly string[];
   fireRear: readonly string[];
   turbo: readonly string[];
+  reset: readonly string[];
 }
 
 /** Single player: arrows or WASD, weapons on the other hand. */
@@ -19,6 +20,7 @@ export const SOLO_KEYS: KeyBinding = {
   fireFront: ['Space', 'KeyK'],
   fireRear: ['KeyJ', 'KeyX'],
   turbo: ['KeyL', 'KeyC'],
+  reset: ['KeyR'],
 };
 
 /** Split screen, left player. */
@@ -30,6 +32,7 @@ export const P1_KEYS: KeyBinding = {
   fireFront: ['KeyG'],
   fireRear: ['KeyF'],
   turbo: ['KeyH'],
+  reset: ['KeyR'],
 };
 
 /** Split screen, right player. */
@@ -41,4 +44,5 @@ export const P2_KEYS: KeyBinding = {
   fireFront: ['Period', 'Numpad0'],
   fireRear: ['Comma', 'Numpad1'],
   turbo: ['Slash', 'Numpad2'],
+  reset: ['Enter', 'NumpadEnter'],
 };

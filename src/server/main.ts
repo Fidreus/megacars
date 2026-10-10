@@ -5,7 +5,8 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { MsgType } from '../shared/net/protocol.ts';
+import { TICK_RATE } from '../shared/config/constants.ts';
+import { Client, GameServer } from './gameServer.ts';
 
 // SERVER_PORT wins in development (PORT may be set for the Vite dev server).
 const PORT = Number(process.env.SERVER_PORT ?? process.env.PORT ?? 8787);
@@ -13,7 +14,6 @@ const DIST = resolve(import.meta.dirname, '../../dist');
 const SHOTS = resolve(import.meta.dirname, '../../screenshots');
 /** Development helpers (screenshot upload) are only enabled by `npm run dev`. */
 const DEV = process.env.MEGACARS_DEV === '1' || (process.env.SERVER_PORT !== undefined && process.env.NODE_ENV !== 'production');
-const START = performance.now();
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -95,43 +95,83 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
 
+const game = new GameServer();
+game.log = (msg) => console.log(msg);
+
 interface Conn {
   ws: WebSocket;
-  alive: boolean;
+  client: Client;
+  /** Heartbeats without an answer. */
+  missed: number;
 }
 const conns = new Set<Conn>();
 
 wss.on('connection', (ws: WebSocket) => {
-  const conn: Conn = { ws, alive: true };
+  const client = game.open({
+    sendText: (s) => ws.readyState === ws.OPEN && ws.send(s),
+    sendBinary: (d) => ws.readyState === ws.OPEN && ws.send(d),
+    close: (code, reason) => ws.close(code, reason),
+  });
+  const conn: Conn = { ws, client, missed: 0 };
   conns.add(conn);
-  ws.on('pong', () => (conn.alive = true));
-  ws.on('message', (data, isBinary) => {
-    if (!isBinary) return;
-    const buf = data as Buffer;
-    if (buf.length >= 9 && buf[0] === MsgType.Ping) {
-      // Echo the client's timestamp together with the server clock.
-      const out = Buffer.alloc(17);
-      out[0] = MsgType.Pong;
-      buf.copy(out, 1, 1, 9);
-      out.writeDoubleLE(performance.now() - START, 9);
-      ws.send(out);
+  ws.on('pong', (data: Buffer) => {
+    conn.missed = 0;
+    if (data.length === 8) {
+      const rtt = performance.now() - data.readDoubleLE(0);
+      client.rtt = client.rtt < 0 ? rtt : client.rtt * 0.7 + rtt * 0.3;
     }
   });
-  ws.on('close', () => conns.delete(conn));
+  ws.on('message', (data, isBinary) => {
+    if (isBinary) {
+      const buf = data as Buffer;
+      game.binary(client, new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
+    } else {
+      game.text(client, data.toString());
+    }
+  });
+  ws.on('close', () => {
+    conns.delete(conn);
+    game.closed(client);
+  });
+  ping(conn);
 });
 
-// Heartbeat: drop dead connections and keep proxies from idling us out.
+function ping(c: Conn): void {
+  const b = Buffer.alloc(8);
+  b.writeDoubleLE(performance.now(), 0);
+  c.ws.ping(b);
+}
+
+// Heartbeat: drop dead connections, measure round trips, keep proxies awake.
 setInterval(() => {
   for (const c of conns) {
-    if (!c.alive) {
+    if (++c.missed > 5) {
       c.ws.terminate();
       conns.delete(c);
+      game.closed(c.client);
       continue;
     }
-    c.alive = false;
-    c.ws.ping();
+    ping(c);
   }
-}, 10_000).unref();
+  game.refreshLobbies();
+  game.sweep();
+}, 2_000).unref();
+
+// The race clock: 60 ticks per second for every room with a race running.
+const TICK_MS = 1000 / TICK_RATE;
+let nextTick = performance.now();
+function loop(): void {
+  const now = performance.now();
+  let steps = 0;
+  while (now >= nextTick && steps < 10) {
+    game.tick();
+    nextTick += TICK_MS;
+    steps++;
+  }
+  if (now - nextTick > 250) nextTick = now;
+  setTimeout(loop, Math.max(0, nextTick - performance.now()));
+}
+loop();
 
 server.listen(PORT, () => {
   console.log(`megacars server on http://localhost:${PORT} (static: ${existsSync(DIST) ? DIST : 'not built'})`);

@@ -85,6 +85,19 @@ export function installDebugApi(app: App): void {
     reset() {
       app.resetCar(app.session.playerCars[0]);
     },
+    /** Online status: screen, room, connection and prediction health. */
+    online() {
+      const o = app.online;
+      const n = app.netRace?.net;
+      return {
+        mode: app.mode,
+        conn: o.state,
+        me: o.me,
+        rtt: Math.round(o.conn.rtt),
+        room: o.room,
+        race: n ? { tick: n.world.tick, server: n.predictor.serverTick, lead: n.predictor.lead, rate: n.rate, cars: n.localCars } : null,
+      };
+    },
     /** Start a race straight away, e.g. startRace({ players: 2, laps: 1 }). */
     startRace(over: Record<string, unknown> = {}) {
       app.startRace({ ...app.settings, ...over });

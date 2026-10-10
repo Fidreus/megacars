@@ -98,7 +98,7 @@ export class Minimap {
   private ox = 0;
   private oz = 0;
 
-  draw(ctx: CanvasRenderingContext2D, track: Track, world: World, colors: string[], players: number[], x: number, y: number, w: number, h: number): void {
+  draw(ctx: CanvasRenderingContext2D, track: Track, world: World, colors: readonly string[], players: readonly number[], x: number, y: number, w: number, h: number): void {
     const key = `${track.def.id}:${w}x${h}`;
     if (key !== this.key) this.build(track, w, h, key);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
