@@ -1,9 +1,10 @@
 # Megacars
 
 Retro top-down combat racer for the browser, inspired by the Amiga classic
-Super Cars II. 3D rendered at Amiga-like resolution with pixel-snapped
-camera, toon shading and hard shadows; arcade drift physics where full-speed
-corners are taken sideways.
+Super Cars II. 3D rendered at a low internal resolution (~360 lines) with a
+pixel-snapped camera, toon-shaded world, glossy cars, hard shadows, bloom and
+optional Amiga colour modes/CRT; arcade drift physics where full-speed corners
+are taken sideways.
 
 ## Kom igång
 
@@ -35,7 +36,7 @@ och snö sladdar av sig själva.
 | P | Autopilot (AI kör din bil) |
 | M | Stämning: dag / solnedgång / natt |
 | 3 | CRT: av / scanlines / full (mask + kurvatur) |
-| 4 | Färger: full / 12-bit Amiga / 32 färger |
+| 4 | Färger: full (standard) / 12-bit Amiga / 32 färger |
 | V | Delad skärm (test, höger vy följer AI-bil 1) |
 | 1 | Debugvy (väggar, racinglinje, checkpoints) |
 | 2 | Telemetri (slip, sidokraft, underlag) |
@@ -44,7 +45,7 @@ och snö sladdar av sig själva.
 Handkontroll: vänster spak styr, RT gas, LT broms.
 
 URL-parametrar: `?ai=0..7` (antal AI-bilar), `?mood=day|sunset|night`,
-`?debug=1`, `?scale=N` (pixelstorlek), `?mpp=0.19` (meter per pixel),
+`?debug=1`, `?scale=N` (pixelstorlek), `?mpp=0.19` (zoom: meter per pixel vid 270 linjer),
 `?scanlines=1`, `?mute=1`.
 
 Felsökning i konsolen: `__megacars.state()`, `.advance(ticks)`, `.pause()`,

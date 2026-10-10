@@ -78,7 +78,7 @@ export class App {
   private readonly camInit = [false, false];
   /** Which car each viewport follows. */
   readonly viewCar = [0, 1];
-  private baseMpp = 0.19;
+  private baseView = 51.3;
   private showTelemetry: boolean;
   private fpsTime = 0;
   private fpsFrames = 0;
@@ -102,8 +102,8 @@ export class App {
     this.renderer = new RetroRenderer(canvas, params.scale);
     this.renderer.crt = params.scanlines ? 1 : 0;
     const cam = this.renderer.viewports[0].cam;
-    if (params.mpp) cam.metersPerPixel = params.mpp;
-    this.baseMpp = cam.metersPerPixel;
+    if (params.mpp) cam.viewHeight = params.mpp * 270;
+    this.baseView = cam.viewHeight;
 
     this.tuning = cloneTuning(DEFAULT_TUNING);
     loadSavedTuning(this.tuning);
@@ -354,7 +354,8 @@ export class App {
         c.steer,
         c.latAccel,
         c.longAccel,
-        c.brakeTicks > 0 && Math.hypot(c.vx, c.vz) > 1,
+        (c.brakeTicks > 0 || c.longAccel < -10) && Math.hypot(c.vx, c.vz) > 1,
+        Math.hypot(c.vx, c.vz),
         dt,
       );
     }
@@ -362,12 +363,14 @@ export class App {
     const views = this.renderer.viewCount;
     for (let v = 0; v < views; v++) this.updateCamera(v, dt);
     this.particles.time.value = (this.world.tick + alpha) * DT;
+    this.particles.dither.value = this.renderer.paletteMode === 0 ? 0 : 1;
     animTime.value = performance.now() / 1000;
     this.particles.flush();
     this.updateAudio();
     this.drawHud(dt);
     for (let v = 0; v < views; v++) {
       this.updateSun(this.camTargets[v]);
+      this.particles.pxScale.value = 0.19 / this.renderer.viewports[v].cam.metersPerPixel;
       this.renderer.renderView(this.scene, v);
     }
     this.renderer.present();
@@ -408,9 +411,9 @@ export class App {
     const r = this.renderer;
     r.setSplit(!r.isSplit);
     const base = r.viewports[0].cam;
-    const mpp = r.isSplit ? this.baseMpp * 1.25 : this.baseMpp;
+    const view = r.isSplit ? this.baseView * 1.25 : this.baseView;
     for (const vp of r.viewports) {
-      vp.cam.metersPerPixel = mpp;
+      vp.cam.viewHeight = view;
       vp.cam.tilt = base.tilt;
     }
     this.camInit[1] = false;
@@ -436,6 +439,7 @@ export class App {
       cam.update(tx, 0, tz, vp.w, vp.h);
       this.updateSun(t);
       animTime.value = frozen;
+      this.particles.pxScale.value = 0.19 / cam.metersPerPixel;
       this.renderer.renderView(this.scene, 0);
       const out = vp.post.out;
       const buf = new Uint8Array(out.width * out.height * 4);

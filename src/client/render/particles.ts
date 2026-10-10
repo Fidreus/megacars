@@ -9,6 +9,7 @@ const MAX = 8192;
 const VERT = /* glsl */ `
 uniform float uTime;
 uniform float uLight;
+uniform float uPxScale;
 attribute vec3 aVel;
 attribute vec4 aTime;   // birth, life, gravity, drag
 attribute vec2 aSize;   // start px, end px
@@ -31,22 +32,32 @@ void main() {
   // HDR colours (sparks, fire) glow on their own; the rest takes the scene light.
   vColor = max(aColor.r, max(aColor.g, aColor.b)) > 1.0 ? aColor : aColor * uLight;
   vFade = 1.0 - t;
-  gl_PointSize = mix(aSize.x, aSize.y, t);
+  gl_PointSize = mix(aSize.x, aSize.y, t) * uPxScale;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
 }
 `;
 
 const FRAG = /* glsl */ `
+uniform float uDither;
 varying vec3 vColor;
 varying float vFade;
 const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
 void main() {
   vec2 c = gl_PointCoord - 0.5;
-  if (dot(c, c) > 0.25) discard;
-  ivec2 g = ivec2(mod(gl_FragCoord.xy, 4.0));
-  float threshold = (BAYER[g.y * 4 + g.x] + 0.5) / 16.0;
-  if (vFade * 1.15 < threshold) discard;
-  gl_FragColor = vec4(vColor, 1.0);
+  float r2 = dot(c, c);
+  if (r2 > 0.25) discard;
+  bool hot = max(vColor.r, max(vColor.g, vColor.b)) > 1.0;
+  if (uDither > 0.5 || hot) {
+    // Retro modes (and sparks): screen-door fade with an ordered dither.
+    ivec2 g = ivec2(mod(gl_FragCoord.xy, 4.0));
+    float threshold = (BAYER[g.y * 4 + g.x] + 0.5) / 16.0;
+    if (vFade * 1.15 < threshold) discard;
+    gl_FragColor = vec4(vColor, 1.0);
+  } else {
+    // Full colour: soft, translucent puffs.
+    float edge = 1.0 - smoothstep(0.12, 0.25, r2);
+    gl_FragColor = vec4(vColor, clamp(vFade * 0.9, 0.0, 1.0) * edge * 0.75);
+  }
 }
 `;
 
@@ -55,6 +66,10 @@ export class Particles {
   readonly time = { value: 0 };
   /** Scene light level for unlit particles (smoke, dust). */
   readonly light = { value: 1 };
+  /** Point sizes are authored for 0.19 m/pixel; this scales them to the current zoom. */
+  readonly pxScale = { value: 1 };
+  /** 1 = dithered screen-door fade (retro colour modes), 0 = alpha blended. */
+  readonly dither = { value: 0 };
   private readonly pos = new Float32Array(MAX * 3);
   private readonly vel = new Float32Array(MAX * 3);
   private readonly tim = new Float32Array(MAX * 4);
@@ -82,8 +97,9 @@ export class Particles {
     const mat = new THREE.ShaderMaterial({
       vertexShader: VERT,
       fragmentShader: FRAG,
-      uniforms: { uTime: this.time, uLight: this.light },
+      uniforms: { uTime: this.time, uLight: this.light, uPxScale: this.pxScale, uDither: this.dither },
       depthWrite: false,
+      transparent: true,
     });
     this.points = new THREE.Points(geo, mat);
     this.points.frustumCulled = false;

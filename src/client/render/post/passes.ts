@@ -203,7 +203,7 @@ export class PostChain {
     u.uSize.value.set(w, h);
     u.uNear.value = camera.near;
     u.uFar.value = camera.far;
-    u.uOutline.value = outline ? 0.5 : 0;
+    u.uOutline.value = outline ? 0.4 : 0;
     u.uBloom.value = grade.bloom;
     u.uTint.value.copy(grade.tint);
     u.uLift.value.copy(grade.lift);

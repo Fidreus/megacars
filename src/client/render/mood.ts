@@ -42,7 +42,7 @@ export const MOODS: Mood[] = [
     tint: new THREE.Color(1, 1, 1),
     lift: new THREE.Color(0, 0, 0),
     exposure: 1,
-    bloom: 0.6,
+    bloom: 0.75,
     bloomThreshold: 1.1,
     lights: false,
     particleLight: 1,
@@ -72,7 +72,7 @@ export const MOODS: Mood[] = [
   {
     id: 'night',
     name: 'NIGHT',
-    sunDir: new THREE.Vector3(60, 120, -50).normalize(),
+    sunDir: new THREE.Vector3(50, 130, 70).normalize(),
     sunColor: '#9fb4ff',
     sunIntensity: 0.45,
     skyColor: '#2a3a66',

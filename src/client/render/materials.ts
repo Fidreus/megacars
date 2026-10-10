@@ -1,4 +1,4 @@
-// Shared materials: toon shading with three hard light bands gives the flat,
+// Shared materials: toon shading with four hard light bands gives the flat,
 // hand-shaded look of pixel art.
 
 import * as THREE from 'three';
@@ -10,7 +10,7 @@ let gradient: THREE.DataTexture | null = null;
 
 export function toonGradient(): THREE.DataTexture {
   if (gradient) return gradient;
-  const data = new Uint8Array([90, 170, 255]);
+  const data = new Uint8Array([78, 138, 198, 255]);
   gradient = new THREE.DataTexture(data, data.length, 1, THREE.RedFormat);
   gradient.minFilter = THREE.NearestFilter;
   gradient.magFilter = THREE.NearestFilter;

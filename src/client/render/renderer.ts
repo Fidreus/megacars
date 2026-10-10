@@ -1,5 +1,5 @@
 // Retro render pipeline: each viewport renders the 3D scene into a small
-// render target (internal resolution ≈ 240 lines), runs the low-res post
+// render target (internal resolution ≈ 360 lines), runs the low-res post
 // chain (outlines, bloom, grading, dither, palette), then a composite pass
 // upscales it with nearest-neighbour filtering by an integer factor, applies
 // the sub-pixel scroll offset, overlays the Canvas2D UI and an optional CRT look.
@@ -11,7 +11,7 @@ import { PixelCamera } from './pixelCamera.ts';
 import { FullscreenPass, PostChain, type GradeSettings } from './post/passes.ts';
 
 /** Target number of internal lines; the integer scale is floor(deviceHeight / this). */
-const TARGET_LINES = 240;
+const TARGET_LINES = 360;
 
 export class Viewport {
   readonly cam = new PixelCamera();
@@ -117,13 +117,13 @@ export class RetroRenderer {
   forcedScale: number | null = null;
   /** 0 = off, 1 = scanlines + vignette, 2 = + aperture mask + curvature. */
   crt = 0;
-  paletteMode: PaletteModeId = PaletteMode.Bits12;
+  paletteMode: PaletteModeId = PaletteMode.Off;
   outlines = true;
   readonly grade: GradeSettings = {
     tint: new THREE.Color(1, 1, 1),
     lift: new THREE.Color(0, 0, 0),
     exposure: 1,
-    bloom: 0.6,
+    bloom: 0.75,
     bloomThreshold: 1.1,
   };
   private readonly fs = new FullscreenPass();

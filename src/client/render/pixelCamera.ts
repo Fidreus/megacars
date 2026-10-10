@@ -11,7 +11,12 @@ export class PixelCamera {
   readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 1500);
   /** Angle between the view direction and the ground. */
   tilt = 57 * DEG;
-  /** World metres covered by one low-res pixel. */
+  /**
+   * Visible height of the view in camera-plane metres. Framing is the same at
+   * any resolution; metres per pixel follow from the viewport height.
+   */
+  viewHeight = 51.3;
+  /** World metres covered by one low-res pixel (derived in update()). */
   metersPerPixel = 0.19;
   distance = 600;
   /** Sub-pixel remainder of the ideal camera position, in low-res pixels. */
@@ -23,6 +28,7 @@ export class PixelCamera {
 
   /** Point the camera at a world position; `w`/`h` are the viewport size in low-res pixels. */
   update(tx: number, ty: number, tz: number, w: number, h: number): void {
+    this.metersPerPixel = this.viewHeight / h;
     const p = this.metersPerPixel;
     const ct = Math.cos(this.tilt);
     const st = Math.sin(this.tilt);

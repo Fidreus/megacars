@@ -89,7 +89,7 @@ export async function openTuningPanel(t: CarTuning, camera: CameraSettings): Pro
   add(col, 'carRestitution', 0, 1, 0.01);
 
   const camF = gui.addFolder('Camera');
-  camF.add(camera.cam, 'metersPerPixel', 0.1, 0.35, 0.005).name('metres / pixel');
+  camF.add(camera.cam, 'viewHeight', 30, 90, 0.5).name('view height m');
   camF.add({ get tiltDeg() { return (camera.cam.tilt * 180) / Math.PI; }, set tiltDeg(v: number) { camera.cam.tilt = (v * Math.PI) / 180; } }, 'tiltDeg', 35, 90, 1).name('tilt °');
   camF.add(camera.lookAhead, 'value', 0, 0.8, 0.01).name('look-ahead s');
 
