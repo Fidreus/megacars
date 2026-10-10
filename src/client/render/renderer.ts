@@ -59,6 +59,7 @@ uniform sampler2D tUI;
 uniform vec2 uOff0;
 uniform vec2 uOff1;
 uniform float uScale;
+uniform float uUiScale;
 uniform float uSplitX;
 uniform float uView1X;
 uniform float uCrt;
@@ -73,7 +74,7 @@ vec3 sampleScene(vec2 frag) {
     vec2 f = frag - vec2(uView1X * uScale, 0.0);
     col = texelFetch(tView1, ivec2(floor((f + uOff1) / uScale)) + ivec2(1), 0).rgb;
   }
-  vec4 ui = texelFetch(tUI, ivec2(lp), 0);
+  vec4 ui = texelFetch(tUI, ivec2(floor(frag / uUiScale)), 0);
   return mix(col, ui.rgb, ui.a);
 }
 
@@ -112,6 +113,9 @@ export class RetroRenderer {
   deviceW = 1;
   deviceH = 1;
   scale = 1;
+  /** Device pixels per UI pixel: the 3D scale, or bigger on phones (readable text, thumb-sized menus). */
+  uiScale = 1;
+  private uiBoost = false;
   lowW = 1;
   lowH = 1;
   forcedScale: number | null = null;
@@ -161,6 +165,7 @@ export class RetroRenderer {
         uOff0: { value: new THREE.Vector2() },
         uOff1: { value: new THREE.Vector2() },
         uScale: { value: 1 },
+        uUiScale: { value: 1 },
         uSplitX: { value: 1e9 },
         uView1X: { value: 0 },
         uCrt: { value: 0 },
@@ -176,8 +181,11 @@ export class RetroRenderer {
     this.observer = new ResizeObserver((entries) => {
       const e = entries[0];
       const box = e.devicePixelContentBoxSize?.[0];
-      const w = box ? box.inlineSize : Math.round(e.contentRect.width * devicePixelRatio);
-      const h = box ? box.blockSize : Math.round(e.contentRect.height * devicePixelRatio);
+      const dpr = window.devicePixelRatio || 1;
+      // Some browsers (and device emulation) report CSS pixels here: then scale.
+      const real = box && !(dpr > 1.01 && Math.abs(box.inlineSize - e.contentRect.width) < 1);
+      const w = real ? box.inlineSize : Math.round(e.contentRect.width * dpr);
+      const h = real ? box.blockSize : Math.round(e.contentRect.height * dpr);
       this.resize(w, h);
     });
     try {
@@ -216,7 +224,10 @@ export class RetroRenderer {
     this.scale = s;
     this.lowW = Math.ceil(this.deviceW / s);
     this.lowH = Math.ceil(this.deviceH / s);
-    this.ui.resize(this.lowW, this.lowH);
+    // Phones: UI pixels of about 1.35 CSS px, but keep at least 240 lines.
+    const dpr = window.devicePixelRatio || 1;
+    this.uiScale = this.uiBoost ? Math.max(s, Math.min(Math.ceil(dpr * 1.35), Math.max(1, Math.floor(this.deviceH / 240)))) : s;
+    this.ui.resize(Math.ceil(this.deviceW / this.uiScale), Math.ceil(this.deviceH / this.uiScale));
     if (this.split) {
       const w = Math.floor((this.lowW - 2) / 2);
       this.viewports[0].resize(0, w, this.lowH);
@@ -224,6 +235,18 @@ export class RetroRenderer {
     } else {
       this.viewports[0].resize(0, this.lowW, this.lowH);
     }
+  }
+
+  /** Bigger UI pixels for touch screens. */
+  setUiBoost(on: boolean): void {
+    if (on === this.uiBoost) return;
+    this.uiBoost = on;
+    this.layout();
+  }
+
+  /** UI pixels per low-res 3D pixel (horizontal, vertical). */
+  get uiPerLow(): [number, number] {
+    return [this.ui.w / this.lowW, this.ui.h / this.lowH];
   }
 
   /** Number of active viewports. */
@@ -257,6 +280,7 @@ export class RetroRenderer {
       u.uSplitX.value = 1e9;
     }
     u.uScale.value = s;
+    u.uUiScale.value = this.uiScale;
     u.uCrt.value = this.crt;
     u.uDevice.value.set(this.deviceW, this.deviceH);
     this.gl.setRenderTarget(null);

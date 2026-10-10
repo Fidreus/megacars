@@ -22,6 +22,8 @@ export interface RaceSettings {
   soundVolume: number;
   /** 0 automatic, 1 high, 2 medium, 3 low. */
   graphics: number;
+  /** Touch controls: accelerate unless braking. */
+  touchAutoGas: boolean;
   /** Bumped when the default volumes change, so saved settings pick them up once. */
   audioRev?: number;
 }
@@ -42,6 +44,7 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   musicVolume: 1,
   soundVolume: 7,
   graphics: 0,
+  touchAutoGas: true,
   audioRev: AUDIO_REV,
 };
 
@@ -69,6 +72,7 @@ export function loadSettings(): RaceSettings {
   s.musicVolume = Math.max(0, Math.min(10, Math.round(s.musicVolume)));
   s.soundVolume = Math.max(0, Math.min(10, Math.round(s.soundVolume)));
   s.graphics = [0, 1, 2, 3].includes(s.graphics) ? s.graphics : 0;
+  s.touchAutoGas = s.touchAutoGas !== false;
   return s;
 }
 

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>MEGACARS</title>
     <meta name="description" content="Top-down retro combat racing in the browser." />
     <meta name="theme-color" content="#0a0c1a" />
@@ -14,8 +14,18 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Megacars" />
     <style>
-      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-      #game { display: block; width: 100vw; height: 100vh; outline: none; cursor: none; }
+      html, body {
+        margin: 0; height: 100%; background: #000; overflow: hidden; overscroll-behavior: none;
+        -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+      }
+      /* Inside the safe area (phone notches and rounded corners get black bars). */
+      #game {
+        position: fixed; display: block; outline: none; cursor: none; touch-action: none;
+        left: env(safe-area-inset-left, 0px); right: env(safe-area-inset-right, 0px);
+        top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px);
+        width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+        height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      }
       #loading {
         position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
         color: #ffd84a; background: #0a0c1a; font: bold 28px/1.4 ui-monospace, Menlo, monospace; letter-spacing: 4px;

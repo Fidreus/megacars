@@ -25,13 +25,20 @@ export interface MenuEvents {
 export class Menu {
   index = 0;
   items: MenuItem[];
-  private rects: { x: number; y: number; w: number; h: number }[] = [];
+  private rects: { x: number; y: number; w: number; h: number; item: number }[] = [];
+  /** First item shown when the list is taller than the screen (scrolled). */
+  private first = 0;
   private readonly events: MenuEvents;
   private blink = 0;
 
   constructor(items: MenuItem[], events: MenuEvents = {}) {
     this.items = items;
     this.events = events;
+  }
+
+  /** Where each shown row was drawn (UI pixels; item -1/-2 = scroll arrows). */
+  get hitRects(): readonly { x: number; y: number; w: number; h: number; item: number }[] {
+    return this.rects;
   }
 
   /** The selected item is a text field (letters should type, not navigate). */
@@ -67,15 +74,23 @@ export class Menu {
     if (nav.confirm) this.activate(item, 1);
     if (nav.pointerMoved || nav.click) {
       const hit = this.rects.findIndex((r) => nav.pointerX >= r.x && nav.pointerX < r.x + r.w && nav.pointerY >= r.y && nav.pointerY < r.y + r.h);
-      if (hit >= 0 && hit !== this.index) {
-        this.index = hit;
+      const item = hit >= 0 ? this.rects[hit].item : -1;
+      if (item < 0 && hit >= 0 && nav.click) {
+        // A scroll arrow: page up or down.
+        const page = Math.max(1, this.rects.filter((r) => r.item >= 0).length - 1);
+        this.index = Math.max(0, Math.min(this.items.length - 1, this.index + (item === -1 ? -page : page)));
+        this.events.onMove?.();
+        return;
+      }
+      if (item >= 0 && item !== this.index) {
+        this.index = item;
         this.events.onMove?.();
       }
       if (nav.click && hit >= 0) {
         const r = this.rects[hit];
-        const it = this.items[hit];
+        const it = this.items[r.item];
         // Clicking the left third of a value item steps it down.
-        this.activate(it, it.change && nav.pointerX < r.x + r.w / 3 ? -1 : 1);
+        if (r.item >= 0) this.activate(it, it.change && nav.pointerX < r.x + r.w / 3 ? -1 : 1);
       }
     }
   }
@@ -92,22 +107,45 @@ export class Menu {
   }
 
   /** Draw centred at (cx, top) with the given text scale. */
-  draw(ctx: CanvasRenderingContext2D, cx: number, top: number, scale = 1, dt = 0, panel = true): void {
+  /** Draw centred at (cx, top); a list taller than `bottom` scrolls with the selection. */
+  draw(ctx: CanvasRenderingContext2D, cx: number, top: number, scale = 1, dt = 0, panel = true, bottom = Infinity): void {
     this.blink += dt;
     this.rects = [];
     const rowH = LINE_H * scale + 4;
     const widest = Math.max(...this.items.map((it) => textWidth(it.label(), scale))) + 28 * scale;
+    const n = this.items.length;
+    let rows = Math.max(3, Math.floor((bottom - top) / rowH));
+    const scroll = rows < n;
+    if (scroll) {
+      rows -= 2; // the ↑ and ↓ rows
+      if (this.index < this.first) this.first = this.index;
+      if (this.index >= this.first + rows) this.first = this.index - rows + 1;
+      this.first = Math.max(0, Math.min(n - rows, this.first));
+    } else {
+      this.first = 0;
+      rows = n;
+    }
+    const shown = scroll ? rows + 2 : n;
     if (panel) {
       const pw = widest + 24;
-      const ph = this.items.length * rowH + 12;
+      const ph = shown * rowH + 12;
       ctx.fillStyle = 'rgba(8,10,24,0.72)';
       ctx.fillRect(Math.round(cx - pw / 2), top - 9, Math.round(pw), ph);
       ctx.fillStyle = '#ffd84a';
       ctx.fillRect(Math.round(cx - pw / 2), top - 9, Math.round(pw), 1);
       ctx.fillRect(Math.round(cx - pw / 2), top - 9 + ph - 1, Math.round(pw), 1);
     }
+    let y0 = top;
+    const arrow = (label: string, item: number, on: boolean) => {
+      drawText(ctx, label, cx, y0, { scale, color: on ? '#ffd84a' : '#3a4256', align: 'center' });
+      this.rects.push({ x: cx - widest / 2, y: y0 - 3, w: widest, h: rowH, item });
+      y0 += rowH;
+    };
+    if (scroll) arrow('↑', -1, this.first > 0);
     this.items.forEach((it, i) => {
-      const y = top + i * rowH;
+      if (i < this.first || i >= this.first + rows) return;
+      const y = y0;
+      y0 += rowH;
       const off = it.disabled?.() ?? false;
       let label = it.label();
       const selected = i === this.index;
@@ -128,7 +166,8 @@ export class Menu {
         }
       }
       drawText(ctx, label, cx, y, { scale, color: off ? '#6a7488' : selected ? '#ffffff' : '#c8d0dc', align: 'center' });
-      this.rects.push({ x: cx - widest / 2, y: y - 3, w: widest, h: rowH });
+      this.rects.push({ x: cx - widest / 2, y: y - 3, w: widest, h: rowH, item: i });
     });
+    if (scroll) arrow('↓', -2, this.first + rows < n);
   }
 }

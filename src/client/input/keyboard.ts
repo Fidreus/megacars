@@ -16,6 +16,8 @@ export class Keyboard {
   constructor(target: Window) {
     target.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Typing in a real text box (the phone keyboard bridge) isn't game input.
+      if (e.target instanceof HTMLInputElement) return;
       if (GAME_KEYS.has(e.code)) e.preventDefault();
       if (!e.repeat) {
         this.pressed.add(e.code);

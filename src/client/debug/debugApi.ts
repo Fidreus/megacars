@@ -30,6 +30,7 @@ export function installDebugApi(app: App): void {
           speed: +Math.hypot(c.vx, c.vz).toFixed(2),
           y: +c.y.toFixed(2),
           heading: +c.heading.toFixed(3),
+          steer: +c.steer.toFixed(2),
           slipDeg: +((c.slip * 180) / Math.PI).toFixed(1),
           sliding: c.sliding,
           lap: c.lap,
@@ -129,6 +130,26 @@ export function installDebugApi(app: App): void {
       return +app.audio.level().toFixed(4);
     },
     /** Open the controls screen; read the current bindings. */
+    /** The active menu: labels and where to tap each row (CSS pixels). */
+    menu() {
+      const m = app.activeMenu;
+      if (!m) return null;
+      const rect = app.renderer.canvas.getBoundingClientRect();
+      const k = rect.width / app.renderer.ui.w;
+      return {
+        mode: app.mode,
+        index: m.index,
+        rows: m.hitRects.map((r) => ({ item: r.item, label: r.item >= 0 ? m.items[r.item].label() : r.item === -1 ? 'UP' : 'DOWN', x: rect.left + (r.x + r.w / 2) * k, y: rect.top + (r.y + r.h / 2) * k })),
+      };
+    },
+    focused() {
+      const el = document.activeElement;
+      return el ? el.tagName : null;
+    },
+    touch() {
+      const t = app.touch;
+      return { enabled: t.enabled, visible: t.visible, steer: +t.steer.toFixed(2), throttle: t.throttle, brake: t.brake, buttons: t.buttons, ui: [app.renderer.ui.w, app.renderer.ui.h, app.renderer.uiScale] };
+    },
     openControls() {
       app.mode = 'controls';
     },

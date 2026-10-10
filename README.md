@@ -120,6 +120,21 @@ Alla tangenter och knappar kan bytas under **OPTIONS → CONTROLS** (en
 spelare, delad skärm vänster/höger och handkontroll, två platser per
 funktion). **HOW TO PLAY** i titelmenyn visar de nuvarande knapparna.
 
+## Mobil och surfplatta
+
+Spelet fungerar på telefon i liggande läge (i stående visas "vänd
+telefonen", och racet pausas). Vänster tumme styr genom att dra i sidled
+där den landar (analogt), höger tumme har BRAKE, DRIFT, MISSILE, MINE och
+TURBO (ammunitionen syns på knapparna), RESET och paus uppe till höger.
+**AUTO GAS** (på som standard, OPTIONS → TOUCH) gasar själv så att höger
+tumme är fri; broms/back avbryter. Menyerna styrs genom att trycka, långa
+menyer scrollar med pilarna, och en BACK-knapp finns uppe till vänster.
+Namn och rumskod öppnar telefonens tangentbord. Gränssnittet ritas med
+större pixlar på pekskärmar så att texten går att läsa och träffa. Första
+tryck går till helskärm (Android); installerat som app (Lägg till på
+hemskärmen) körs det i helskärm även på iPhone. Telefoner startar på
+grafiknivå MEDIUM i AUTO.
+
 ## Grafik och prestanda
 
 **OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM eller LOW. AUTO börjar på HIGH och

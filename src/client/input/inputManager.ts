@@ -4,6 +4,7 @@ import { Btn, quantizeInput, type CarInput } from '../../shared/sim/input.ts';
 import { PAD_DEFAULT, type KeyBinding, type PadBinding } from './bindings.ts';
 import { makePadState, readPad } from './gamepad.ts';
 import { Keyboard } from './keyboard.ts';
+import type { TouchControls } from './touch.ts';
 
 export interface LocalPlayerInput {
   keys: KeyBinding | null;
@@ -18,6 +19,8 @@ export class InputManager {
   /** Debug/automation override for player 0 (window.__megacars.drive). */
   override: CarInput | null = null;
   overrideTicks = 0;
+  /** On-screen touch controls (drive player 1 while they are shown). */
+  touch: TouchControls | null = null;
   /** Pads that were the most recently used device of their player. */
   private readonly padInUse = new Set<number>();
 
@@ -66,6 +69,18 @@ export class InputManager {
         if (p.drift) buttons |= Btn.Drift;
         if (p.reset) buttons |= Btn.Reset;
       }
+    }
+    const t = this.touch;
+    if (first && t?.enabled && t.visible) {
+      if (t.steer !== 0 || !(buttons & Btn.Analog)) {
+        steer = t.steer;
+        buttons |= Btn.Analog;
+      }
+      throttle = Math.max(throttle, t.throttle);
+      brake = Math.max(brake, t.brake);
+      // Braking (reverse) cancels the automatic gas.
+      if (t.brake > 0 && t.autoGas) throttle = 0;
+      buttons |= t.buttons;
     }
     out.steer = steer;
     out.throttle = throttle;

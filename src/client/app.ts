@@ -29,6 +29,8 @@ import { lightsOn, RaceView } from './game/raceView.ts';
 import { DIFFICULTIES, loadSettings, saveSettings, type RaceSettings } from './game/settings.ts';
 import { keysLabel, loadControls, type KeyBinding } from './input/bindings.ts';
 import { ControlsScreen } from './ui/screens/controls.ts';
+import { TouchControls } from './input/touch.ts';
+import { TextBridge } from './input/textBridge.ts';
 import { drawHelp } from './ui/screens/help.ts';
 import { VERSION } from './version.ts';
 import { InputManager, type LocalPlayerInput } from './input/inputManager.ts';
@@ -148,6 +150,11 @@ export class App {
   /** Key and gamepad bindings (saved in the browser). */
   readonly controls = loadControls();
   private readonly controlsScreen: ControlsScreen;
+  /** On-screen controls for phones and tablets. */
+  readonly touch: TouchControls;
+  private readonly textBridge: TextBridge;
+  /** The touch BACK button (UI pixels), when shown. */
+  private backRect: { x: number; y: number; w: number; h: number } | null = null;
   readonly music: Music;
   private songToast = 0;
   private cupRace = false;
@@ -195,7 +202,20 @@ export class App {
       const rect = canvas.getBoundingClientRect();
       const sx = (cx - rect.left) * (this.renderer.deviceW / rect.width);
       const sy = (cy - rect.top) * (this.renderer.deviceH / rect.height);
-      return [Math.floor(sx / this.renderer.scale), Math.floor(sy / this.renderer.scale)];
+      return [Math.floor(sx / this.renderer.uiScale), Math.floor(sy / this.renderer.uiScale)];
+    };
+    this.touch = new TouchControls(canvas, this.nav.toUi);
+    this.renderer.setUiBoost(this.touch.enabled);
+    this.touch.autoGas = this.settings.touchAutoGas;
+    this.input.touch = this.touch;
+    this.textBridge = new TextBridge(canvas);
+    this.textBridge.pick = (cx, cy) => {
+      const menu = this.activeMenu;
+      if (!menu || !this.touch.enabled) return null;
+      const [x, y] = this.nav.toUi(cx, cy);
+      const r = menu.hitRects.find((h) => x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h);
+      const it = r && r.item >= 0 ? menu.items[r.item] : null;
+      return it?.text && !it.disabled?.() ? it.text : null;
     };
 
     this.scene.add(this.hemi);
@@ -310,7 +330,9 @@ export class App {
       void this.openTuning();
     }
     try {
-      this.autoQuality = Math.max(0, Math.min(2, Number(localStorage.getItem(AUTO_QUALITY_KEY)) || 0));
+      const saved = localStorage.getItem(AUTO_QUALITY_KEY);
+      // Phones start one step down; AUTO goes lower if needed.
+      this.autoQuality = saved === null ? (this.touch.enabled ? 1 : 0) : Math.max(0, Math.min(2, Number(saved) || 0));
     } catch {
       // No storage: start high.
     }
@@ -331,6 +353,12 @@ export class App {
     };
     window.addEventListener('keydown', unlock);
     window.addEventListener('pointerdown', unlock);
+    // Phones only count a finished tap as a gesture (audio, fullscreen).
+    window.addEventListener('pointerup', (e) => {
+      unlock();
+      if (e.pointerType === 'touch') this.goFullscreen();
+    });
+    window.addEventListener('touchend', unlock);
     // Drop module files anywhere to add them to the shuffle list.
     window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', (e) => {
@@ -571,6 +599,15 @@ export class App {
             }
           }
           this.applyQuality();
+          changed();
+        },
+      },
+      {
+        label: () => `TOUCH: AUTO GAS ${s.touchAutoGas ? 'ON' : 'OFF'}`,
+        change: () => {
+          s.touchAutoGas = !s.touchAutoGas;
+          this.touch.autoGas = s.touchAutoGas;
+          this.touch.relayout();
           changed();
         },
       },
@@ -845,7 +882,7 @@ export class App {
   };
 
   /** The menu that has the keyboard on the current screen. */
-  private get activeMenu(): Menu | null {
+  get activeMenu(): Menu | null {
     if (this.mode === 'title') return this.titleMenu;
     if (this.mode === 'online') return this.onlineMenu;
     if (this.mode === 'lobby') return this.lobbyMenu;
@@ -861,9 +898,11 @@ export class App {
     const kb = this.input.keyboard;
     this.nav.textMode = this.activeMenu?.typing ?? false;
     const nav = this.nav.poll(dt);
+    this.updateTouch(nav);
     if (this.nav.textMode || (this.mode === 'controls' && this.controlsScreen.capturing)) {
       // Letters and digits go into the text field.
       this.handleMenus(nav);
+      this.updateTextBridge();
       return;
     }
     if (kb.wasPressed('Digit1') && this.debugView) this.debugView.visible = !this.debugView.visible;
@@ -884,8 +923,56 @@ export class App {
     if (kb.wasPressed('KeyN')) this.music.next();
     const pad = this.input.firstActivePad();
     if (pad >= 0) this.padIndex = pad;
+    // A real keyboard or pad in a race: hide the on-screen controls.
+    if ((pad >= 0 || kb.anyPressed) && this.mode === 'race') this.touch.enabled = false;
 
     this.handleMenus(nav);
+    this.updateTextBridge();
+  }
+
+  /** Touch: BACK button, showing the race controls, pausing when held upright. */
+  private updateTouch(nav: NavState): void {
+    const t = this.touch;
+    this.renderer.setUiBoost(t.enabled);
+    if (t.enabled && this.backRect && nav.click) {
+      const r = this.backRect;
+      if (nav.pointerX >= r.x && nav.pointerX < r.x + r.w && nav.pointerY >= r.y && nav.pointerY < r.y + r.h) {
+        nav.back = true;
+        nav.click = false;
+      }
+    }
+    const racing = this.mode === 'race' && !this.paused && !this.showingResults && this.session.playerCars.length > 0;
+    t.setVisible(t.enabled && racing);
+    if (t.pauseTapped) {
+      t.pauseTapped = false;
+      nav.pause = true;
+    }
+    // Upright phone: the race waits (offline) until it is turned sideways.
+    const portrait = t.enabled && this.renderer.deviceH > this.renderer.deviceW;
+    if (portrait && this.mode === 'race' && !this.paused && !this.showingResults && !this.netRace) {
+      this.paused = true;
+      this.pauseMenu.index = 0;
+    }
+  }
+
+  /** The phone keyboard goes away when the text field is no longer selected. */
+  private updateTextBridge(): void {
+    const menu = this.activeMenu;
+    const item = menu?.typing ? menu.items[menu.index] : null;
+    if (!item?.text && this.textBridge.open) this.textBridge.close();
+    this.textBridge.submitted = false;
+  }
+
+  /** Fullscreen and landscape on phones (not when installed: already full). */
+  private goFullscreen(): void {
+    if (document.fullscreenElement || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) return;
+    const el = document.documentElement;
+    if (!el.requestFullscreen) return;
+    el.requestFullscreen({ navigationUI: 'hide' })
+      .then(() => (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape'))
+      .catch(() => {
+        // Not allowed here (iPhone Safari): play in the browser window.
+      });
   }
 
   private handleMenus(nav: NavState): void {
@@ -1268,21 +1355,25 @@ export class App {
     if (this.mode === 'title') {
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(0, 0, W, H);
-      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
-      this.titleMenu.draw(ctx, W / 2, top + 14, fitScale(this.titleMenu, top + 14, H - 30), dt);
+      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), logoWidth(W, H), this.time);
+      this.titleMenu.draw(ctx, W / 2, top + 14, fitScale(this.titleMenu, top + 14, H - 30), dt, true, H - 30);
       const c = this.controls;
       const help = this.settings.players === 2
         ? `P1: ${driveKeys(c.p1)} ${keysLabel(c.p1, 'drift')} DRIFT   P2: ${driveKeys(c.p2)} ${keysLabel(c.p2, 'drift')} DRIFT   OR GAMEPADS`
         : `${driveKeys(c.solo)} DRIVE   ${keysLabel(c.solo, 'drift')} DRIFT   ${keysLabel(c.solo, 'fireFront')} MISSILE   ${keysLabel(c.solo, 'fireRear')} MINE   ${keysLabel(c.solo, 'turbo')} TURBO`;
-      drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
-      drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+      if (this.touch.enabled) {
+        drawText(ctx, 'TAP TO CHOOSE   TAP THE LEFT / RIGHT END OF A SETTING TO CHANGE IT', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+      } else {
+        drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
+        drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+      }
       drawText(ctx, `V${VERSION}`, W - 4, H - 11, { align: 'right', color: '#5a6478' });
     } else if (this.mode === 'online') {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
-      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
+      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), logoWidth(W, H), this.time);
       drawText(ctx, 'PLAY ONLINE', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
-      this.onlineMenu.draw(ctx, W / 2, top + 30, fitScale(this.onlineMenu, top + 30, H - 40), dt);
+      this.onlineMenu.draw(ctx, W / 2, top + 30, fitScale(this.onlineMenu, top + 30, H - 40), dt, true, H - 40);
       const st = connText(this.online.state, this.online.conn.rtt);
       drawText(ctx, st.text, W / 2, H - 34, { align: 'center', color: st.color });
       drawText(ctx, 'CREATE A ROOM AND SEND THE CODE TO YOUR FRIENDS, OR TYPE THEIR CODE', W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
@@ -1290,12 +1381,12 @@ export class App {
     } else if (this.mode === 'cup') {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
-      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
+      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), logoWidth(W, H), this.time);
       drawText(ctx, 'CHAMPIONSHIP', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
       const names = TRACK_LIST.map((t) => t.name.toUpperCase()).join(', ');
       drawText(ctx, `${TRACK_LIST.length} RACES: ${names}`, W / 2, top + 22, { color: '#9fd8ff', align: 'center' });
       drawText(ctx, 'WIN PRIZE MONEY AND POINTS - UPGRADE YOUR CAR BETWEEN RACES', W / 2, top + 34, { color: '#c8d0dc', align: 'center' });
-      this.cupMenu.draw(ctx, W / 2, top + 56, fitScale(this.cupMenu, top + 56, H - 30), dt);
+      this.cupMenu.draw(ctx, W / 2, top + 56, fitScale(this.cupMenu, top + 56, H - 30), dt, true, H - 30);
       const s = this.settings;
       drawText(ctx, `PLAYERS ${s.players}   OPPONENTS ${s.opponents}   ${DIFFICULTIES[s.difficulty]}   LAPS ${s.laps}   WEAPONS ${s.weapons ? 'ON' : 'OFF'}`, W / 2, H - 22, { color: '#8090a8', align: 'center' });
       drawText(ctx, 'NEW CHAMPIONSHIPS USE THE SETTINGS FROM THE MAIN MENU', W / 2, H - 11, { color: '#8090a8', align: 'center' });
@@ -1304,9 +1395,9 @@ export class App {
     } else if (this.mode === 'options') {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
-      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
+      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), logoWidth(W, H), this.time);
       drawText(ctx, 'OPTIONS', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
-      this.optionsMenu.draw(ctx, W / 2, top + 30, fitScale(this.optionsMenu, top + 30, H - 30), dt);
+      this.optionsMenu.draw(ctx, W / 2, top + 30, fitScale(this.optionsMenu, top + 30, H - 30), dt, true, H - 30);
       drawText(ctx, 'TIP: DRAG YOUR OWN .MOD / .XM FILES ONTO THE GAME TO ADD THEM - THEY STAY ON YOUR COMPUTER', W / 2, H - 11, { color: '#8090a8', align: 'center' });
     } else if (this.mode === 'help') {
       drawHelp(ctx, W, H, this.controls);
@@ -1335,7 +1426,7 @@ export class App {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
       const top = drawLobby(ctx, W, H, this.online.room, this.online.me, this.time);
-      this.lobbyMenu.draw(ctx, W / 2, top, fitScale(this.lobbyMenu, top, H - 26), dt);
+      this.lobbyMenu.draw(ctx, W / 2, top, fitScale(this.lobbyMenu, top, H - 26), dt, true, H - 26);
       const st = connText(this.online.state, this.online.conn.rtt);
       drawText(ctx, st.text, 6, H - 11, { color: st.color });
       const hint = this.online.isHost ? 'YOU ARE THE HOST: PICK THE RACE AND START WHEN EVERYONE IS READY' : 'MARK YOURSELF READY - THE HOST STARTS THE RACE';
@@ -1360,28 +1451,63 @@ export class App {
         color: '#9cff9c', align: 'right',
       });
     }
+    this.drawTouchExtras(ctx, W, H);
     ui.end();
+  }
+
+  /** BACK button on menu screens and the "turn your phone" notice. */
+  private drawTouchExtras(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+    this.backRect = null;
+    if (!this.touch.enabled) return;
+    const backModes: Mode[] = ['online', 'cup', 'shop', 'options', 'controls', 'help', 'credits', 'career'];
+    if (backModes.includes(this.mode) && !(this.mode === 'controls' && this.controlsScreen.capturing)) {
+      const r = { x: 4, y: 4, w: 52, h: 20 };
+      ctx.fillStyle = 'rgba(10,12,26,0.75)';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = '#ffd84a';
+      ctx.fillRect(r.x, r.y + r.h - 1, r.w, 1);
+      drawText(ctx, '← BACK', r.x + r.w / 2, r.y + 6, { color: '#ffffff', align: 'center' });
+      this.backRect = r;
+    }
+    if (H > W) {
+      ctx.fillStyle = 'rgba(6,8,20,0.92)';
+      ctx.fillRect(0, 0, W, H);
+      drawText(ctx, 'TURN YOUR', W / 2, H * 0.4, { scale: 2, color: '#ffd84a', align: 'center' });
+      drawText(ctx, 'PHONE SIDEWAYS', W / 2, H * 0.4 + 20, { scale: 2, color: '#ffd84a', align: 'center' });
+      drawText(ctx, '↻', W / 2, H * 0.4 + 46, { scale: 4, color: '#ffffff', align: 'center' });
+    }
   }
 
   private drawRaceUi(ctx: CanvasRenderingContext2D, W: number, H: number): void {
     const s = this.session;
     const w = s.world;
     const split = this.renderer.isSplit;
+    const [kx] = this.renderer.uiPerLow;
     for (let p = 0; p < s.playerCars.length; p++) {
       const vp = this.renderer.viewports[split ? p : 0];
-      drawPlayerHud(ctx, { x: vp.x, w: vp.w, h: H }, w, s.playerCars[p], split ? `P${p + 1}` : null);
+      drawPlayerHud(ctx, { x: Math.round(vp.x * kx), w: Math.round(vp.w * kx), h: H }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split);
     }
     if (split) {
       ctx.fillStyle = '#000';
-      ctx.fillRect(this.renderer.viewports[1].x - 2, 0, 2, H);
+      ctx.fillRect(Math.round(this.renderer.viewports[1].x * kx) - 2, 0, 2, H);
     }
     const mw = Math.round(Math.min(110, W * 0.2));
     const mh = Math.round(mw * 0.75);
-    const mx = split ? Math.round(W / 2 - mw / 2) : W - mw - 8;
+    // Room for the touch pause button in the corner.
+    const mx = split ? Math.round(W / 2 - mw / 2) : W - mw - 8 - (this.touch.enabled ? 30 : 0);
     const my = split ? H - mh - 8 : 8;
     this.minimap.draw(ctx, s.track, w, s.colors, s.playerCars, mx, my, mw, mh);
     drawCountdown(ctx, W, w);
-    if (this.firstRace && w.tick < w.race.startTick + 60 * 15) {
+    if (this.touch.enabled && !split) {
+      const me = w.cars[s.playerCars[0]];
+      this.touch.arrange(W, H);
+      if (this.touch.visible) this.touch.draw(ctx, { missiles: me.missiles, mines: me.mines, turbos: me.turbos }, !!w.race.weapons);
+      if (this.firstRace && w.tick < w.race.startTick + 60 * 12) {
+        const gas = this.touch.autoGas ? 'THE CAR ACCELERATES BY ITSELF' : 'HOLD GAS';
+        drawText(ctx, `DRAG YOUR LEFT THUMB TO STEER - ${gas}`, W / 2, Math.round(H * 0.62), { color: '#ffd84a', align: 'center' });
+        drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, Math.round(H * 0.62) + 11, { color: '#ffd84a', align: 'center' });
+      }
+    } else if (this.firstRace && w.tick < w.race.startTick + 60 * 15) {
       const hintY = split ? my - 14 : H - 36;
       const c = this.controls;
       const drift = split ? `P1 ${keysLabel(c.p1, 'drift')} / P2 ${keysLabel(c.p2, 'drift')}` : keysLabel(c.solo, 'drift');
@@ -1400,8 +1526,10 @@ export class App {
     } else if (this.paused) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(0, 0, W, H);
-      drawText(ctx, 'PAUSED', W / 2, Math.round(H * 0.3), { scale: 4, color: '#ffd84a', align: 'center' });
-      this.pauseMenu.draw(ctx, W / 2, Math.round(H * 0.3) + 44, 2);
+      const py = Math.round(H * (H < 320 ? 0.12 : 0.3));
+      drawText(ctx, 'PAUSED', W / 2, py, { scale: H < 320 ? 3 : 4, color: '#ffd84a', align: 'center' });
+      const my = py + (H < 320 ? 32 : 44);
+      this.pauseMenu.draw(ctx, W / 2, my, fitScale(this.pauseMenu, my, H - 8), 0, true, H - 8);
     }
   }
 
@@ -1425,7 +1553,7 @@ export class App {
       drawText(ctx, 'WIN DIVISION 1 TO BECOME MEGACARS CHAMPION', W / 2, y, { color: '#9fd8ff', align: 'center' });
     }
     y += 22;
-    this.careerMenu.draw(ctx, W / 2, y, fitScale(this.careerMenu, y, H - 24), dt);
+    this.careerMenu.draw(ctx, W / 2, y, fitScale(this.careerMenu, y, H - 24), dt, true, H - 24);
     drawText(ctx, 'MONEY, UPGRADES AND YOUR CAR STAY WITH YOU FROM SEASON TO SEASON', W / 2, H - 14, { color: '#8090a8', align: 'center' });
   }
 
@@ -1440,8 +1568,9 @@ export class App {
       p.y += 2.4;
       p.project(vp.cam.camera);
       if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1) return;
-      const x = vp.x + ((p.x + 1) / 2) * vp.w;
-      const y = ((1 - p.y) / 2) * vp.h - 10;
+      const [kx, ky] = this.renderer.uiPerLow;
+      const x = (vp.x + ((p.x + 1) / 2) * vp.w) * kx;
+      const y = ((1 - p.y) / 2) * vp.h * ky - 10;
       drawText(ctx, e.name, x, y, { align: 'center', color: e.color });
     });
     const conn = this.online.conn;
@@ -1635,4 +1764,9 @@ function driveKeys(b: KeyBinding): string {
   if (four === 'ArrowUp,ArrowLeft,ArrowDown,ArrowRight') return b.gas[1] === 'KeyW' ? 'ARROWS/WASD' : 'ARROWS';
   if (four === 'KeyW,KeyA,KeyS,KeyD') return 'WASD';
   return [keysLabel(b, 'gas'), keysLabel(b, 'left'), keysLabel(b, 'brake'), keysLabel(b, 'right')].join(' ');
+}
+
+/** Title logo width: smaller on short (phone) screens so the menus fit. */
+function logoWidth(W: number, H: number): number {
+  return Math.min(W - 40, 420, Math.round(H * 1.15));
 }

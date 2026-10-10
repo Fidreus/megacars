@@ -29,7 +29,8 @@ export interface HudRect {
 const YELLOW = '#ffd84a';
 
 /** Position, lap, times and speed for one player's viewport. */
-export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: World, carId: number, label: string | null): void {
+/** `touch`: on-screen controls fill the bottom corners, so speed and arsenal go to the top. */
+export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: World, carId: number, label: string | null, touch = false): void {
   const car = world.cars[carId];
   const race = world.race;
   const x = r.x + 6;
@@ -55,7 +56,9 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   if (car.bestLapTicks) drawText(ctx, `BEST ${formatTime(car.bestLapTicks * DT)}`, x, y, { color: '#9cff9c' });
   if (label) drawText(ctx, label, r.x + r.w - 6, 6, { scale: 2, color: label === 'P1' ? '#ff6b5e' : '#6fa0ff', align: 'right' });
 
-  if (race.weapons) drawArsenal(ctx, x, r.h - 46, car);
+  // Touch: the bottom corners belong to the thumbs; go under the lap times.
+  const top = practice ? 76 : 100;
+  if (race.weapons) drawArsenal(ctx, touch ? x + 4 : x, touch ? top : r.h - 46, car);
   const grace = race.startTick + 180 - world.tick;
   if (race.weapons && race.phase === RacePhase.Racing && grace > -90 && !practice) {
     const text = grace > 0 ? `WEAPONS IN ${Math.ceil(grace / 60)}` : 'WEAPONS FREE!';
@@ -63,8 +66,10 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   }
 
   const kmh = Math.round(Math.hypot(car.vx, car.vz) * 3.6);
-  drawText(ctx, `${kmh}`, x, r.h - 22, { scale: 2 });
-  drawText(ctx, 'KM/H', x + 4 + String(kmh).length * 12, r.h - 15, { color: '#c0c0c0' });
+  const sx = x;
+  const sy = touch ? (race.weapons ? top + 26 : top - 10) : r.h - 22;
+  drawText(ctx, `${kmh}`, sx, sy, { scale: 2 });
+  drawText(ctx, 'KM/H', sx + 4 + String(kmh).length * 12, sy + 7, { color: '#c0c0c0' });
 
   const cx = r.x + r.w / 2;
   if (car.finished) {
