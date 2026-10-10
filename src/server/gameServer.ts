@@ -4,7 +4,7 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import {
   cleanCode, cleanName, CODE_ALPHABET, CODE_LENGTH, decodeInput, MsgType, PROTOCOL_VERSION,
-  type ClientMsg, type ErrorCode, type ServerMsg,
+  type ClientMsg, type ErrorCode, type PublicRoom, type ServerMsg,
 } from '../shared/net/protocol.ts';
 import { neutralInput } from '../shared/sim/input.ts';
 import { isShopItem } from '../shared/game/shop.ts';
@@ -76,16 +76,24 @@ export class GameServer {
     }
     if (!c.identified) return;
     switch (msg.t) {
-      case 'create': {
-        if (this.rooms.size >= MAX_ROOMS) {
-          c.error('limit', 'Server is full, try again later');
-          return;
+      case 'create':
+        this.createRoom(c, !!msg.public);
+        break;
+      case 'list':
+        c.send({ t: 'rooms', rooms: this.publicRooms() });
+        break;
+      case 'quick': {
+        // The fullest public room still waiting, then one racing (watch, then
+        // race in the next one), else open a new public room and wait there.
+        const open = [...this.rooms.values()]
+          .filter((r) => r.config.public && r !== c.room && r.members.length < 8 && r.connectedCount > 0)
+          .sort((a, b) => (a.state === b.state ? b.connectedCount - a.connectedCount : a.state === 'lobby' ? -1 : 1));
+        if (open.length) {
+          this.leaveRoom(c);
+          this.enter(c, open[0]);
+        } else {
+          this.createRoom(c, true);
         }
-        this.leaveRoom(c);
-        const room = new Room(this.newCode());
-        this.rooms.set(room.code, room);
-        this.enter(c, room);
-        this.log(`room ${room.code} created by ${c.name}`);
         break;
       }
       case 'join': {
@@ -164,9 +172,22 @@ export class GameServer {
     c.room = null;
   }
 
-  /** One 60 Hz tick for every racing room, plus housekeeping. */
+  /** One 60 Hz tick for every racing room; public lobbies may start by themselves. */
   tick(): void {
-    for (const room of this.rooms.values()) room.tick();
+    const now = this.now();
+    for (const room of this.rooms.values()) {
+      room.tick();
+      if (room.config.public && room.autoStart(now, this.seed())) this.log(`room ${room.code} auto-started`);
+    }
+  }
+
+  /** Public rooms anyone can join, waiting ones first. */
+  publicRooms(): PublicRoom[] {
+    return [...this.rooms.values()]
+      .filter((r) => r.config.public && r.connectedCount > 0)
+      .map((r) => r.listing())
+      .sort((a, b) => (a.state === b.state ? b.players - a.players : a.state === 'lobby' ? -1 : 1))
+      .slice(0, 30);
   }
 
   /** Expire dropped seats and empty rooms (call every few seconds). */
@@ -216,6 +237,19 @@ export class GameServer {
       c.room = room;
       room.reconnect(c);
     }
+  }
+
+  private createRoom(c: Client, isPublic: boolean): void {
+    if (this.rooms.size >= MAX_ROOMS) {
+      c.error('limit', 'Server is full, try again later');
+      return;
+    }
+    this.leaveRoom(c);
+    const room = new Room(this.newCode());
+    room.config.public = isPublic;
+    this.rooms.set(room.code, room);
+    this.enter(c, room);
+    this.log(`${isPublic ? 'public' : 'private'} room ${room.code} created by ${c.name}`);
   }
 
   private enter(c: Client, room: Room): void {

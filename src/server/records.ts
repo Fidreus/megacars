@@ -47,6 +47,8 @@ export class RecordStore {
       console.warn('records: could not read', this.file, e);
     }
     for (const id of Object.keys(this.boards)) if (!TRACKS[id]) delete this.boards[id];
+    const n = Object.values(this.boards).reduce((k, b) => k + b.length, 0);
+    console.log(`records: ${n} entries in ${this.file}`);
   }
 
   /** Queue a submission for checking; resolves when it is done. */

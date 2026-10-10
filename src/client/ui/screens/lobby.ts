@@ -9,7 +9,7 @@ import { drawText } from '../font.ts';
 export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, room: RoomInfo, me: number, time: number): number {
   const big = H >= 330 ? 3 : 2;
   let y = Math.round(H * 0.04);
-  drawText(ctx, `ROOM ${room.code}`, W / 2, y, { scale: big, color: '#ffd84a', align: 'center' });
+  drawText(ctx, `${room.config.public ? 'PUBLIC' : 'PRIVATE'} ROOM ${room.code}`, W / 2, y, { scale: big, color: '#ffd84a', align: 'center' });
   y += 7 * big + 6;
   drawText(ctx, `INVITE: ${inviteLink(room.code)}`, W / 2, y, { color: '#9fd8ff', align: 'center' });
   y += 14;
@@ -40,7 +40,7 @@ export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, r
     if (!p.connected) {
       status = 'DROPPED';
       color = '#ff6b5e';
-    } else if (p.id === room.hostId) {
+    } else if (p.id === room.hostId && !room.config.public) {
       status = 'HOST';
       color = '#ffd84a';
     } else if (p.ready) {
@@ -55,8 +55,19 @@ export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, r
     if (p.ping >= 0) drawText(ctx, `${p.ping}MS`, x0 + boxW - 6, ry, { color: pingColor(p.ping), align: 'right' });
   }
   y += boxH + 4;
+  // A dark strip so the status reads over the scenery.
+  if (room.state === 'race' || room.startsIn > 0 || room.config.public) {
+    ctx.fillStyle = 'rgba(8,10,24,0.72)';
+    ctx.fillRect(x0, y - 3, boxW, 13);
+  }
   if (room.state === 'race') {
     drawText(ctx, 'RACE IN PROGRESS - YOU ARE WATCHING UNTIL THE NEXT ONE', W / 2, y, { color: '#ffd84a', align: 'center' });
+  } else if (room.startsIn > 0) {
+    drawText(ctx, `EVERYBODY IS READY - THE RACE STARTS IN ${room.startsIn}`, W / 2, y, { color: '#9cff9c', align: 'center' });
+  } else if (room.config.public) {
+    const people = room.players.filter((p) => p.connected).length;
+    const text = people < 2 ? 'WAITING FOR OTHER PLAYERS TO JOIN...' : 'STARTS BY ITSELF WHEN EVERYBODY IS READY';
+    drawText(ctx, text, W / 2, y, { color: Math.sin(time * 3) > -0.3 ? '#ffd84a' : '#c8a838', align: 'center' });
   }
   return y + 16;
 }

@@ -3,7 +3,7 @@
 
 import { NetRace } from '../../shared/net/netRace.ts';
 import { priceOf, type Profile, type ShopItem } from '../../shared/game/shop.ts';
-import { cleanName, MsgType, type RoomConfig, type RoomInfo, type ServerMsg } from '../../shared/net/protocol.ts';
+import { cleanName, MsgType, type ClientMsg, type PublicRoom, type RoomConfig, type RoomInfo, type ServerMsg } from '../../shared/net/protocol.ts';
 import type { CarInput } from '../../shared/sim/input.ts';
 import type { World } from '../../shared/sim/world.ts';
 import type { Track } from '../../shared/track/types.ts';
@@ -52,7 +52,10 @@ export class Online {
   profile: Profile | null = null;
   /** Room code being typed on the join screen. */
   code = '';
-  private pending: { t: 'create' } | { t: 'join'; code: string } | null = null;
+  /** The public room list (null until it arrives). */
+  publicRooms: PublicRoom[] | null = null;
+  private wantList = false;
+  private pending: ClientMsg | null = null;
   private readonly events: OnlineEvents;
 
   constructor(events: OnlineEvents) {
@@ -105,8 +108,20 @@ export class Online {
     this.conn.connect();
   }
 
-  create(): void {
-    this.request({ t: 'create' });
+  create(isPublic = false): void {
+    this.request({ t: 'create', public: isPublic });
+  }
+
+  /** Join the best public room that is waiting for players, or open one. */
+  quick(): void {
+    this.request({ t: 'quick' });
+  }
+
+  /** Ask for the public room list (arrives in publicRooms). */
+  list(): void {
+    this.connect();
+    if (this.conn.online) this.conn.send({ t: 'list' });
+    else this.wantList = true;
   }
 
   join(code: string): void {
@@ -154,7 +169,7 @@ export class Online {
     if (this.race && this.conn.rtt > 0) this.race.net.rttMs = this.conn.rtt;
   }
 
-  private request(msg: { t: 'create' } | { t: 'join'; code: string }): void {
+  private request(msg: ClientMsg): void {
     this.pending = msg;
     this.connect();
     if (this.conn.online) this.flush();
@@ -181,6 +196,13 @@ export class Online {
     switch (msg.t) {
       case 'welcome':
         this.flush();
+        if (this.wantList) {
+          this.wantList = false;
+          this.conn.send({ t: 'list' });
+        }
+        break;
+      case 'rooms':
+        this.publicRooms = msg.rooms;
         break;
       case 'room':
         this.setRoom(msg.room);

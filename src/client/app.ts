@@ -96,7 +96,7 @@ const FAR_RANGE = 45;
 const VIEW_HEIGHT = 51.3;
 
 /** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
-type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'controls' | 'help' | 'records' | 'credits';
+type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'controls' | 'help' | 'records' | 'rooms' | 'credits';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -142,6 +142,9 @@ export class App {
   private readonly pauseMenu: Menu;
   private readonly onlineMenu: Menu;
   private readonly lobbyMenu: Menu;
+  /** The public room list. */
+  private readonly roomsMenu: Menu;
+  private roomsPoll = 0;
   private readonly cupMenu: Menu;
   /** The shop being shown (mode 'shop'). */
   private shop: ShopScreen | null = null;
@@ -263,13 +266,14 @@ export class App {
     this.online = new Online({
       race: (s) => this.startOnlineRace(s),
       room: (room) => {
-        if (room && this.mode === 'online') this.toLobby();
+        if (room && (this.mode === 'online' || this.mode === 'rooms')) this.toLobby();
         else if (!room && this.mode === 'lobby') this.mode = 'online';
       },
       notice: (text) => this.flashMessage(text, 2.5),
     });
     this.onlineMenu = new Menu(this.buildOnlineItems(), { onMove: beep, onChange: change });
     this.lobbyMenu = new Menu(this.buildLobbyItems(), { onMove: beep, onChange: change });
+    this.roomsMenu = new Menu([], { onMove: beep, onChange: change });
     this.cupMenu = new Menu([
       {
         label: () => {
@@ -452,7 +456,10 @@ export class App {
         text: { get: () => o().name, set: (v: string) => (o().name = v), max: 12, allowed: /[A-Z0-9 ._-]/ },
         select: () => o().commitName(),
       },
-      { label: () => 'CREATE ROOM', select: () => { o().commitName(); o().create(); } },
+      { label: () => 'QUICK MATCH', select: () => { o().commitName(); o().quick(); } },
+      { label: () => 'PUBLIC ROOMS', select: () => this.toRooms() },
+      { label: () => 'CREATE PUBLIC ROOM', select: () => { o().commitName(); o().create(true); } },
+      { label: () => 'CREATE PRIVATE ROOM', select: () => { o().commitName(); o().create(false); } },
       {
         label: () => `JOIN ROOM: ${o().code || '----'}`,
         text: { get: () => o().code, set: (v: string) => (o().code = v), max: 4, allowed: /[A-Z]/ },
@@ -475,16 +482,23 @@ export class App {
     const notHost = () => !o().isHost;
     const busy = () => o().room?.state === 'race';
     const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
-    const everyoneReady = () => !!o().room?.players.every((p) => p.ready || !p.connected);
+    const everyoneReady = () => !!o().room?.players.every((p) => p.ready || !p.connected || p.id === o().room?.hostId);
+    const pub = () => !!cfg()?.public;
     return [
       {
         label: () => {
           if (busy()) return 'RACE IN PROGRESS';
-          if (o().isHost) return everyoneReady() ? 'START RACE' : 'START RACE (WAITING)';
+          // Public rooms: everybody (the host too) readies up and the race starts by itself.
+          if (o().isHost && !pub()) return everyoneReady() ? 'START RACE' : 'START RACE (WAITING)';
           return o().myInfo?.ready ? 'READY: YES' : 'READY: NO';
         },
-        disabled: () => busy() || (o().isHost && !everyoneReady()),
-        select: () => (o().isHost ? o().start() : o().setReady(!o().myInfo?.ready)),
+        disabled: () => busy() || (o().isHost && !pub() && !everyoneReady()),
+        select: () => (o().isHost && !pub() ? o().start() : o().setReady(!o().myInfo?.ready)),
+      },
+      {
+        label: () => `ROOM: ${pub() ? 'PUBLIC - IN THE ROOM LIST' : 'PRIVATE - CODE ONLY'}`,
+        disabled: notHost,
+        change: () => o().configure({ public: !pub() }),
       },
       {
         label: () => `TRACK: ${TRACKS[cfg()?.track ?? '']?.name.toUpperCase() ?? '?'}`,
@@ -512,6 +526,32 @@ export class App {
       { label: () => 'COPY INVITE LINK', select: () => this.copyInvite() },
       { label: () => 'LEAVE ROOM', select: () => this.leaveRoom() },
     ];
+  }
+
+  /** The public room list (refreshed every few seconds while shown). */
+  private toRooms(): void {
+    this.online.commitName();
+    this.mode = 'rooms';
+    this.roomsMenu.index = 0;
+    this.roomsPoll = 0;
+    this.online.publicRooms = null;
+    this.online.list();
+  }
+
+  private roomItems() {
+    const o = this.online;
+    const rooms = o.publicRooms;
+    const items: { label: () => string; select: () => void; disabled?: () => boolean }[] = [];
+    if (!rooms) items.push({ label: () => (o.state === 'failed' ? 'SERVER NOT REACHABLE' : 'LOOKING FOR ROOMS...'), select: () => o.list(), disabled: () => true });
+    else if (!rooms.length) items.push({ label: () => 'NO PUBLIC ROOMS YET - OPEN ONE', select: () => o.create(true) });
+    for (const r of rooms ?? []) {
+      const track = TRACKS[r.track]?.name.toUpperCase() ?? r.track;
+      const state = r.state === 'race' ? 'RACING' : 'WAITING';
+      items.push({ label: () => `${track}  ${r.players}/8 PLAYERS  ${state}  - ${r.host}`, select: () => o.join(r.code) });
+    }
+    items.push({ label: () => 'QUICK MATCH', select: () => o.quick() });
+    items.push({ label: () => 'BACK', select: () => (this.mode = 'online') });
+    return items;
   }
 
   private openOnlineShop(): void {
@@ -914,6 +954,7 @@ export class App {
     if (this.mode === 'title') return this.titleMenu;
     if (this.mode === 'online') return this.onlineMenu;
     if (this.mode === 'lobby') return this.lobbyMenu;
+    if (this.mode === 'rooms') return this.roomsMenu;
     if (this.mode === 'cup') return this.cupMenu;
     if (this.mode === 'options') return this.optionsMenu;
     if (this.mode === 'controls') return this.controlsScreen.menu;
@@ -1039,6 +1080,11 @@ export class App {
     }
     if (this.mode === 'records') {
       this.recordsScreen.handle(nav);
+      return;
+    }
+    if (this.mode === 'rooms') {
+      if (nav.back) this.mode = 'online';
+      else this.roomsMenu.handle(nav);
       return;
     }
     if (this.mode === 'help') {
@@ -1445,8 +1491,25 @@ export class App {
       this.onlineMenu.draw(ctx, W / 2, top + 30, fitScale(this.onlineMenu, top + 30, H - 40), dt, true, H - 40);
       const st = connText(this.online.state, this.online.conn.rtt);
       drawText(ctx, st.text, W / 2, H - 34, { align: 'center', color: st.color });
-      drawText(ctx, 'CREATE A ROOM AND SEND THE CODE TO YOUR FRIENDS, OR TYPE THEIR CODE', W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
+      drawText(ctx, 'QUICK MATCH FINDS A PUBLIC ROOM - OR MAKE A PRIVATE ONE AND SEND THE CODE TO FRIENDS', W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
       drawText(ctx, 'ENTER SELECT   TYPE TO EDIT   ESC BACK', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+    } else if (this.mode === 'rooms') {
+      // Refresh the list every 3 s; keep the selection on the same row.
+      this.roomsPoll -= dt;
+      if (this.roomsPoll <= 0) {
+        this.roomsPoll = 3;
+        this.online.list();
+      }
+      const idx = this.roomsMenu.index;
+      this.roomsMenu.items = this.roomItems();
+      this.roomsMenu.index = Math.min(idx, this.roomsMenu.items.length - 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, 0, W, H);
+      const top = Math.round(H * 0.06);
+      drawText(ctx, 'PUBLIC ROOMS', W / 2, top, { scale: 2, color: '#ffd84a', align: 'center' });
+      this.roomsMenu.draw(ctx, W / 2, top + 30, fitScale(this.roomsMenu, top + 30, H - 30), dt, true, H - 30);
+      drawText(ctx, 'WAITING ROOMS START WHEN EVERYBODY IS READY - RACING ROOMS: WATCH, THEN JOIN THE NEXT RACE', W / 2, H - 22, { color: '#c8d0dc', align: 'center' });
+      drawText(ctx, 'ENTER JOIN   ESC BACK', W / 2, H - 11, { color: '#8090a8', align: 'center' });
     } else if (this.mode === 'cup') {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
@@ -1500,7 +1563,12 @@ export class App {
       this.lobbyMenu.draw(ctx, W / 2, top, fitScale(this.lobbyMenu, top, H - 26), dt, true, H - 26);
       const st = connText(this.online.state, this.online.conn.rtt);
       drawText(ctx, st.text, 6, H - 11, { color: st.color });
-      const hint = this.online.isHost ? 'YOU ARE THE HOST: PICK THE RACE AND START WHEN EVERYONE IS READY' : 'MARK YOURSELF READY - THE HOST STARTS THE RACE';
+      const pubRoom = !!this.online.room.config.public;
+      const hint = pubRoom
+        ? this.online.isHost
+          ? 'YOU PICK THE RACE - IT STARTS BY ITSELF WHEN EVERYBODY IS READY'
+          : 'MARK YOURSELF READY - THE RACE STARTS WHEN EVERYBODY IS'
+        : this.online.isHost ? 'YOU ARE THE HOST: PICK THE RACE AND START WHEN EVERYONE IS READY' : 'MARK YOURSELF READY - THE HOST STARTS THE RACE';
       drawText(ctx, hint, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
     } else if (this.mode === 'race') {
       this.drawRaceUi(ctx, W, H);
@@ -1530,7 +1598,7 @@ export class App {
   private drawTouchExtras(ctx: CanvasRenderingContext2D, W: number, H: number): void {
     this.backRect = null;
     if (!this.touch.enabled) return;
-    const backModes: Mode[] = ['online', 'cup', 'shop', 'options', 'controls', 'help', 'records', 'credits', 'career'];
+    const backModes: Mode[] = ['online', 'rooms', 'cup', 'shop', 'options', 'controls', 'help', 'records', 'credits', 'career'];
     if (backModes.includes(this.mode) && !(this.mode === 'controls' && this.controlsScreen.capturing)) {
       const r = { x: 4, y: 4, w: 52, h: 20 };
       ctx.fillStyle = 'rgba(10,12,26,0.75)';

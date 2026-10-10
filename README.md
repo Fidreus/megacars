@@ -135,6 +135,17 @@ tryck går till helskärm (Android); installerat som app (Lägg till på
 hemskärmen) körs det i helskärm även på iPhone. Telefoner startar på
 grafiknivå MEDIUM i AUTO.
 
+## Publika rum
+
+**PLAY ONLINE → QUICK MATCH** går med i det publika rum som har flest
+spelare och väntar, annars ett som kör (man tittar och är med i nästa race),
+och finns inget öppnas ett nytt publikt rum där man väntar på andra.
+**PUBLIC ROOMS** listar öppna rum (uppdateras var tredje sekund) och man går
+med genom att välja ett. Rum kan vara **PUBLIC** (syns i listan) eller
+**PRIVATE** (bara med koden); värden kan växla i lobbyn. Publika rum väntar
+inte på värden: när minst två är inne och alla har tryckt READY startar
+racet efter fem sekunders nedräkning.
+
 ## Rekord och topplistor
 
 **RECORDS** i titelmenyn visar per bana ditt bästa varv och dina bästa

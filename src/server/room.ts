@@ -7,8 +7,8 @@ import { AI_NAMES, AI_SKILL, CAR_COLORS } from '../shared/game/roster.ts';
 import { createRaceWorld } from '../shared/game/raceSetup.ts';
 import { makeRng } from '../shared/math/rng.ts';
 import {
-  MAX_PLAYERS, SNAPSHOT_EVERY,
-  type Entrant, type PlayerInfo, type RaceSpec, type RoomConfig, type RoomInfo, type ServerMsg,
+  AUTO_START_MS, MAX_PLAYERS, SNAPSHOT_EVERY,
+  type Entrant, type PlayerInfo, type PublicRoom, type RaceSpec, type RoomConfig, type RoomInfo, type ServerMsg,
 } from '../shared/net/protocol.ts';
 import { encodeSnapshot } from '../shared/net/snapshot.ts';
 import {
@@ -78,7 +78,11 @@ export class Room {
   readonly code: string;
   readonly members: Member[] = [];
   hostId = -1;
-  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true, upgrades: true };
+  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true, upgrades: true, public: false };
+  /** Public rooms: when the race starts by itself (ms, 0 = not counting down). */
+  startsAt = 0;
+  private now = 0;
+  private shownLeft = 0;
   /** Races finished this season. */
   races = 0;
   race: RaceRun | null = null;
@@ -224,6 +228,7 @@ export class Room {
     if (typeof c.weapons === 'boolean') cfg.weapons = c.weapons;
     if (typeof c.upgrades === 'boolean') cfg.upgrades = c.upgrades;
     if (Number.isFinite(c.difficulty)) cfg.difficulty = Math.max(0, Math.min(2, Math.round(c.difficulty!)));
+    if (typeof c.public === 'boolean') cfg.public = c.public;
     this.broadcastRoom();
     return null;
   }
@@ -233,13 +238,64 @@ export class Room {
       id: m.id,
       name: m.name,
       color: CAR_COLORS[m.color % CAR_COLORS.length],
-      ready: m.ready || m.id === this.hostId,
+      // The host of a private room starts the race, so counts as ready; in a
+      // public room the race starts by itself, so the host readies up too.
+      ready: m.ready || (m.id === this.hostId && !this.config.public),
       connected: m.peer !== null,
       ping: m.peer ? Math.round(m.peer.rtt) : -1,
       points: m.profile.points,
       lastPlace: m.lastPlace,
     }));
-    return { code: this.code, hostId: this.hostId, players, config: { ...this.config }, state: this.state, races: this.races };
+    const startsIn = this.startsAt ? Math.max(0, Math.ceil((this.startsAt - this.now) / 1000)) : 0;
+    return { code: this.code, hostId: this.hostId, players, config: { ...this.config }, state: this.state, races: this.races, startsIn };
+  }
+
+  /** How the room looks in the public room list. */
+  listing(): PublicRoom {
+    const c = this.config;
+    return {
+      code: this.code, host: this.member(this.hostId)?.name ?? '', players: this.connectedCount,
+      track: c.track, laps: c.laps, weapons: c.weapons, upgrades: c.upgrades, state: this.state,
+    };
+  }
+
+  /**
+   * Public rooms don't wait for the host: once at least two people are in
+   * and every one of them is ready, the race starts after AUTO_START_MS.
+   * Call often (every server tick); returns true when it started a race.
+   */
+  autoStart(now: number, seed: number): boolean {
+    this.now = now;
+    if (!this.config.public || this.race) {
+      this.startsAt = 0;
+      return false;
+    }
+    const racers = this.members.filter((m) => m.peer);
+    const go = racers.length >= 2 && racers.every((m) => m.ready);
+    if (!go) {
+      if (this.startsAt) {
+        this.startsAt = 0;
+        this.broadcastRoom();
+      }
+      return false;
+    }
+    if (!this.startsAt) {
+      this.startsAt = now + AUTO_START_MS;
+      this.broadcastRoom();
+      return false;
+    }
+    if (now < this.startsAt) {
+      // Tell everybody each time the shown seconds change.
+      const left = Math.ceil((this.startsAt - now) / 1000);
+      if (left !== this.shownLeft) {
+        this.shownLeft = left;
+        this.broadcastRoom();
+      }
+      return false;
+    }
+    this.startsAt = 0;
+    this.shownLeft = 0;
+    return this.start(this.hostId, seed) === null;
   }
 
   broadcastRoom(): void {

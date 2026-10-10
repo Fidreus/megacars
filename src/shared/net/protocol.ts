@@ -6,7 +6,8 @@ import type { CarInput } from '../sim/input.ts';
 import type { Loadout, Profile, ShopItem } from '../game/shop.ts';
 
 /** Bump when messages change incompatibly. Clients and server must match. */
-export const PROTOCOL_VERSION = 1 + SIM_VERSION * 100;
+// The +2: public rooms (room list, quick match, auto start).
+export const PROTOCOL_VERSION = 2 + SIM_VERSION * 100;
 
 export const MsgType = {
   Input: 1,
@@ -61,7 +62,24 @@ export interface RoomConfig {
   weapons: boolean;
   /** Prize money, the shop and upgrades carried between races. */
   upgrades: boolean;
+  /** Listed for anyone to join (otherwise only with the code). */
+  public: boolean;
 }
+
+/** A public room in the room list. */
+export interface PublicRoom {
+  code: string;
+  host: string;
+  players: number;
+  track: string;
+  laps: number;
+  weapons: boolean;
+  upgrades: boolean;
+  state: 'lobby' | 'race';
+}
+
+/** Public rooms start by themselves this long after everybody is ready (ms). */
+export const AUTO_START_MS = 5000;
 
 export interface PlayerInfo {
   id: number;
@@ -85,6 +103,8 @@ export interface RoomInfo {
   state: 'lobby' | 'race';
   /** Races run this season. */
   races: number;
+  /** Public rooms: seconds until the race starts by itself (0 = not counting down). */
+  startsIn: number;
 }
 
 export interface Entrant {
@@ -111,7 +131,11 @@ export interface RaceSpec {
 
 export type ClientMsg =
   | { t: 'hello'; v: number; name: string; token?: string }
-  | { t: 'create' }
+  | { t: 'create'; public?: boolean }
+  /** The public rooms, please. */
+  | { t: 'list' }
+  /** Join the best public room waiting for players (or open a new one). */
+  | { t: 'quick' }
   | { t: 'join'; code: string }
   | { t: 'leave' }
   | { t: 'name'; name: string }
@@ -125,6 +149,7 @@ export type ServerMsg =
   | { t: 'welcome'; id: number; token: string }
   | { t: 'error'; code: ErrorCode; msg: string }
   | { t: 'room'; room: RoomInfo }
+  | { t: 'rooms'; rooms: PublicRoom[] }
   | { t: 'left' }
   /** A race starts (or is running, for newcomers). `tick` is the server's world tick now. */
   | { t: 'race'; spec: RaceSpec; tick: number }
