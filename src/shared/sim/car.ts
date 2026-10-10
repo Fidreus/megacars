@@ -200,7 +200,10 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
         car.modeTicks = 0;
       }
     } else {
-      const rate = Math.min(t.kAlign * Math.abs(beta), (t.aSlide * surf.slide) / s);
+      // The more sideways the car is, the harder the tyres swing the velocity
+      // round (and the more speed they scrub): big angle = tight turn.
+      const aSlide = t.aSlide * (1 + t.slideAngleBoost * smoothstep(15 * DEG, 60 * DEG, Math.abs(beta)));
+      const rate = Math.min(t.kAlign * Math.abs(beta), (aSlide * surf.slide) / s);
       delta = clamp(beta, -rate * dt, rate * dt);
       const scrub = Math.max(0, 1 - t.cScrub * surf.scrub * Math.abs(Math.sin(beta)) * dt);
       vx *= scrub;

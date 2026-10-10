@@ -39,6 +39,7 @@ export interface CarTuning {
   driftKick: number; // yaw rate the car is flicked to, rad/s
   // Sliding
   aSlide: number; // lateral budget while sliding, m/s²
+  slideAngleBoost: number; // extra budget share at big slip angles (sideways = tighter)
   kAlign: number; // 1/s, how fast velocity swings toward the nose per radian of slip
   cScrub: number; // 1/s, speed loss factor × |sin β|
   aSteerSlide: number;
@@ -103,17 +104,18 @@ export const DEFAULT_TUNING: CarTuning = {
   driftArmTicks: 10,
   driftMinSpeed: 12,
   driftMinSteer: 0.45,
-  driftKick: 1.6,
+  driftKick: 3.0,
 
-  aSlide: 26,
-  kAlign: 3.5,
-  cScrub: 0.55,
-  aSteerSlide: 45,
+  aSlide: 34,
+  slideAngleBoost: 0.8,
+  kAlign: 4.5,
+  cScrub: 0.6,
+  aSteerSlide: 65,
   kPow: 0.6,
   assistKb: 0.5,
   assistPad: 0.25,
   kYawGrip: 12,
-  kYawSlide: 6,
+  kYawSlide: 9,
 
   spinDeg: 80,
   spinMinSpeed: 8,

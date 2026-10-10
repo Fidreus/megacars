@@ -68,10 +68,14 @@ export async function openTuningPanel(t: CarTuning, camera: CameraSettings): Pro
   add(grip, 'slideEnterTicks', 1, 20, 1);
 
   const slide = gui.addFolder('Slide');
-  add(slide, 'aSlide', 10, 40, 0.5);
+  add(slide, 'aSlide', 10, 60, 0.5);
+  add(slide, 'slideAngleBoost', 0, 2, 0.05);
+  add(slide, 'driftKick', 0, 6, 0.1);
+  add(slide, 'liftTapTicks', 4, 40, 1);
+  add(slide, 'driftTapTicks', 4, 40, 1);
   add(slide, 'kAlign', 1, 8, 0.1);
   add(slide, 'cScrub', 0, 2, 0.01);
-  add(slide, 'aSteerSlide', 10, 80, 1);
+  add(slide, 'aSteerSlide', 10, 120, 1);
   add(slide, 'kPow', 0, 2, 0.05);
   add(slide, 'assistKb', 0, 2, 0.05);
   add(slide, 'kYawGrip', 2, 25, 0.5);
