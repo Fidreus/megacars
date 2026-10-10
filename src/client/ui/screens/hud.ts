@@ -57,8 +57,12 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   if (label) drawText(ctx, label, r.x + r.w - 6, 6, { scale: 2, color: label === 'P1' ? '#ff6b5e' : '#6fa0ff', align: 'right' });
 
   // Touch: the bottom corners belong to the thumbs; go under the lap times.
-  const top = practice ? 76 : 100;
-  if (race.weapons) drawArsenal(ctx, touch ? x + 4 : x, touch ? top : r.h - 46, car);
+  const top = practice ? 76 : 92;
+  if (race.weapons) {
+    // Touch: the ammo is on the buttons, so only a small damage bar here.
+    if (touch) drawDamageBar(ctx, x, top, car);
+    else drawArsenal(ctx, x, r.h - 46, car);
+  }
   const grace = race.startTick + 180 - world.tick;
   if (race.weapons && race.phase === RacePhase.Racing && grace > -90 && !practice) {
     const text = grace > 0 ? `WEAPONS IN ${Math.ceil(grace / 60)}` : 'WEAPONS FREE!';
@@ -67,7 +71,7 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
 
   const kmh = Math.round(Math.hypot(car.vx, car.vz) * 3.6);
   const sx = x;
-  const sy = touch ? (race.weapons ? top + 26 : top - 10) : r.h - 22;
+  const sy = touch ? (race.weapons ? top + 14 : top - 10) : r.h - 22;
   drawText(ctx, `${kmh}`, sx, sy, { scale: 2 });
   drawText(ctx, 'KM/H', sx + 4 + String(kmh).length * 12, sy + 7, { color: '#c0c0c0' });
 
@@ -77,6 +81,23 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   } else if (car.wrongWayTicks > 90 && race.phase === RacePhase.Racing) {
     if (Math.floor(world.tick / 15) % 2 === 0) drawText(ctx, 'WRONG WAY!', cx, r.h * 0.3, { scale: 3, color: '#ff4a3a', align: 'center' });
   }
+}
+
+function damageColor(car: World['cars'][number]): string {
+  const d = car.damage;
+  return car.wreckTicks > 0 ? '#ff2b1c' : d < 0.4 ? '#9cff9c' : d < 0.7 ? '#ffd84a' : '#ff6b5e';
+}
+
+/** Compact damage bar (touch layout). */
+function drawDamageBar(ctx: CanvasRenderingContext2D, x: number, y: number, car: World['cars'][number]): void {
+  const w = 74;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(x - 3, y - 3, w, 12);
+  drawText(ctx, 'DMG', x, y - 1, { color: '#9aa4b8' });
+  ctx.fillStyle = '#222';
+  ctx.fillRect(x + 22, y, w - 29, 5);
+  ctx.fillStyle = damageColor(car);
+  ctx.fillRect(x + 22, y, Math.round((w - 29) * Math.min(1, car.damage)), 5);
 }
 
 /** Missiles, mines and turbos left (big), and a damage bar. */
@@ -89,7 +110,7 @@ function drawArsenal(ctx: CanvasRenderingContext2D, x: number, y: number, car: W
   drawText(ctx, 'DAMAGE', x, y - 13, { color: '#9aa4b8' });
   ctx.fillStyle = '#222';
   ctx.fillRect(x + 40, y - 13, w - 50, 6);
-  ctx.fillStyle = car.wreckTicks > 0 ? '#ff2b1c' : d < 0.4 ? '#9cff9c' : d < 0.7 ? '#ffd84a' : '#ff6b5e';
+  ctx.fillStyle = damageColor(car);
   ctx.fillRect(x + 40, y - 13, Math.round((w - 50) * d), 6);
   // Ammo: missile, mine, turbo icons with big counts.
   const icon = (ix: number, kind: number, n: number) => {
