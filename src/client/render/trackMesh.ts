@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { Surface } from '../../shared/config/surfaces.ts';
 import type { Track } from '../../shared/track/types.ts';
+import { themeOf } from './theme.ts';
 import { toon } from './materials.ts';
 
 export const SURFACE_COLORS: Record<number, string> = {
@@ -63,7 +64,7 @@ function buildGround(track: Track): THREE.Mesh {
   const geo = new THREE.PlaneGeometry(b.maxX - b.minX + pad * 2, b.maxZ - b.minZ + pad * 2);
   geo.rotateX(-Math.PI / 2);
   geo.translate((b.minX + b.maxX) / 2, -0.06, (b.minZ + b.maxZ) / 2);
-  const mat = toon(SURFACE_COLORS[Surface.Grass]);
+  const mat = toon(themeOf(track.def.theme).ground);
   mat.onBeforeCompile = (shader) => {
     withWorldPos(shader);
     shader.fragmentShader = shader.fragmentShader.replace(

@@ -37,7 +37,7 @@ export function readPad(index: number, out: PadState): PadState {
   out.brake = Math.max(val(6), pressed(1) ? 1 : 0);
   out.fireFront = pressed(2) || pressed(5);
   out.fireRear = pressed(3) || pressed(4);
-  out.turbo = pressed(10);
+  out.turbo = pressed(0) || pressed(10);
   out.active = x !== 0 || out.throttle > 0.05 || out.brake > 0.05 || out.fireFront || out.fireRear || out.turbo;
   return out;
 }

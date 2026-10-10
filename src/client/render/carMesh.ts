@@ -97,7 +97,7 @@ function alongLine(line: Line, width: number, thick: number, x: number, from = 0
   return out;
 }
 
-function merge(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
+export function merge(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const pos: number[] = [];
   const nrm: number[] = [];
   for (const g of geos) {

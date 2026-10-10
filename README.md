@@ -32,16 +32,33 @@ ingen drift. I sladden orkar däcken mycket mer sidokraft, så rätt timing tar
 dig genom skarpa kurvor mycket fortare. Gas ökar sladdvinkeln, släpp gasen
 eller motstyr för att räta upp. Is, olja och snö sladdar av sig själva.
 
+Tre banor: **Green Valley** (bred landsbygdsbana), **Dust Bowl** (öken,
+smal och teknisk, grus och oljefläckar) och **Frost Ring** (vinter, snabba
+svep med is och packad snö).
+
+**Vapen** (kan stängas av i menyn och i onlinelobbyn): varje bil startar med
+5 missiler, 3 minor och 3 turbo. Missiler flyger rakt fram och snurrar runt
+den de träffar, minor läggs bakom bilen, gillrar sig efter en halv sekund och
+kastar upp bilen i luften. Turbo ger 1,5 s extra kraft och högre toppfart.
+Vapnen låses upp tre sekunder efter start. Krockar och träffar ger skada;
+över 40 % skada går bilen långsammare, och vid 100 % exploderar den, brinner
+en stund och kommer tillbaka lappad (30 % skada). Datorförarna använder också
+vapen – oftare ju svårare de är.
+
 | En spelare | Funktion |
 |---|---|
 | ↑ / W | Gas (släpp + tryck igen medan du styr = drift) |
 | ↓ / S | Broms / back |
 | ← → / A D | Styr |
+| Space / K | Missil framåt |
+| X / J | Mina bakåt |
+| C / L | Turbo |
 | R | Sätt tillbaka bilen på banan (P2 i delad skärm: Enter) |
 | Esc / P | Paus |
 
-Delad skärm: **P1** WASD (vapentangenter G/F/H kommer i M5), **P2**
-piltangenter (. , -). Handkontroller: vänster spak styr, RT gas, LT broms;
+Delad skärm: **P1** WASD, missil/mina/turbo G/F/H, **P2** piltangenter,
+missil/mina/turbo . , -. Handkontroller: vänster spak styr, RT gas, LT broms,
+X/RB missil, Y/LB mina, A turbo;
 handkontroll 1 = P1, handkontroll 2 = P2.
 
 ## Spela online
@@ -78,7 +95,7 @@ URL-parametrar: `?mode=quick` (direkt till lopp), `?mode=practice`, `?p2=1`,
 `?mood=day|sunset|night`, `?debug=1`, `?scale=N`, `?scanlines=1`, `?mute=1`,
 `?room=KODE` (gå direkt med i ett onlinerum).
 
-`npm run sim -- --seeds 20 --laps 3` kör headless AI-lopp och kontrollerar
+`npm run sim -- --seeds 20 --laps 3 [--track dustbowl] [--weapons]` kör headless AI-lopp och kontrollerar
 att alla bilar går i mål.
 
 Felsökning i konsolen: `__megacars.state()`, `.startRace({ players: 2 })`,

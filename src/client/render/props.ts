@@ -7,6 +7,7 @@ import { distanceToCentreline } from '../../shared/track/builder.ts';
 import type { Track } from '../../shared/track/types.ts';
 import { makeRng } from '../../shared/math/rng.ts';
 import { drawText } from '../ui/font.ts';
+import { themeOf } from './theme.ts';
 import { animTime, toon } from './materials.ts';
 import { mergeGeometries } from './trackMesh.ts';
 
@@ -216,9 +217,10 @@ export function buildProps(track: Track): Props {
   }
 
   // --- A pond somewhere quiet.
-  const pond = findPondSpot(track, rnd);
+  const theme = themeOf(track.def.theme);
+  const pond = theme.pond === 'none' ? null : findPondSpot(track, rnd);
   if (pond) {
-    group.add(buildPond(pond.x, pond.z, pond.r, rnd));
+    group.add(buildPond(pond.x, pond.z, pond.r, rnd, theme.pond === 'ice', theme.shore));
     keepOut.push({ x: pond.x, z: pond.z, r: pond.r + 4 });
   }
   return { group, nightLights, bulbs, pools: poolMat, keepOut };
@@ -368,7 +370,7 @@ function findPondSpot(track: Track, rnd: () => number): KeepOut | null {
   return null;
 }
 
-function buildPond(x: number, z: number, r: number, rnd: () => number): THREE.Group {
+function buildPond(x: number, z: number, r: number, rnd: () => number, frozen = false, shoreColor = '#b49a68'): THREE.Group {
   const g = new THREE.Group();
   const seg = 28;
   const radii = Array.from({ length: seg }, () => r * (0.85 + rnd() * 0.25));
@@ -389,9 +391,15 @@ function buildPond(x: number, z: number, r: number, rnd: () => number): THREE.Gr
     geo.setIndex(idx);
     return geo;
   };
-  const shore = new THREE.Mesh(ring(1.18, -0.03, false), toon('#b49a68'));
+  const shore = new THREE.Mesh(ring(1.18, -0.03, false), toon(shoreColor));
   shore.receiveShadow = true;
   g.add(shore);
+  if (frozen) {
+    const ice = new THREE.Mesh(ring(1, 0.0, false), toon('#bfe3f2'));
+    ice.receiveShadow = true;
+    g.add(ice);
+    return g;
+  }
   const mat = toon('#2f6f9f');
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = animTime;

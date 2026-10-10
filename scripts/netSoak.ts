@@ -1,6 +1,6 @@
 // Headless online clients against a running server over real WebSockets:
 // create a room, race with N bots driving like people, report sync health.
-//   node scripts/netSoak.ts --url ws://localhost:8787/ws --clients 3 --laps 1
+//   node scripts/netSoak.ts --url ws://localhost:8787/ws --clients 3 --laps 1 --track dustbowl
 
 import { parseArgs } from 'node:util';
 import WebSocket from 'ws';
@@ -18,6 +18,7 @@ const { values } = parseArgs({
     clients: { type: 'string', default: '2' },
     laps: { type: 'string', default: '1' },
     ai: { type: 'string', default: '2' },
+    track: { type: 'string', default: 'greenvalley' },
   },
 });
 
@@ -100,7 +101,7 @@ bots[0].send({ t: 'create' });
 while (!bots[0].room) await sleep(50);
 for (const b of bots.slice(1)) b.send({ t: 'join', code: bots[0].room.code });
 await sleep(500);
-bots[0].send({ t: 'config', config: { laps: Number(values.laps), ai: Number(values.ai) } });
+bots[0].send({ t: 'config', config: { laps: Number(values.laps), ai: Number(values.ai), track: values.track, weapons: true } });
 for (const b of bots.slice(1)) b.send({ t: 'ready', ready: true });
 await sleep(500);
 bots[0].send({ t: 'start' });

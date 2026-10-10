@@ -4,6 +4,7 @@ import { buildTrack, surfaceAt, distanceToCentreline } from './builder.ts';
 import { validateTrack } from './validate.ts';
 import { GREEN_VALLEY } from './defs/greenValley.ts';
 import { BENCH_SWEEPER, BENCH_TIGHT } from './defs/bench.ts';
+import { TRACK_LIST } from './defs/index.ts';
 
 describe('track builder', () => {
   const track = buildTrack(GREEN_VALLEY);
@@ -28,6 +29,14 @@ describe('track builder', () => {
   it('keeps the racing line inside the road', () => {
     for (let i = 0; i < track.n; i++) {
       expect(Math.abs(track.line.off[i])).toBeLessThanOrEqual(track.hw[i] - 1.15 + 1e-9);
+    }
+  });
+
+  it('builds every track in the game without errors', () => {
+    for (const def of TRACK_LIST) {
+      const t = buildTrack(def);
+      expect(validateTrack(t), def.id).toEqual([]);
+      expect(t.grid, def.id).toHaveLength(8);
     }
   });
 
