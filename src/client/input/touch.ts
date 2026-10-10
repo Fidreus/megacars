@@ -8,7 +8,7 @@
 import { Btn } from '../../shared/sim/input.ts';
 import { drawText } from '../ui/font.ts';
 
-type Role = 'gas' | 'brake' | 'drift' | 'missile' | 'mine' | 'turbo' | 'reset' | 'pause';
+type Role = 'gas' | 'brake' | 'drift' | 'missile' | 'mine' | 'turbo' | 'reset' | 'pause' | 'left' | 'right';
 
 interface Button {
   role: Role;
@@ -33,16 +33,22 @@ export interface TouchAmmo {
 }
 
 /** Steering thumb travel (UI pixels) for full lock. */
-const STEER_RANGE = 34;
+const STEER_RANGE = 46;
+/** Share of the travel around the middle that counts as straight ahead. */
+const DEAD_ZONE = 0.16;
 
 export class TouchControls {
   /** A touch screen has been used: show the controls. */
   enabled = false;
   /** Accelerate unless braking. */
   autoGas = true;
+  /** 'slide': drag the left thumb (analog); 'buttons': two arrow buttons (like keys). */
+  steerMode: 'slide' | 'buttons' = 'slide';
   /** Controls are drawn and react (racing, not paused or on the results). */
   visible = false;
   steer = 0;
+  /** Where the thumb says the steering should be; `steer` follows it smoothly. */
+  private target = 0;
   throttle = 0;
   brake = 0;
   buttons = 0;
@@ -70,7 +76,7 @@ export class TouchControls {
         return;
       }
       // Anything on the left side that isn't a button is the steering thumb.
-      const role = hit ?? (x < this.W * 0.45 ? 'steer' : null);
+      const role = hit ?? (x < this.W * 0.45 && this.steerMode === 'slide' ? 'steer' : null);
       this.touches.set(e.pointerId, { role, x, y, ax: x });
       this.update();
     };
@@ -126,6 +132,7 @@ export class TouchControls {
 
   private update(): void {
     let steer = 0;
+    let digital = 0;
     let gas = false;
     let brake = false;
     let buttons = 0;
@@ -138,13 +145,39 @@ export class TouchControls {
       else if (t.role === 'mine') buttons |= Btn.FireRear;
       else if (t.role === 'turbo') buttons |= Btn.Turbo;
       else if (t.role === 'reset') buttons |= Btn.Reset;
+      else if (t.role === 'left') digital -= 1;
+      else if (t.role === 'right') digital += 1;
     }
-    // A small dead zone, then a gentle curve for fine corrections.
-    const a = Math.max(0, Math.abs(steer) - 0.08) / 0.92;
-    this.steer = Math.sign(steer) * Math.pow(a, 1.3);
+    if (this.steerMode === 'buttons') {
+      this.target = Math.max(-1, Math.min(1, digital));
+    } else {
+      // A wide middle that is straight ahead (thumbs wobble), then a soft
+      // curve: small movements make small corrections, full lock at the end.
+      const a = Math.max(0, Math.abs(steer) - DEAD_ZONE) / (1 - DEAD_ZONE);
+      this.target = Math.sign(steer) * Math.pow(a, 1.7);
+    }
     this.brake = brake ? 1 : 0;
     this.throttle = gas || (this.autoGas && !brake) ? 1 : 0;
     this.buttons = buttons;
+  }
+
+  /** Steering follows the thumb smoothly (call once per frame). */
+  tick(dt: number): void {
+    if (this.steerMode === 'buttons') {
+      // Digital, like keys: the simulation ramps it.
+      this.steer = this.target;
+      return;
+    }
+    // Faster back to the middle than away from it: letting go straightens up.
+    const back = Math.abs(this.target) < Math.abs(this.steer);
+    const k = 1 - Math.exp(-dt * (back ? 22 : 12));
+    this.steer += (this.target - this.steer) * k;
+    if (Math.abs(this.steer) < 0.01 && this.target === 0) this.steer = 0;
+  }
+
+  /** The steering is analog (slide) rather than left/right keys. */
+  get analog(): boolean {
+    return this.steerMode === 'slide';
   }
 
   /** Lay the buttons out for a W x H UI (call every frame; cheap). */
@@ -157,14 +190,20 @@ export class TouchControls {
     const right = W - R(16);
     const bottom = H - R(14);
     const b: Button[] = [];
-    // Main button: brake/reverse (auto gas) or gas, biggest, under the thumb.
+    // Main button under the thumb: drift (auto gas; braking is rare) or gas.
     if (this.autoGas) {
-      b.push({ role: 'brake', x: right - R(38), y: bottom - R(38), r: R(34), label: 'BRAKE' });
+      b.push({ role: 'drift', x: right - R(38), y: bottom - R(38), r: R(34), label: 'DRIFT' });
+      b.push({ role: 'brake', x: right - R(112), y: bottom - R(26), r: R(26), label: 'BRAKE' });
     } else {
       b.push({ role: 'gas', x: right - R(38), y: bottom - R(38), r: R(34), label: 'GAS' });
       b.push({ role: 'brake', x: right - R(118), y: bottom - R(22), r: R(24), label: 'BRAKE' });
+      b.push({ role: 'drift', x: right - R(104), y: bottom - R(92), r: R(26), label: 'DRIFT' });
     }
-    b.push({ role: 'drift', x: right - R(this.autoGas ? 112 : 104), y: bottom - R(this.autoGas ? 26 : 92), r: R(26), label: 'DRIFT' });
+    if (this.steerMode === 'buttons') {
+      const left = R(16);
+      b.push({ role: 'left', x: left + R(36), y: bottom - R(40), r: R(36), label: '←' });
+      b.push({ role: 'right', x: left + R(124), y: bottom - R(40), r: R(36), label: '→' });
+    }
     b.push({ role: 'missile', x: right - R(36), y: bottom - R(118), r: R(24), label: 'MISSILE' });
     b.push({ role: 'mine', x: right - R(98), y: bottom - R(this.autoGas ? 96 : 150), r: R(21), label: 'MINE' });
     b.push({ role: 'turbo', x: right - R(this.autoGas ? 156 : 160), y: bottom - R(this.autoGas ? 70 : 96), r: R(20), label: 'TURBO' });
@@ -194,9 +233,11 @@ export class TouchControls {
       ctx.stroke();
       const count = !ammo ? null : b.role === 'missile' ? ammo.missiles : b.role === 'mine' ? ammo.mines : b.role === 'turbo' ? ammo.turbos : null;
       const color = count === 0 ? 'rgba(160,170,190,0.6)' : '#ffffff';
-      drawText(ctx, b.label, b.x, b.y - (count === null ? 3 : 8), { color, align: 'center', shadow: '#000' });
+      const arrow = b.role === 'left' || b.role === 'right';
+      drawText(ctx, b.label, b.x, b.y - (arrow ? 10 : count === null ? 3 : 8), { color, align: 'center', shadow: '#000', scale: arrow ? 3 : 1 });
       if (count !== null) drawText(ctx, String(count), b.x, b.y + 2, { scale: 2, color, align: 'center' });
     }
+    if (this.steerMode === 'buttons') return;
     // Steering: a base and a knob where the thumb is, or a hint where it goes.
     const steer = [...this.touches.values()].find((t) => t.role === 'steer');
     const cy = steer ? steer.y : this.H - Math.round(this.H * 0.2);

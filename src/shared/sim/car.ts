@@ -154,6 +154,8 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
       aLong += throttle * t.brakeDecel;
     }
   }
+  // Holding brake when (nearly) stopped or rolling back drives in reverse.
+  let reversing = 0;
   if (brake > 0) {
     if (vF > 0.5) {
       aLong -= brake * t.brakeDecel;
@@ -161,6 +163,7 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
     } else {
       const r = Math.max(0, -vF) / t.reverseMax;
       aLong -= brake * t.reverseAccel * Math.max(0, 1 - r * r);
+      reversing = brake;
     }
   }
   vx += fx * aLong * dt;
@@ -168,7 +171,8 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
 
   let s = Math.hypot(vx, vz);
   if (s > 0) {
-    const resist = (1 - throttle) * (t.coastBase + t.coastLinear * s) + surf.drag + surf.dragLinear * s;
+    // Engine braking only when coasting: driving forwards or in reverse is powered.
+    const resist = (1 - Math.max(throttle, reversing)) * (t.coastBase + t.coastLinear * s) + surf.drag + surf.dragLinear * s;
     const ns = Math.max(0, s - resist * dt);
     const k = ns / s;
     vx *= k;

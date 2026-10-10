@@ -78,8 +78,8 @@ export const DEFAULT_TUNING: CarTuning = {
   accel0: 19,
   vTop: 45,
   brakeDecel: 18,
-  reverseAccel: 6,
-  reverseMax: 9,
+  reverseAccel: 13,
+  reverseMax: 14,
   coastBase: 1.5,
   coastLinear: 0.03,
 

@@ -222,6 +222,7 @@ export class App {
     this.touch = new TouchControls(canvas, this.nav.toUi);
     this.renderer.setUiBoost(this.touch.enabled);
     this.touch.autoGas = this.settings.touchAutoGas;
+    this.touch.steerMode = this.settings.touchSteer;
     this.input.touch = this.touch;
     this.textBridge = new TextBridge(canvas);
     this.textBridge.pick = (cx, cy) => {
@@ -679,6 +680,15 @@ export class App {
         },
       },
       {
+        label: () => `TOUCH STEERING: ${s.touchSteer === 'buttons' ? 'ARROW BUTTONS' : 'SLIDE THUMB'}`,
+        change: () => {
+          s.touchSteer = s.touchSteer === 'buttons' ? 'slide' : 'buttons';
+          this.touch.steerMode = s.touchSteer;
+          this.touch.relayout();
+          changed();
+        },
+      },
+      {
         label: () => `TOUCH: AUTO GAS ${s.touchAutoGas ? 'ON' : 'OFF'}`,
         change: () => {
           s.touchAutoGas = !s.touchAutoGas;
@@ -919,6 +929,7 @@ export class App {
     const dt = Math.min(0.1, now - this.last);
     this.last = now;
     this.time += dt;
+    this.touch.tick(dt);
     this.handleKeys(dt);
     const net = this.netRace;
     let alpha: number;
@@ -1658,7 +1669,8 @@ export class App {
       if (this.touch.visible) this.touch.draw(ctx, { missiles: me.missiles, mines: me.mines, turbos: me.turbos }, !!w.race.weapons);
       if (this.firstRace && w.tick < w.race.startTick + 60 * 12) {
         const gas = this.touch.autoGas ? 'THE CAR ACCELERATES BY ITSELF' : 'HOLD GAS';
-        drawText(ctx, `DRAG YOUR LEFT THUMB TO STEER - ${gas}`, W / 2, Math.round(H * 0.62), { color: '#ffd84a', align: 'center' });
+        const how = this.touch.steerMode === 'buttons' ? 'STEER WITH THE ARROWS' : 'DRAG YOUR LEFT THUMB TO STEER';
+        drawText(ctx, `${how} - ${gas}`, W / 2, Math.round(H * 0.62), { color: '#ffd84a', align: 'center' });
         drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, Math.round(H * 0.62) + 11, { color: '#ffd84a', align: 'center' });
       }
     } else if (this.firstRace && w.tick < w.race.startTick + 60 * 15) {

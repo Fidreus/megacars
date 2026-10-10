@@ -24,6 +24,8 @@ export interface RaceSettings {
   graphics: number;
   /** Touch controls: accelerate unless braking. */
   touchAutoGas: boolean;
+  /** Touch steering: drag the left thumb, or two arrow buttons. */
+  touchSteer: 'slide' | 'buttons';
   /** Bumped when the default volumes change, so saved settings pick them up once. */
   audioRev?: number;
 }
@@ -45,6 +47,7 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   soundVolume: 7,
   graphics: 0,
   touchAutoGas: true,
+  touchSteer: 'slide',
   audioRev: AUDIO_REV,
 };
 
@@ -73,6 +76,7 @@ export function loadSettings(): RaceSettings {
   s.soundVolume = Math.max(0, Math.min(10, Math.round(s.soundVolume)));
   s.graphics = [0, 1, 2, 3].includes(s.graphics) ? s.graphics : 0;
   s.touchAutoGas = s.touchAutoGas !== false;
+  s.touchSteer = s.touchSteer === 'buttons' ? 'buttons' : 'slide';
   return s;
 }
 

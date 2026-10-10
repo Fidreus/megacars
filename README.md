@@ -124,8 +124,10 @@ funktion). **HOW TO PLAY** i titelmenyn visar de nuvarande knapparna.
 
 Spelet fungerar på telefon i liggande läge (i stående visas "vänd
 telefonen", och racet pausas). Vänster tumme styr genom att dra i sidled
-där den landar (analogt), höger tumme har BRAKE, DRIFT, MISSILE, MINE och
-TURBO (ammunitionen syns på knapparna), RESET och paus uppe till höger.
+där den landar (analogt, med en bred neutral mitt och mjuk kurva), eller med
+två pilknappar (OPTIONS → TOUCH STEERING). Höger tumme har DRIFT (störst),
+BRAKE, MISSILE, MINE och TURBO (ammunitionen syns på knapparna), RESET och
+paus uppe till höger.
 **AUTO GAS** (på som standard, OPTIONS → TOUCH) gasar själv så att höger
 tumme är fri; broms/back avbryter. Menyerna styrs genom att trycka, långa
 menyer scrollar med pilarna, och en BACK-knapp finns uppe till vänster.

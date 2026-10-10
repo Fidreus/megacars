@@ -74,7 +74,9 @@ export class InputManager {
     if (first && t?.enabled && t.visible) {
       if (t.steer !== 0 || !(buttons & Btn.Analog)) {
         steer = t.steer;
-        buttons |= Btn.Analog;
+        // Arrow buttons are digital like keys: the simulation ramps them.
+        if (t.analog) buttons |= Btn.Analog;
+        else buttons &= ~Btn.Analog;
       }
       throttle = Math.max(throttle, t.throttle);
       brake = Math.max(brake, t.brake);
