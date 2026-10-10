@@ -67,7 +67,7 @@ export function collideCarWithWalls(car: CarState, t: CarTuning, walls: Walls, e
       car.z += bnz * bestPen;
       const rx = fx * off - bnx * r;
       const rz = fz * off - bnz * r;
-      const impact = applyImpulse(car, rx, rz, bnx, bnz, t.wallRestitution, t.wallFriction, t.mass, t.inertia);
+      const impact = applyImpulse(car, rx, rz, bnx, bnz, t.wallRestitution, t.wallFriction, t.mass, t.inertia * t.wallSpinDamping);
       if (impact > maxImpact) {
         maxImpact = impact;
         hitX = car.x + rx;

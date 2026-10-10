@@ -12,6 +12,12 @@ export function installDebugApi(app: App): void {
     state() {
       const r = app.renderer;
       return {
+        mode: app.mode,
+        paused: app.paused,
+        phase: app.world.race.phase,
+        laps: app.world.race.laps,
+        finishOrder: [...app.world.race.finishOrder],
+        players: [...app.session.playerCars],
         tick: app.world.tick,
         fps: Math.round(app.fps),
         lowRes: [r.lowW, r.lowH],
@@ -25,6 +31,9 @@ export function installDebugApi(app: App): void {
           slipDeg: +((c.slip * 180) / Math.PI).toFixed(1),
           sliding: c.sliding,
           lap: c.lap,
+          place: c.place,
+          finished: c.finished,
+          respawns: c.respawns,
           trackS: +c.trackS.toFixed(1),
           raceDist: +c.raceDist.toFixed(1),
           ai: c.aiDriven,
@@ -74,7 +83,14 @@ export function installDebugApi(app: App): void {
       app.player.aiDriven = on ? 1 : 0;
     },
     reset() {
-      app.resetPlayer();
+      app.resetCar(app.session.playerCars[0]);
+    },
+    /** Start a race straight away, e.g. startRace({ players: 2, laps: 1 }). */
+    startRace(over: Record<string, unknown> = {}) {
+      app.startRace({ ...app.settings, ...over });
+    },
+    toTitle() {
+      app.toTitle();
     },
     tuning(): CarTuning {
       return app.tuning;

@@ -7,6 +7,9 @@ export const Ev = {
   Lap: 3,
   Spin: 4,
   Respawn: 5,
+  Finish: 6,
+  RaceStart: 7,
+  RaceEnd: 8,
 } as const;
 
 export interface SimEvent {

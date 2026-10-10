@@ -64,6 +64,8 @@ export interface CarTuning {
   circleOffset: number;
   wallRestitution: number;
   wallFriction: number;
+  /** >1 makes wall hits rotate the car less (forgiving barriers). */
+  wallSpinDamping: number;
   carRestitution: number;
   carFriction: number;
   wallDamageSpeed: number;
@@ -71,8 +73,8 @@ export interface CarTuning {
 }
 
 export const DEFAULT_TUNING: CarTuning = {
-  accel0: 13,
-  vTop: 46,
+  accel0: 19,
+  vTop: 45,
   brakeDecel: 18,
   reverseAccel: 6,
   reverseMax: 9,
@@ -90,7 +92,7 @@ export const DEFAULT_TUNING: CarTuning = {
   steerRateOut: 9,
   steerRateFlip: 14,
 
-  aGrip: 14,
+  aGrip: 16,
   frictionCircle: 0.65,
   overloadRatio: 1.0,
   slideEnterTicks: 4,
@@ -131,7 +133,8 @@ export const DEFAULT_TUNING: CarTuning = {
   circleR: 1.05,
   circleOffset: 1.2,
   wallRestitution: 0.2,
-  wallFriction: 0.35,
+  wallFriction: 0.12,
+  wallSpinDamping: 2.5,
   carRestitution: 0.4,
   carFriction: 0.25,
   wallDamageSpeed: 6,

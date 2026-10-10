@@ -4,7 +4,7 @@ import { makeSurfaceMix, mixSurfaces, Surface } from '../config/surfaces.ts';
 import { DEFAULT_TUNING } from '../config/tuning.ts';
 import { makeRng } from '../math/rng.ts';
 import { buildTrack, distanceToCentreline } from '../track/builder.ts';
-import { PROVING_GROUND } from '../track/defs/proving.ts';
+import { GREEN_VALLEY } from '../track/defs/greenValley.ts';
 import { closestOnSegment } from '../math/geom.ts';
 import type { Track } from '../track/types.ts';
 import { createCar, stepCarDynamics } from './car.ts';
@@ -27,7 +27,7 @@ function exactDistance(track: Track, x: number, z: number): number {
 }
 
 describe('car dynamics', () => {
-  it('accelerates 0-100 km/h in 2.4-3.0 s', () => {
+  it('accelerates 0-100 km/h in 1.6-2.0 s', () => {
     const car = createCar(0, 0, 0, Math.PI / 2);
     const inp = neutralInput();
     inp.throttle = 1;
@@ -37,8 +37,8 @@ describe('car dynamics', () => {
       ticks++;
     }
     const t = ticks * DT;
-    expect(t).toBeGreaterThanOrEqual(2.4);
-    expect(t).toBeLessThanOrEqual(3.0);
+    expect(t).toBeGreaterThanOrEqual(1.6);
+    expect(t).toBeLessThanOrEqual(2.0);
   });
 
   it('reaches top speed within 2%', () => {
@@ -155,7 +155,7 @@ describe('car dynamics', () => {
   });
 
   it('survives 100k ticks of random input without NaN or leaving the track', () => {
-    const track = buildTrack(PROVING_GROUND);
+    const track = buildTrack(GREEN_VALLEY);
     const world = createWorld(track, 3, 7);
     const rnd = makeRng(1234);
     const inputs = [neutralInput(), neutralInput(), neutralInput()];
@@ -183,7 +183,7 @@ describe('car dynamics', () => {
   });
 
   it('never passes through a wall at 55 m/s', () => {
-    const track = buildTrack(PROVING_GROUND);
+    const track = buildTrack(GREEN_VALLEY);
     const limit = track.def.width / 2 + track.def.runoff - DEFAULT_TUNING.circleR + 0.05;
     for (let k = 0; k < 40; k++) {
       const world = createWorld(track, 1, 1);

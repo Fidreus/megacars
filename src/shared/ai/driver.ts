@@ -61,7 +61,9 @@ export function plannedSpeed(track: Track, from: number, aLat: number, aBrake: n
   return vAllowed;
 }
 
-export function aiDrive(car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, out: CarInput): void {
+export function aiDrive(
+  car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, cars: readonly CarState[], out: CarInput,
+): void {
   const line = track.line;
   const n = track.n;
   const s = Math.hypot(car.vx, car.vz);
@@ -70,10 +72,47 @@ export function aiDrive(car: CarState, track: Track, t: CarTuning, surf: Surface
   const fwd = car.vx * fx + car.vz * fz;
   const drift = car.aiMode === AiMode.Drift;
   const skill = car.aiSkill;
+  const rx = Math.cos(car.heading);
+  const rz = Math.sin(car.heading);
+
+  // --- Getting unstuck: back away from the obstacle, nose turning toward the line.
+  if (car.aiReverseTicks === 0 && (car.stuckTicks === 40 || car.stuckTicks === 140)) car.aiReverseTicks = 75;
+  if (car.aiReverseTicks > 0) {
+    car.aiReverseTicks--;
+    const j = (car.trackIdx + 12) % n;
+    const err = wrapAngle(headingOf(line.x[j] - car.x, line.z[j] - car.z) - car.heading);
+    out.steer = err > 0 ? -1 : 1;
+    out.throttle = 0;
+    out.brake = 1;
+    out.buttons = Btn.Analog;
+    return;
+  }
+
+  // --- Traffic: slide over to pass a slower car close ahead; brake if about to hit it.
+  let dodge = 0;
+  let vTraffic = Infinity;
+  if (car.ghostTicks === 0) {
+    for (const o of cars) {
+      if (o === car || o.ghostTicks > 0) continue;
+      const dx = o.x - car.x;
+      const dz = o.z - car.z;
+      const ahead = dx * fx + dz * fz;
+      if (ahead < 1 || ahead > 16) continue;
+      const side = dx * rx + dz * rz;
+      if (Math.abs(side) > 3.4) continue;
+      const theirs = o.vx * fx + o.vz * fz;
+      if (fwd - theirs <= 0.5) continue;
+      dodge += (side > 0 ? -1 : 1) * (1 - ahead / 16) * 4;
+      if (ahead < 8) vTraffic = Math.min(vTraffic, theirs + ahead * 0.8);
+    }
+  }
 
   // --- Speed: brake early enough for every corner within planning range.
   const aLat = (drift ? t.aSlide * AI_PARAMS.latSlide : t.aGrip * AI_PARAMS.latGrip) * skill;
-  const vAllowed = plannedSpeed(track, car.trackIdx, aLat, t.brakeDecel * AI_PARAMS.brakeUse, t.vTop * 1.5);
+  const vAllowed = Math.min(
+    vTraffic,
+    plannedSpeed(track, car.trackIdx, aLat, t.brakeDecel * AI_PARAMS.brakeUse, t.vTop * 1.5),
+  );
   let throttle = 1;
   let brake = 0;
   if (s > vAllowed + 0.3) {
@@ -91,8 +130,11 @@ export function aiDrive(car: CarState, track: Track, t: CarTuning, surf: Surface
     acc += lineStep(track, j);
     j = j + 1 === n ? 0 : j + 1;
   }
-  const dx = line.x[j] - car.x;
-  const dz = line.z[j] - car.z;
+  // Pursue the racing line, shifted sideways when dodging traffic.
+  const lim = track.hw[j] - 1.6;
+  const shift = clamp(line.off[j] + dodge, -lim, lim) - line.off[j];
+  const dx = line.x[j] + track.nx[j] * shift - car.x;
+  const dz = line.z[j] + track.nz[j] * shift - car.z;
   const ld = Math.hypot(dx, dz);
   const travel = s > 2 ? headingOf(car.vx, car.vz) : car.heading;
   const alpha = wrapAngle(headingOf(dx, dz) - travel);
@@ -130,6 +172,13 @@ export function aiDrive(car: CarState, track: Track, t: CarTuning, surf: Surface
   }
   const dirSign = fwd >= 0 ? 1 : -1;
   const steer = omegaMax > 1e-3 ? clamp(((omegaDes - extra) / omegaMax) * dirSign, -1, 1) : 0;
+
+  // Traction control while gripping: hard acceleration eats lateral grip, so
+  // ease off (but stay above the lift threshold) when the corner needs most of it.
+  if (!car.sliding && throttle > 0.55) {
+    const fullThrottle = t.accel0 * surf.accel * Math.max(0, 1 - (fwd / (t.vTop * surf.vTop)) ** 2);
+    if (Math.abs(turnRate) * s > gripBudget(t, surf, 0, fullThrottle) * 0.92) throttle = 0.55;
+  }
 
   // A short brake pulse or throttle lift while steering would start a drift;
   // when not drifting, hold the pedal state past the flick window instead.

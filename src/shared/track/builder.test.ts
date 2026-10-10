@@ -2,24 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { Surface } from '../config/surfaces.ts';
 import { buildTrack, surfaceAt, distanceToCentreline } from './builder.ts';
 import { validateTrack } from './validate.ts';
-import { PROVING_GROUND } from './defs/proving.ts';
+import { GREEN_VALLEY } from './defs/greenValley.ts';
 import { BENCH_SWEEPER, BENCH_TIGHT } from './defs/bench.ts';
 
 describe('track builder', () => {
-  const track = buildTrack(PROVING_GROUND);
+  const track = buildTrack(GREEN_VALLEY);
 
-  it('builds the proving ground without validation errors', () => {
+  it('builds Green Valley without validation errors', () => {
     expect(validateTrack(track)).toEqual([]);
-    expect(track.length).toBeGreaterThan(1400);
-    expect(track.length).toBeLessThan(2000);
+    expect(track.length).toBeGreaterThan(1800);
+    expect(track.length).toBeLessThan(2600);
     expect(track.grid).toHaveLength(8);
     expect(track.walls.count).toBeGreaterThan(50);
   });
 
   it('has the expected surfaces', () => {
     expect(surfaceAt(track, 100, 0)).toBe(Surface.Asphalt); // main straight
-    expect(surfaceAt(track, 100, 30)).toBe(Surface.Grass); // outside the walls
-    expect(surfaceAt(track, -74, 286)).toBe(Surface.Ice);
+    expect(surfaceAt(track, 100, 40)).toBe(Surface.Grass); // outside the walls
+    expect(surfaceAt(track, -154, 335)).toBe(Surface.Ice);
     // Gravel through corner B, including run-off.
     const i = track.n - 1;
     expect(distanceToCentreline(track, track.px[i], track.pz[i])).toBeLessThan(0.6);

@@ -45,6 +45,10 @@ export interface CarState {
   aiDriven: number;
   aiMode: number;
   aiSkill: number;
+  /** Ticks left of an AI reverse manoeuvre (getting unstuck). */
+  aiReverseTicks: number;
+  /** 1 for cars driven by people (race end, respawn rules). */
+  human: number;
   // Race progress
   trackIdx: number;
   trackS: number;
@@ -56,6 +60,14 @@ export interface CarState {
   bestLapTicks: number;
   wrongWayTicks: number;
   finished: number;
+  finishTick: number;
+  /** Current race position, 1-based (derived each tick). */
+  place: number;
+  /** Ticks spent (nearly) stopped while trying to move. */
+  stuckTicks: number;
+  /** Ticks left without car-to-car collisions (after a respawn). */
+  ghostTicks: number;
+  respawns: number;
   // Derived each tick (recomputed, never authoritative)
   slip: number;
   latAccel: number;
@@ -69,9 +81,10 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
     id, x, z, y: 0, vx: 0, vz: 0, vy: 0, heading, angVel: 0, steer: 0,
     sliding: 0, modeTicks: 0, spinTicks: 0, spinCool: 0, airborne: 0,
     damage: 0,
-    prevButtons: 0, brakeTicks: 0, liftTicks: 60, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1,
+    prevButtons: 0, brakeTicks: 0, liftTicks: 60, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1, aiReverseTicks: 0, human: 0,
     trackIdx: 0, trackS: 0, raceDist: 0, lap: 0, nextCp: 0,
     lapStartTick: 0, lastLapTicks: 0, bestLapTicks: 0, wrongWayTicks: 0, finished: 0,
+    finishTick: 0, place: id + 1, stuckTicks: 0, ghostTicks: 0, respawns: 0,
     slip: 0, latAccel: 0, longAccel: 0, surfFront: 0, surfRear: 0,
   };
 }

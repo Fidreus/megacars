@@ -48,3 +48,29 @@ export function playImpact(audio: AudioSystem, strength: number, pan: number): v
   src.start(now, Math.random() * 0.5);
   src.stop(now + 0.5);
 }
+
+/** A short synth tone (beeps, chimes). */
+export function playTone(
+  audio: AudioSystem, freq: number, duration: number, type: OscillatorType = 'square', volume = 0.15, slideTo = 0, delay = 0,
+): void {
+  const ctx = audio.ctx;
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime + delay;
+  const osc = ctx.createOscillator();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  if (slideTo > 0) osc.frequency.exponentialRampToValueAtTime(slideTo, t + duration);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(volume, t);
+  g.gain.setValueAtTime(volume, t + duration * 0.7);
+  g.gain.exponentialRampToValueAtTime(0.001, t + duration);
+  osc.connect(g).connect(audio.master!);
+  osc.start(t);
+  osc.stop(t + duration + 0.02);
+}
+
+/** Rising arpeggio for crossing the finish line. */
+export function playFanfare(audio: AudioSystem, good: boolean): void {
+  const notes = good ? [523, 659, 784, 1047, 784, 1047] : [392, 494, 587, 523];
+  notes.forEach((f, i) => playTone(audio, f, 0.16, 'square', 0.12, 0, i * 0.12));
+}

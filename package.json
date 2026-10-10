@@ -15,7 +15,8 @@
     "start": "node src/server/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.shared.json && tsc -p tsconfig.client.json && tsc -p tsconfig.server.json"
+    "typecheck": "tsc -p tsconfig.shared.json && tsc -p tsconfig.client.json && tsc -p tsconfig.server.json",
+    "sim": "node scripts/simRace.ts"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",

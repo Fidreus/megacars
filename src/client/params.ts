@@ -1,9 +1,16 @@
-// URL parameters, e.g. ?ai=7&track=proving&debug=1&scale=4&mpp=0.2
+// URL parameters, e.g. ?mode=quick&p2=1&laps=2&ai=5&difficulty=2&mood=night&debug=1
 
 export interface Params {
+  /** 'title' (default), 'quick' (straight into a race) or 'practice'. */
+  mode: string;
   debug: boolean;
   track: string;
+  /** Number of computer opponents (only applied when `aiSet`). */
   ai: number;
+  aiSet: boolean;
+  p2: boolean;
+  laps: number | null;
+  difficulty: number | null;
   seed: number;
   scale: number | null;
   mpp: number | null;
@@ -22,9 +29,14 @@ export function readParams(search: string = location.search): Params {
   };
   const flag = (k: string) => q.has(k) && q.get(k) !== '0' && q.get(k) !== 'false';
   return {
+    mode: q.get('mode') ?? 'title',
     debug: flag('debug'),
-    track: q.get('track') ?? 'proving',
-    ai: Math.max(0, Math.min(7, num('ai') ?? 3)),
+    track: q.get('track') ?? 'greenvalley',
+    ai: Math.max(0, Math.min(7, num('ai') ?? 7)),
+    aiSet: q.has('ai'),
+    p2: flag('p2'),
+    laps: num('laps'),
+    difficulty: num('difficulty'),
     seed: num('seed') ?? 1,
     scale: num('scale'),
     mpp: num('mpp'),

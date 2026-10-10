@@ -1,8 +1,11 @@
 import type { TrackDef } from '../types.ts';
-import { PROVING_GROUND } from './proving.ts';
+import { GREEN_VALLEY } from './greenValley.ts';
 
 export const TRACKS: Readonly<Record<string, TrackDef>> = {
-  [PROVING_GROUND.id]: PROVING_GROUND,
+  [GREEN_VALLEY.id]: GREEN_VALLEY,
 };
 
-export const DEFAULT_TRACK = PROVING_GROUND.id;
+/** Track list in menu order. */
+export const TRACK_LIST: readonly TrackDef[] = [GREEN_VALLEY];
+
+export const DEFAULT_TRACK = GREEN_VALLEY.id;

@@ -20,8 +20,8 @@ export class InputManager {
   /** Pads that were the most recently used device of their player. */
   private readonly padInUse = new Set<number>();
 
-  sample(player: LocalPlayerInput, out: CarInput): CarInput {
-    if (this.override && this.overrideTicks > 0) {
+  sample(player: LocalPlayerInput, out: CarInput, first = true): CarInput {
+    if (first && this.override && this.overrideTicks > 0) {
       this.overrideTicks--;
       out.steer = this.override.steer;
       out.throttle = this.override.throttle;

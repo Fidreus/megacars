@@ -1,156 +1,122 @@
-// M1 drift sandbox: one player car (plus optional AI cars) on a track, with
-// the retro renderer, live tuning, telemetry and sound.
+// The game shell: renderer, track scene, lighting moods, sound, input and the
+// screen flow (title menu → race → results), plus debug hooks.
 
 import * as THREE from 'three';
 import { DT } from '../shared/config/constants.ts';
 import { SURFACES, Surface } from '../shared/config/surfaces.ts';
 import { cloneTuning, DEFAULT_TUNING, type CarTuning } from '../shared/config/tuning.ts';
-import { buildTrack, surfaceAt } from '../shared/track/builder.ts';
-import { TRACKS, DEFAULT_TRACK } from '../shared/track/defs/index.ts';
+import { TRACKS, TRACK_LIST } from '../shared/track/defs/index.ts';
 import type { Track } from '../shared/track/types.ts';
-import type { CarState } from '../shared/sim/car.ts';
 import { Ev } from '../shared/sim/events.ts';
-import { neutralInput, type CarInput } from '../shared/sim/input.ts';
 import { resetProgress } from '../shared/sim/race.ts';
-import { stepWorld } from '../shared/sim/step.ts';
-import { createWorld, respawnCar, type World } from '../shared/sim/world.ts';
+import { RacePhase, respawnCar, standings } from '../shared/sim/world.ts';
 import { AudioSystem } from './audio/audio.ts';
 import { EngineSound } from './audio/engine.ts';
-import { playImpact, SkidSound } from './audio/sfx.ts';
+import { playFanfare, playImpact, playTone, SkidSound } from './audio/sfx.ts';
 import { installDebugApi } from './debug/debugApi.ts';
 import { buildTrackDebugView } from './debug/trackDebugView.ts';
 import { loadSavedTuning, openTuningPanel } from './debug/tuningPanel.ts';
-import { SOLO_KEYS } from './input/bindings.ts';
-import { InputManager } from './input/inputManager.ts';
+import { attractSession, RaceSession } from './game/raceSession.ts';
+import { lightsOn, RaceView } from './game/raceView.ts';
+import { DIFFICULTIES, loadSettings, saveSettings, type RaceSettings } from './game/settings.ts';
+import { P1_KEYS, P2_KEYS, SOLO_KEYS } from './input/bindings.ts';
+import { InputManager, type LocalPlayerInput } from './input/inputManager.ts';
+import { Nav } from './input/nav.ts';
 import type { Params } from './params.ts';
-import { CarView } from './render/carMesh.ts';
-import { CAR_COLORS } from './render/materials.ts';
+import { animTime } from './render/materials.ts';
 import { MOODS, moodById, type Mood } from './render/mood.ts';
-import { PALETTE_MODE_NAMES, type PaletteModeId } from './render/palette.ts';
+import { PALETTE_MODE_NAMES, PaletteMode, type PaletteModeId } from './render/palette.ts';
+import { buildProps } from './render/props.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
-import { buildProps } from './render/props.ts';
-import { animTime } from './render/materials.ts';
-import { SkidMarks } from './render/skidmarks.ts';
-import { Effects } from './render/effects.ts';
-import { Particles } from './render/particles.ts';
 import { buildTrackView } from './render/trackMesh.ts';
 import { PingProbe } from './session/pingProbe.ts';
 import { drawText } from './ui/font.ts';
+import { Menu } from './ui/menu.ts';
+import { drawCountdown, drawPlayerHud, Minimap } from './ui/screens/hud.ts';
+import { drawResults } from './ui/screens/results.ts';
+import { drawLogo } from './ui/screens/title.ts';
 
 const SHADOW_HALF = 62;
 const SHADOW_MAP = 2048;
 const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
+/** Visible height of a full-screen view, metres. Split screen zooms out a little. */
+const VIEW_HEIGHT = 51.3;
 
-interface Pose {
-  x: number;
-  z: number;
-  y: number;
-  heading: number;
-}
+type Mode = 'title' | 'race';
 
 export class App {
   readonly renderer: RetroRenderer;
   readonly scene = new THREE.Scene();
-  readonly track: Track;
-  readonly world: World;
   readonly tuning: CarTuning;
   readonly input = new InputManager();
   readonly lookAhead = { value: 0.3 };
-  private readonly params: Params;
-  private readonly tunings: CarTuning[];
-  private readonly inputs: CarInput[];
-  private readonly carViews: CarView[] = [];
-  private readonly prev: Pose[] = [];
-  private readonly skid = new SkidMarks();
-  private readonly particles = new Particles();
-  private readonly effects: Effects;
-  private readonly sun = new THREE.DirectionalLight('#fff0d4', 2.4);
-  private readonly debugView: THREE.Group;
-  private readonly audio = new AudioSystem();
-  private readonly ping = new PingProbe();
-  private engine: EngineSound | null = null;
-  private skidSound: SkidSound | null = null;
-  private tuningPanel: { toggle(): void } | null = null;
-  private acc = 0;
-  private last = -1;
-  private readonly camTargets = [new THREE.Vector3(), new THREE.Vector3()];
-  private readonly camInit = [false, false];
+  readonly settings: RaceSettings;
+  mode: Mode = 'title';
+  session!: RaceSession;
+  view!: RaceView;
+  track!: Track;
+  mood: Mood = MOODS[0];
+  fps = 0;
+  /** Freeze the simulation (pause menu, debug, screenshots); rendering continues. */
+  paused = false;
   /** Which car each viewport follows. */
   readonly viewCar = [0, 1];
-  private baseView = 51.3;
-  private showTelemetry: boolean;
-  private fpsTime = 0;
-  private fpsFrames = 0;
-  fps = 0;
-  /** Freeze the simulation (debug/screenshots); rendering continues. */
-  paused = false;
-  private flash = '';
-  private flashTime = 0;
-  private padIndex = -1;
+  private readonly params: Params;
+  private readonly nav: Nav;
+  private readonly sun = new THREE.DirectionalLight('#fff0d4', 2.4);
+  private readonly hemi = new THREE.HemisphereLight('#ffffff', '#000000', 1);
   private readonly sunRight = new THREE.Vector3();
   private readonly sunUp = new THREE.Vector3();
   private readonly sunDir = new THREE.Vector3(0, 1, 0);
-  private readonly hemi = new THREE.HemisphereLight('#ffffff', '#000000', 1);
-  private readonly nightLights: THREE.Object3D[] = [];
+  private readonly audio = new AudioSystem();
+  private readonly ping = new PingProbe();
+  private readonly minimap = new Minimap();
+  private trackGroup: THREE.Group | null = null;
+  private debugView: THREE.Group | null = null;
+  private nightLights: THREE.Object3D[] = [];
   private lampBulbs: THREE.MeshBasicMaterial | null = null;
   private lampPools: THREE.MeshBasicMaterial | null = null;
-  mood: Mood = MOODS[0];
+  private engines: EngineSound[] = [];
+  private skidSound: SkidSound | null = null;
+  private tuningPanel: { toggle(): void } | null = null;
+  private readonly titleMenu: Menu;
+  private readonly pauseMenu: Menu;
+  private readonly camTargets = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly camInit = [false, false];
+  private acc = 0;
+  private last = -1;
+  private time = 0;
+  private fpsTime = 0;
+  private fpsFrames = 0;
+  private flash = '';
+  private flashTime = 0;
+  private showTelemetry = false;
+  private padIndex = -1;
+  private lastLights = 0;
+  private firstRace = true;
 
   constructor(canvas: HTMLCanvasElement, params: Params) {
     this.params = params;
     this.renderer = new RetroRenderer(canvas, params.scale);
     this.renderer.crt = params.scanlines ? 1 : 0;
-    const cam = this.renderer.viewports[0].cam;
-    if (params.mpp) cam.viewHeight = params.mpp * 270;
-    this.baseView = cam.viewHeight;
-
     this.tuning = cloneTuning(DEFAULT_TUNING);
     loadSavedTuning(this.tuning);
-    this.tunings = [this.tuning];
-
-    const def = TRACKS[params.track] ?? TRACKS[DEFAULT_TRACK];
-    this.track = buildTrack(def);
-    this.world = createWorld(this.track, 1 + params.ai, params.seed);
-    this.inputs = this.world.cars.map(() => neutralInput());
-    this.world.cars.forEach((car, i) => {
-      if (i > 0) {
-        car.aiDriven = 1;
-        car.aiSkill = 0.9 + 0.1 * ((i * 37) % 10) / 10;
-      }
-      const view = new CarView(CAR_COLORS[i % CAR_COLORS.length], i + 1);
-      this.carViews.push(view);
-      this.scene.add(view.root);
-      this.prev.push({ x: car.x, z: car.z, y: car.y, heading: car.heading });
-    });
-
-    this.effects = new Effects(this.particles, this.track);
-    this.buildScene();
-    this.setMood(moodById(params.mood));
-    this.debugView = buildTrackDebugView(this.track, this.tuning);
-    this.scene.add(this.debugView);
-    this.showTelemetry = params.debug;
-    if (params.debug) {
-      this.debugView.visible = true;
-      void this.openTuning();
-    }
-    this.ping.start();
-    installDebugApi(this);
-
-    const unlock = () => {
-      if (this.params.mute) return;
-      this.audio.unlock();
-      if (!this.engine && this.audio.ctx) {
-        this.engine = new EngineSound(this.audio);
-        this.skidSound = new SkidSound(this.audio);
-      }
+    this.settings = loadSettings();
+    if (params.mood) this.settings.mood = params.mood;
+    if (TRACKS[params.track]) this.settings.track = params.track;
+    if (params.laps) this.settings.laps = params.laps;
+    if (params.p2) this.settings.players = 2;
+    if (params.aiSet) this.settings.opponents = Math.min(8 - this.settings.players, params.ai);
+    if (params.difficulty !== null) this.settings.difficulty = params.difficulty;
+    this.nav = new Nav(this.input.keyboard, canvas);
+    this.nav.toUi = (cx, cy) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = (cx - rect.left) * (this.renderer.deviceW / rect.width);
+      const sy = (cy - rect.top) * (this.renderer.deviceH / rect.height);
+      return [Math.floor(sx / this.renderer.scale), Math.floor(sy / this.renderer.scale)];
     };
-    window.addEventListener('keydown', unlock);
-    window.addEventListener('pointerdown', unlock);
-    canvas.focus();
-  }
 
-  private buildScene(): void {
     this.scene.add(this.hemi);
     const sun = this.sun;
     sun.castShadow = true;
@@ -166,15 +132,127 @@ export class App {
     sun.shadow.normalBias = 0.04;
     this.scene.add(sun, sun.target);
 
-    this.scene.add(buildTrackView(this.track));
-    const props = buildProps(this.track);
-    this.scene.add(props.group);
-    this.nightLights.push(...props.nightLights);
+    const beep = () => playTone(this.audio, 660, 0.04, 'square', 0.05);
+    this.titleMenu = new Menu(this.buildTitleItems(), { onMove: beep, onChange: beep });
+    this.pauseMenu = new Menu([
+      { label: () => 'RESUME', select: () => (this.paused = false) },
+      { label: () => 'RESTART RACE', select: () => this.startRace(this.session.settings) },
+      { label: () => 'QUIT TO MENU', select: () => this.toTitle() },
+    ], { onMove: beep });
+
+    this.setMood(moodById(this.settings.mood));
+    if (params.mode === 'quick') this.startRace(this.settings);
+    else if (params.mode === 'practice') this.startRace({ ...this.settings, practice: true, opponents: params.aiSet ? params.ai : 0 });
+    else this.toTitle();
+    if (params.debug) {
+      this.showTelemetry = true;
+      if (this.debugView) this.debugView.visible = true;
+      void this.openTuning();
+    }
+    this.ping.start();
+    installDebugApi(this);
+
+    const unlock = () => {
+      if (this.params.mute) return;
+      this.audio.unlock();
+      if (!this.skidSound && this.audio.ctx) {
+        this.engines = [new EngineSound(this.audio), new EngineSound(this.audio)];
+        this.skidSound = new SkidSound(this.audio);
+      }
+    };
+    window.addEventListener('keydown', unlock);
+    window.addEventListener('pointerdown', unlock);
+    canvas.focus();
+  }
+
+  // ---------------------------------------------------------------- menus
+
+  private buildTitleItems() {
+    const s = this.settings;
+    const changed = () => saveSettings(s);
+    const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
+    return [
+      { label: () => 'START RACE', select: () => this.startRace(s) },
+      {
+        label: () => (s.players === 1 ? 'PLAYERS: 1' : 'PLAYERS: 2 SPLIT SCREEN'),
+        change: () => {
+          s.players = s.players === 1 ? 2 : 1;
+          s.opponents = Math.min(s.opponents, 8 - s.players);
+          changed();
+        },
+      },
+      {
+        label: () => `TRACK: ${TRACKS[s.track].name.toUpperCase()}`,
+        change: (d: number) => {
+          const i = TRACK_LIST.findIndex((t) => t.id === s.track);
+          s.track = TRACK_LIST[cycle(i, TRACK_LIST.length, d)].id;
+          changed();
+          this.toTitle();
+        },
+      },
+      { label: () => `LAPS: ${s.laps}`, change: (d: number) => { s.laps = 1 + cycle(s.laps - 1, 9, d); changed(); } },
+      {
+        label: () => `OPPONENTS: ${s.opponents}`,
+        change: (d: number) => { s.opponents = cycle(s.opponents, 9 - s.players, d); changed(); },
+      },
+      { label: () => `DIFFICULTY: ${DIFFICULTIES[s.difficulty]}`, change: (d: number) => { s.difficulty = cycle(s.difficulty, 3, d); changed(); } },
+      {
+        label: () => `TIME: ${moodById(s.mood).name}`,
+        change: (d: number) => {
+          const i = MOODS.findIndex((m) => m.id === s.mood);
+          s.mood = MOODS[cycle(i, MOODS.length, d)].id;
+          this.setMood(moodById(s.mood));
+          changed();
+        },
+      },
+      { label: () => 'FREE PRACTICE', select: () => this.startRace({ ...s, practice: true, players: 1, opponents: 0 }) },
+    ];
+  }
+
+  /** Back to the title screen with an all-AI race running behind the menu. */
+  toTitle(): void {
+    this.mode = 'title';
+    this.paused = false;
+    this.setSession(attractSession(this.settings, this.tuning));
+  }
+
+  startRace(settings: RaceSettings): void {
+    this.mode = 'race';
+    this.paused = false;
+    this.lastLights = 0;
+    this.setSession(new RaceSession({ ...settings }, this.tuning));
+  }
+
+  private setSession(session: RaceSession): void {
+    if (this.view) this.view.dispose();
+    if (this.track !== session.track) this.setTrack(session.track);
+    this.session = session;
+    this.view = new RaceView(this.scene, session, this.mood.lights, this.mood.headlight);
+    const split = this.mode === 'race' && session.playerCars.length === 2;
+    this.renderer.setSplit(split);
+    for (const vp of this.renderer.viewports) vp.cam.viewHeight = split ? VIEW_HEIGHT * 1.25 : VIEW_HEIGHT;
+    this.viewCar[0] = session.playerCars[0] ?? 0;
+    this.viewCar[1] = session.playerCars[1] ?? 1;
+    this.camInit[0] = this.camInit[1] = false;
+    this.acc = 0;
+  }
+
+  private setTrack(track: Track): void {
+    if (this.trackGroup) this.scene.remove(this.trackGroup);
+    this.track = track;
+    const g = new THREE.Group();
+    g.add(buildTrackView(track));
+    const props = buildProps(track);
+    g.add(props.group);
+    g.add(buildScenery(track, props.keepOut));
+    this.debugView = buildTrackDebugView(track, this.tuning);
+    g.add(this.debugView);
+    this.nightLights = props.nightLights;
     this.lampBulbs = props.bulbs;
     this.lampPools = props.pools;
-    this.scene.add(buildScenery(this.track, props.keepOut));
-    this.scene.add(this.skid.mesh);
-    this.scene.add(this.particles.points);
+    this.trackGroup = g;
+    this.scene.add(g);
+    this.setMood(this.mood);
   }
 
   setMood(mood: Mood): void {
@@ -195,11 +273,11 @@ export class App {
     g.exposure = mood.exposure;
     g.bloom = mood.bloom;
     g.bloomThreshold = mood.bloomThreshold;
-    this.particles.light.value = mood.particleLight;
+    if (this.view) this.view.particles.light.value = mood.particleLight;
     this.lampBulbs?.color.setRGB(mood.lights ? 5 : 0.55, mood.lights ? 4.4 : 0.55, mood.lights ? 3.2 : 0.5);
-    for (const o of this.nightLights) o.visible = mood.lights;
     this.lampPools?.color.setRGB(0.95 * mood.lampLight, 0.8 * mood.lampLight, 0.56 * mood.lampLight);
-    for (const v of this.carViews) v.setLights(mood.lights, mood.headlight);
+    for (const o of this.nightLights) o.visible = mood.lights;
+    this.view?.setLights(mood.lights, mood.headlight);
   }
 
   async openTuning(): Promise<void> {
@@ -210,13 +288,26 @@ export class App {
     this.tuningPanel = await openTuningPanel(this.tuning, { cam: this.renderer.viewports[0].cam, lookAhead: this.lookAhead });
   }
 
-  get player(): CarState {
-    return this.world.cars[0];
+  get world() {
+    return this.session.world;
+  }
+
+  /** The results table shows a moment after the race has ended. */
+  get showingResults(): boolean {
+    const race = this.session.world.race;
+    return this.mode === 'race' && race.phase === RacePhase.Finished && this.session.world.tick >= race.endTick + 72;
+  }
+
+  /** The first local player's car (or the followed car on the title screen). */
+  get player() {
+    return this.session.world.cars[this.viewCar[0]];
   }
 
   start(): void {
     requestAnimationFrame(this.frame);
   }
+
+  // ------------------------------------------------------------- main loop
 
   private readonly frame = (nowMs: number): void => {
     requestAnimationFrame(this.frame);
@@ -224,7 +315,8 @@ export class App {
     if (this.last < 0) this.last = now;
     const dt = Math.min(0.1, now - this.last);
     this.last = now;
-    this.handleKeys();
+    this.time += dt;
+    this.handleKeys(dt);
     this.acc = this.paused ? 0 : this.acc + dt;
     let steps = 0;
     while (this.acc >= DT && steps < 6) {
@@ -244,16 +336,10 @@ export class App {
     }
   };
 
-  /** Run `ticks` simulation steps immediately and render one frame (testing). */
-  advance(ticks: number): void {
-    for (let i = 0; i < ticks; i++) this.fixedStep();
-    this.renderFrame(0, ticks * DT);
-  }
-
-  private handleKeys(): void {
+  private handleKeys(dt: number): void {
     const kb = this.input.keyboard;
-    if (kb.wasPressed('KeyR')) this.resetPlayer();
-    if (kb.wasPressed('Digit1')) this.debugView.visible = !this.debugView.visible;
+    const nav = this.nav.poll(dt);
+    if (kb.wasPressed('Digit1') && this.debugView) this.debugView.visible = !this.debugView.visible;
     if (kb.wasPressed('Digit2')) this.showTelemetry = !this.showTelemetry;
     if (kb.wasPressed('Digit3')) {
       this.renderer.crt = (this.renderer.crt + 1) % 3;
@@ -263,25 +349,42 @@ export class App {
       this.renderer.paletteMode = ((this.renderer.paletteMode + 1) % 3) as PaletteModeId;
       this.flashMessage(PALETTE_MODE_NAMES[this.renderer.paletteMode]);
     }
-    if (kb.wasPressed('KeyV')) this.toggleSplit();
     if (kb.wasPressed('KeyM')) {
       this.setMood(MOODS[(MOODS.indexOf(this.mood) + 1) % MOODS.length]);
       this.flashMessage(this.mood.name);
     }
     if (kb.wasPressed('Digit0')) void this.openTuning();
-    if (kb.wasPressed('KeyP')) {
-      this.player.aiDriven = this.player.aiDriven ? 0 : 1;
-      this.flashMessage(this.player.aiDriven ? 'AUTOPILOT ON' : 'AUTOPILOT OFF');
-    }
     const pad = this.input.firstActivePad();
     if (pad >= 0) this.padIndex = pad;
+
+    if (this.mode === 'title') {
+      this.titleMenu.handle(nav);
+      return;
+    }
+    if (this.showingResults) {
+      if (nav.confirm || nav.click || nav.back) this.toTitle();
+      return;
+    }
+    if (this.paused) {
+      if (nav.back) this.paused = false;
+      else this.pauseMenu.handle(nav);
+      return;
+    }
+    if (nav.back || kb.wasPressed('KeyP')) {
+      this.paused = true;
+      this.pauseMenu.index = 0;
+      return;
+    }
+    if (kb.wasPressed('KeyR')) this.resetCar(this.session.playerCars[0]);
   }
 
-  resetPlayer(): void {
-    const car = this.player;
+  /** Put a local player's car back on the track. */
+  resetCar(id: number | undefined): void {
+    if (id === undefined || this.world.race.phase === RacePhase.Countdown) return;
+    const car = this.world.cars[id];
     respawnCar(car, this.track, car.trackS);
     resetProgress(car, this.track);
-    this.skid.mark(0, 0, 0, false);
+    this.view.snap(id);
     this.flashMessage('RESET');
   }
 
@@ -290,87 +393,75 @@ export class App {
     this.flashTime = seconds;
   }
 
+  private playerInputs(): LocalPlayerInput[] {
+    const n = this.session.playerCars.length;
+    if (n === 2) return [{ keys: P1_KEYS, pad: 0 }, { keys: P2_KEYS, pad: 1 }];
+    return [{ keys: SOLO_KEYS, pad: this.padIndex }];
+  }
+
   private fixedStep(): void {
-    this.input.sample({ keys: SOLO_KEYS, pad: this.padIndex }, this.inputs[0]);
-    const cars = this.world.cars;
-    for (let i = 0; i < cars.length; i++) {
-      const p = this.prev[i];
-      p.x = cars[i].x;
-      p.z = cars[i].z;
-      p.y = cars[i].y;
-      p.heading = cars[i].heading;
-    }
-    stepWorld(this.world, this.track, this.inputs, this.tunings);
-    const ev = this.world.events;
+    const s = this.session;
+    const players = this.playerInputs();
+    s.playerCars.forEach((id, p) => this.input.sample(players[p], s.inputs[id], p === 0));
+    this.view.beforeStep();
+    s.step();
+    this.view.afterStep();
+    this.handleEvents();
+  }
+
+  private handleEvents(): void {
+    const w = this.world;
+    const ev = w.events;
+    const players = this.session.playerCars;
+    const me = this.player;
     for (let k = 0; k < ev.count; k++) {
       const e = ev.list[k];
       if ((e.kind === Ev.WallHit || e.kind === Ev.CarHit) && this.audio.ready) {
-        const dx = e.x - this.player.x;
-        const dz = e.z - this.player.z;
-        const dist = Math.hypot(dx, dz);
+        const dx = e.x - me.x;
+        const dist = Math.hypot(dx, e.z - me.z);
         if (dist < 60) playImpact(this.audio, e.value * (1 - dist / 60), dx / 30);
-      } else if (e.kind === Ev.Lap && e.car === 0) {
-        const best = this.player.bestLapTicks === e.value;
-        this.flashMessage(`${best ? 'BEST ' : 'LAP '}${formatTime(e.value * DT)}`, 2.5);
+      } else if (e.kind === Ev.Respawn) {
+        this.view.snap(e.car);
+      } else if (e.kind === Ev.Lap && players.includes(e.car) && this.mode === 'race') {
+        const car = w.cars[e.car];
+        const best = car.bestLapTicks === e.value;
+        if (w.race.laps === 0 || car.lap <= w.race.laps) {
+          this.flashMessage(`${best ? 'BEST LAP ' : 'LAP '}${(e.value * DT).toFixed(2)}`, 2.2);
+          playTone(this.audio, best ? 1046 : 784, 0.12, 'square', 0.1);
+        }
+      } else if (e.kind === Ev.Finish && players.includes(e.car)) {
+        playFanfare(this.audio, e.other <= 3);
+      } else if (e.kind === Ev.RaceStart && this.mode === 'race') {
+        playTone(this.audio, 880, 0.45, 'square', 0.14);
       }
     }
-    for (const car of cars) this.emitSkids(car);
-    this.effects.tick(this.world);
-  }
-
-  private emitSkids(car: CarState): void {
-    const speed = Math.hypot(car.vx, car.vz);
-    const slipDeg = (Math.abs(car.slip) * 180) / Math.PI;
-    const sliding = (car.sliding === 1 || car.spinTicks > 0) && slipDeg > 4 && speed > 5;
-    const hardBrake = car.longAccel < -12 && speed > 10;
-    const fx = Math.sin(car.heading);
-    const fz = -Math.cos(car.heading);
-    const rx = Math.cos(car.heading);
-    const rz = Math.sin(car.heading);
-    for (let w = 0; w < 4; w++) {
-      const rear = w < 2;
-      const side = w % 2 === 0 ? -0.97 : 0.97;
-      const along = rear ? -1.42 : 1.38;
-      const x = car.x + rx * side + fx * along;
-      const z = car.z + rz * side + fz * along;
-      const on = car.airborne === 0 && (sliding || hardBrake) && (rear || slipDeg > 14 || hardBrake) && PAVED.has(surfaceAt(this.track, x, z));
-      this.skid.mark(car.id * 4 + w, x, z, on);
+    // Countdown beeps as the start lights come on.
+    if (this.mode === 'race' && w.race.phase === RacePhase.Countdown) {
+      const lit = lightsOn(w.tick, w.race.startTick);
+      if (lit > this.lastLights) playTone(this.audio, 440, 0.12, 'square', 0.12);
+      this.lastLights = lit;
     }
   }
+
+  // ------------------------------------------------------------- rendering
 
   private renderFrame(alpha: number, dt: number): void {
-    const cars = this.world.cars;
-    for (let i = 0; i < cars.length; i++) {
-      const c = cars[i];
-      const p = this.prev[i];
-      let dh = c.heading - p.heading;
-      if (dh > Math.PI) dh -= Math.PI * 2;
-      else if (dh < -Math.PI) dh += Math.PI * 2;
-      this.carViews[i].update(
-        p.x + (c.x - p.x) * alpha,
-        p.y + (c.y - p.y) * alpha,
-        p.z + (c.z - p.z) * alpha,
-        p.heading + dh * alpha,
-        c.steer,
-        c.latAccel,
-        c.longAccel,
-        (c.brakeTicks > 0 || c.longAccel < -10) && Math.hypot(c.vx, c.vz) > 1,
-        Math.hypot(c.vx, c.vz),
-        dt,
-      );
+    if (this.mode === 'title') {
+      // Attract mode: follow the race leader, switching cars now and then.
+      const order = standings(this.world);
+      this.viewCar[0] = order[Math.floor(this.time / 9) % Math.min(3, order.length)];
     }
-
     const views = this.renderer.viewCount;
     for (let v = 0; v < views; v++) this.updateCamera(v, dt);
-    this.particles.time.value = (this.world.tick + alpha) * DT;
-    this.particles.dither.value = this.renderer.paletteMode === 0 ? 0 : 1;
+    const cam0 = this.renderer.viewports[0].cam;
+    this.view.update(alpha, dt, 0.19 / cam0.metersPerPixel, this.renderer.paletteMode !== PaletteMode.Off);
+    this.view.particles.light.value = this.mood.particleLight;
     animTime.value = performance.now() / 1000;
-    this.particles.flush();
     this.updateAudio();
-    this.drawHud(dt);
+    this.drawUi(dt);
     for (let v = 0; v < views; v++) {
       this.updateSun(this.camTargets[v]);
-      this.particles.pxScale.value = 0.19 / this.renderer.viewports[v].cam.metersPerPixel;
+      this.view.particles.pxScale.value = 0.19 / this.renderer.viewports[v].cam.metersPerPixel;
       this.renderer.renderView(this.scene, v);
     }
     this.renderer.present();
@@ -382,7 +473,7 @@ export class App {
     const cam = vp.cam;
     const idx = Math.min(this.viewCar[v], this.world.cars.length - 1);
     const car = this.world.cars[idx];
-    const view = this.carViews[idx].root.position;
+    const view = this.view.cars[idx].root.position;
     const half = cam.footprint(vp.w, vp.h);
     const maxLead = Math.min(half.width, half.depth) * 0.3;
     let lx = car.vx * this.lookAhead.value;
@@ -399,24 +490,167 @@ export class App {
       target.set(tx, 0, tz);
       this.camInit[v] = true;
     } else {
-      const k = 1 - Math.exp(-7 * dt);
+      const k = 1 - Math.exp(-(this.mode === 'title' ? 3 : 7) * dt);
       target.x += (tx - target.x) * k;
       target.z += (tz - target.z) * k;
     }
     cam.update(target.x, 0, target.z, vp.w, vp.h);
   }
 
-  /** Debug split screen: the second view follows car 1. */
-  toggleSplit(): void {
-    const r = this.renderer;
-    r.setSplit(!r.isSplit);
-    const base = r.viewports[0].cam;
-    const view = r.isSplit ? this.baseView * 1.25 : this.baseView;
-    for (const vp of r.viewports) {
-      vp.cam.viewHeight = view;
-      vp.cam.tilt = base.tilt;
+  /** Keep the shadow map centred on the view, snapped to whole shadow texels. */
+  private updateSun(target: THREE.Vector3): void {
+    const texel = (SHADOW_HALF * 2) / SHADOW_MAP;
+    const r = Math.round(target.dot(this.sunRight) / texel) * texel;
+    const u = Math.round(target.dot(this.sunUp) / texel) * texel;
+    const f = target.dot(this.sunDir);
+    const t = this.sun.target.position;
+    t.copy(this.sunRight).multiplyScalar(r).addScaledVector(this.sunUp, u).addScaledVector(this.sunDir, f);
+    this.sun.position.copy(t).addScaledVector(this.sunDir, 200);
+    this.sun.target.updateMatrixWorld();
+  }
+
+  private updateAudio(): void {
+    const ctx = this.audio.ctx;
+    if (!ctx || !this.skidSound) return;
+    const now = ctx.currentTime;
+    const players = this.mode === 'race' ? this.session.playerCars : [];
+    this.engines.forEach((engine, p) => {
+      const id = players[p];
+      if (id === undefined || this.paused) {
+        engine.silence(now);
+        return;
+      }
+      const car = this.world.cars[id];
+      const pan = players.length === 2 ? (p === 0 ? -0.6 : 0.6) : 0;
+      const throttle = this.session.inputs[id].throttle;
+      const speed = Math.hypot(car.vx, car.vz);
+      // On the grid the engine revs with the throttle.
+      const rev = this.world.race.phase === RacePhase.Countdown ? throttle * 0.6 : speed / this.tuning.vTop;
+      engine.update(rev, throttle, 1, pan, now);
+    });
+    const car = players.length ? this.world.cars[players[0]] : null;
+    let amount = 0;
+    if (car && !this.paused) {
+      const speed = Math.hypot(car.vx, car.vz);
+      const slipDeg = (Math.abs(car.slip) * 180) / Math.PI;
+      if ((car.sliding || car.spinTicks > 0) && speed > 5) amount = Math.min(1, (slipDeg - 3) / 22) * Math.min(1, speed / 18);
+      if (car.longAccel < -12 && speed > 8) amount = Math.max(amount, 0.55);
+      if (!PAVED.has(car.surfRear)) amount = 0;
     }
-    this.camInit[1] = false;
+    this.skidSound.update(Math.max(0, amount), 0.5, now);
+  }
+
+  private drawUi(dt: number): void {
+    const ui = this.renderer.ui;
+    const ctx = ui.begin();
+    const W = ui.w;
+    const H = ui.h;
+    if (this.mode === 'title') {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(0, 0, W, H);
+      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), Math.min(W - 40, 420), this.time);
+      this.titleMenu.draw(ctx, W / 2, top + 14, H >= 330 ? 2 : 1, dt);
+      const help = this.settings.players === 2
+        ? 'P1: WASD + G/F/H   P2: ARROWS + . , -   OR GAMEPADS'
+        : 'ARROWS/WASD DRIVE   LIFT OFF + GAS AGAIN WHILE TURNING = DRIFT';
+      drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
+      drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+    } else {
+      this.drawRaceUi(ctx, W, H);
+    }
+    if (this.flashTime > 0) {
+      this.flashTime -= dt;
+      drawText(ctx, this.flash, W / 2, Math.round(H * 0.18), { scale: 2, color: '#ffd84a', align: 'center' });
+    }
+    if (this.params.debug) {
+      const rtt = this.ping.rtt >= 0 ? ` RTT ${this.ping.rtt.toFixed(0)}MS` : this.ping.connected ? '' : ' OFFLINE';
+      drawText(ctx, `${this.fps.toFixed(0)} FPS ${this.renderer.lowW}X${this.renderer.lowH} X${this.renderer.scale}${rtt}`, W - 4, H - 10, {
+        color: '#9cff9c', align: 'right',
+      });
+    }
+    ui.end();
+  }
+
+  private drawRaceUi(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+    const s = this.session;
+    const w = s.world;
+    const split = this.renderer.isSplit;
+    for (let p = 0; p < s.playerCars.length; p++) {
+      const vp = this.renderer.viewports[split ? p : 0];
+      drawPlayerHud(ctx, { x: vp.x, w: vp.w, h: H }, w, s.playerCars[p], split ? `P${p + 1}` : null);
+    }
+    if (split) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(this.renderer.viewports[1].x - 2, 0, 2, H);
+    }
+    const mw = Math.round(Math.min(110, W * 0.2));
+    const mh = Math.round(mw * 0.75);
+    const mx = split ? Math.round(W / 2 - mw / 2) : W - mw - 8;
+    const my = split ? H - mh - 8 : 8;
+    this.minimap.draw(ctx, s.track, w, s.colors, s.playerCars, mx, my, mw, mh);
+    drawCountdown(ctx, W, w);
+    if (this.firstRace && w.tick < w.race.startTick + 60 * 15) {
+      const hintY = split ? my - 14 : H - 36;
+      drawText(ctx, 'DRIFT: LET GO OF GAS + PRESS AGAIN WHILE TURNING', W / 2, hintY, { color: '#ffd84a', align: 'center' });
+    }
+    if (this.showTelemetry && s.playerCars.length) this.drawTelemetry(ctx, 8, 92);
+    if (this.showingResults) {
+      this.firstRace = false;
+      drawResults(ctx, W, H, w, s.names, s.colors, s.playerCars, this.time);
+    } else if (this.paused) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(0, 0, W, H);
+      drawText(ctx, 'PAUSED', W / 2, Math.round(H * 0.3), { scale: 4, color: '#ffd84a', align: 'center' });
+      this.pauseMenu.draw(ctx, W / 2, Math.round(H * 0.3) + 44, 2);
+    }
+  }
+
+  private drawTelemetry(ctx: CanvasRenderingContext2D, x: number, top: number): void {
+    const car = this.player;
+    let y = top;
+    const slipDeg = (car.slip * 180) / Math.PI;
+    const inp = this.session.inputs[car.id];
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(x - 4, y - 3, 118, 84);
+    const row = (label: string, value: string, color = '#ffffff') => {
+      drawText(ctx, label, x, y, { color: '#9aa4b8' });
+      drawText(ctx, value, x + 110, y, { color, align: 'right' });
+      y += 9;
+    };
+    const state = car.spinTicks > 0 ? 'SPIN' : car.sliding ? 'SLIDE' : 'GRIP';
+    row('STATE', state, car.spinTicks > 0 ? '#ff4a3a' : car.sliding ? '#ffd84a' : '#9cff9c');
+    row('SLIP', `${slipDeg.toFixed(1)}°`);
+    row('LAT G', (car.latAccel / 9.81).toFixed(2));
+    row('YAW', `${car.angVel.toFixed(2)}`);
+    row('SURFACE', SURFACES[car.surfRear]?.name.toUpperCase() ?? '?');
+    row('DIST', `${car.raceDist.toFixed(0)} M`);
+    const bar = (label: string, v: number, color: string, centered = false) => {
+      drawText(ctx, label, x, y, { color: '#9aa4b8' });
+      const bx = x + 36;
+      const bw = 74;
+      ctx.fillStyle = '#222';
+      ctx.fillRect(bx, y, bw, 6);
+      ctx.fillStyle = color;
+      if (centered) {
+        const mid = bx + bw / 2;
+        const len = Math.round((v * bw) / 2);
+        ctx.fillRect(Math.min(mid, mid + len), y, Math.abs(len) || 1, 6);
+      } else {
+        ctx.fillRect(bx, y, Math.round(v * bw), 6);
+      }
+      y += 9;
+    };
+    bar('STEER', car.steer, '#5ac8fa', true);
+    bar('GAS', inp.throttle, '#9cff9c');
+    bar('BRAKE', inp.brake, '#ff6b5e');
+  }
+
+  // ------------------------------------------------------------ debug/test
+
+  /** Run `ticks` simulation steps immediately and render one frame (testing). */
+  advance(ticks: number): void {
+    for (let i = 0; i < ticks; i++) this.fixedStep();
+    this.renderFrame(0, ticks * DT);
   }
 
   /**
@@ -427,7 +661,7 @@ export class App {
   crawlTest(k = 8): { horizontal: number; vertical: number } {
     const wasPaused = this.paused;
     this.paused = true;
-    const hidden: THREE.Object3D[] = [...this.carViews.map((c) => c.root), this.particles.points];
+    const hidden: THREE.Object3D[] = [...this.view.cars.map((c) => c.root), this.view.particles.points];
     for (const o of hidden) o.visible = false;
     const frozen = animTime.value;
     const vp = this.renderer.viewports[0];
@@ -435,11 +669,9 @@ export class App {
     const base = this.camTargets[0].clone();
     const p = cam.metersPerPixel;
     const shot = (tx: number, tz: number) => {
-      const t = new THREE.Vector3(tx, 0, tz);
       cam.update(tx, 0, tz, vp.w, vp.h);
-      this.updateSun(t);
+      this.updateSun(new THREE.Vector3(tx, 0, tz));
       animTime.value = frozen;
-      this.particles.pxScale.value = 0.19 / cam.metersPerPixel;
       this.renderer.renderView(this.scene, 0);
       const out = vp.post.out;
       const buf = new Uint8Array(out.width * out.height * 4);
@@ -485,127 +717,12 @@ export class App {
     };
   }
 
-  /** Keep the shadow map centred on the view, snapped to whole shadow texels. */
-  private updateSun(target: THREE.Vector3): void {
-    const texel = (SHADOW_HALF * 2) / SHADOW_MAP;
-    const r = Math.round(target.dot(this.sunRight) / texel) * texel;
-    const u = Math.round(target.dot(this.sunUp) / texel) * texel;
-    const f = target.dot(this.sunDir);
-    const t = this.sun.target.position;
-    t.copy(this.sunRight).multiplyScalar(r).addScaledVector(this.sunUp, u).addScaledVector(this.sunDir, f);
-    this.sun.position.copy(t).addScaledVector(this.sunDir, 200);
-    this.sun.target.updateMatrixWorld();
-  }
-
-  private updateAudio(): void {
-    const ctx = this.audio.ctx;
-    if (!ctx || !this.engine || !this.skidSound) return;
-    const now = ctx.currentTime;
-    const car = this.player;
-    const speed = Math.hypot(car.vx, car.vz);
-    this.engine.update(speed / this.tuning.vTop, this.inputs[0].throttle, 1, 0, now);
-    const slipDeg = (Math.abs(car.slip) * 180) / Math.PI;
-    const paved = PAVED.has(car.surfRear);
-    let amount = 0;
-    if ((car.sliding || car.spinTicks > 0) && speed > 5) amount = Math.min(1, (slipDeg - 3) / 22) * Math.min(1, speed / 18);
-    if (car.longAccel < -12 && speed > 8) amount = Math.max(amount, 0.55);
-    this.skidSound.update(paved ? Math.max(0, amount) : 0, 0.5, now);
-  }
-
-  private drawHud(dt: number): void {
-    const ui = this.renderer.ui;
-    const ctx = ui.begin();
-    const W = ui.w;
-    const H = ui.h;
-    const car = this.player;
-    const speed = Math.hypot(car.vx, car.vz);
-    const yellow = '#ffd84a';
-
-    // Lap and times.
-    const lapTime = car.lap > 0 ? (this.world.tick - car.lapStartTick) * DT : 0;
-    drawText(ctx, car.lap > 0 ? `LAP ${car.lap}` : 'START', 6, 6, { color: yellow, scale: 2 });
-    drawText(ctx, formatTime(lapTime), 6, 24, { scale: 1 });
-    if (car.lastLapTicks) drawText(ctx, `LAST ${formatTime(car.lastLapTicks * DT)}`, 6, 34, { color: '#b8c8ff' });
-    if (car.bestLapTicks) drawText(ctx, `BEST ${formatTime(car.bestLapTicks * DT)}`, 6, 43, { color: '#9cff9c' });
-
-    // Speedometer.
-    const kmh = Math.round(speed * 3.6);
-    drawText(ctx, `${kmh}`, 6, H - 22, { scale: 2, color: '#ffffff' });
-    drawText(ctx, 'KM/H', 10 + String(kmh).length * 12, H - 15, { color: '#c0c0c0' });
-    if (car.wrongWayTicks > 90) drawText(ctx, 'WRONG WAY!', W / 2, H / 2 - 40, { scale: 2, color: '#ff4a3a', align: 'center' });
-
-    if (this.world.tick < 60 * 20) {
-      drawText(ctx, 'DRIFT: LET GO OF GAS + PRESS AGAIN WHILE TURNING', W / 2, H - 34, { color: '#ffd84a', align: 'center' });
-    }
-    if (this.flashTime > 0) {
-      this.flashTime -= dt;
-      drawText(ctx, this.flash, W / 2, 30, { scale: 2, color: yellow, align: 'center' });
-    }
-
-    if (this.renderer.isSplit) {
-      const v1 = this.renderer.viewports[1];
-      ctx.fillStyle = '#000';
-      ctx.fillRect(v1.x - 2, 0, 2, H);
-    }
-    if (this.showTelemetry) this.drawTelemetry(ctx, 10, 56);
-    if (this.world.tick < 60 * 12 || this.showTelemetry) {
-      drawText(ctx, 'R:RESET M:MOOD 3:CRT 4:COLOURS 2:INFO 0:TUNE', W - 4, H - 10, {
-        color: '#d0d0d0', align: 'right', shadow: '#000',
-      });
-    }
-    if (this.params.debug) {
-      const rtt = this.ping.rtt >= 0 ? ` RTT ${this.ping.rtt.toFixed(0)}MS` : this.ping.connected ? '' : ' OFFLINE';
-      drawText(ctx, `${this.fps.toFixed(0)} FPS ${this.renderer.lowW}X${this.renderer.lowH} X${this.renderer.scale}${rtt}`, W - 4, 4, {
-        color: '#9cff9c', align: 'right',
-      });
-    }
-    ui.end();
-  }
-
-  private drawTelemetry(ctx: CanvasRenderingContext2D, x: number, top: number): void {
-    const car = this.player;
-    let y = top;
-    const slipDeg = (car.slip * 180) / Math.PI;
-    const inp = this.inputs[0];
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(x - 4, y - 3, 118, 84);
-    const row = (label: string, value: string, color = '#ffffff') => {
-      drawText(ctx, label, x, y, { color: '#9aa4b8' });
-      drawText(ctx, value, x + 110, y, { color, align: 'right' });
-      y += 9;
-    };
-    const state = car.spinTicks > 0 ? 'SPIN' : car.sliding ? 'SLIDE' : 'GRIP';
-    row('STATE', state, car.spinTicks > 0 ? '#ff4a3a' : car.sliding ? '#ffd84a' : '#9cff9c');
-    row('SLIP', `${slipDeg.toFixed(1)}°`);
-    row('LAT G', (car.latAccel / 9.81).toFixed(2));
-    row('YAW', `${car.angVel.toFixed(2)}`);
-    row('SURFACE', SURFACES[car.surfRear]?.name.toUpperCase() ?? '?');
-    row('DIST', `${car.raceDist.toFixed(0)} M`);
-    // Steering, throttle and brake bars.
-    const bar = (label: string, v: number, color: string, centered = false) => {
-      drawText(ctx, label, x, y, { color: '#9aa4b8' });
-      const bx = x + 36;
-      const bw = 74;
-      ctx.fillStyle = '#222';
-      ctx.fillRect(bx, y, bw, 6);
-      ctx.fillStyle = color;
-      if (centered) {
-        const mid = bx + bw / 2;
-        const len = Math.round((v * bw) / 2);
-        ctx.fillRect(Math.min(mid, mid + len), y, Math.abs(len) || 1, 6);
-      } else {
-        ctx.fillRect(bx, y, Math.round(v * bw), 6);
-      }
-      y += 9;
-    };
-    bar('STEER', car.steer, '#5ac8fa', true);
-    bar('GAS', inp.throttle, '#9cff9c');
-    bar('BRAKE', inp.brake, '#ff6b5e');
+  /** Debug split screen: toggles a second view following car 1. */
+  toggleSplit(): void {
+    const r = this.renderer;
+    r.setSplit(!r.isSplit);
+    for (const vp of r.viewports) vp.cam.viewHeight = r.isSplit ? VIEW_HEIGHT * 1.25 : VIEW_HEIGHT;
+    this.camInit[1] = false;
   }
 }
 
-export function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds - m * 60;
-  return `${m}:${s < 10 ? '0' : ''}${s.toFixed(2)}`;
-}
