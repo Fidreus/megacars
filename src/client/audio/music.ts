@@ -11,6 +11,12 @@ export interface Song {
   title: string;
   artist: string;
   licence: string;
+  /** A recording (.ogg, with an .mp3 next to it) instead of a tracker module. */
+  audio?: boolean;
+  /** Where it comes from (credits). */
+  source?: string;
+  /** Loudness correction for quiet recordings. */
+  gain?: number;
 }
 
 /** Bundled songs (public/music), all checked on The Mod Archive. */
@@ -26,10 +32,15 @@ export const SONGS: Record<string, Song> = {
   simplechip: { file: 'simple_chip_tune.xm', title: 'SIMPLE CHIP TUNE', artist: 'JAM', licence: 'PUBLIC DOMAIN' },
   numen: { file: 'numen_in_da_chip.xm', title: 'NUMEN IN DA CHIP', artist: 'JAM', licence: 'PUBLIC DOMAIN' },
   imagine: { file: 'imagine.xm', title: 'IMAGINE', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0' },
+  // Commodore 64 SID chip music (GoatTracker, recorded through a SID emulator).
+  uptempo: { file: 'c64_uptempo_chiptune', title: 'UPTEMPO CHIPTUNE (C64 SID)', artist: 'SKRJABLIN', licence: 'CC0', audio: true, source: 'OPENGAMEART' },
+  powertrack: { file: 'melodic_power_track', title: 'MELODIC POWER TRACK (C64 SID)', artist: 'SKRJABLIN', licence: 'CC0', audio: true, source: 'OPENGAMEART', gain: 3 },
+  freddie: { file: 'freddy_the_spider', title: 'FREDDIE THE SPIDER (C64 SID)', artist: 'SKRJABLIN', licence: 'CC0', audio: true, source: 'OPENGAMEART' },
+  shanty: { file: 'shanty_c64', title: 'SHANTY (C64 SID)', artist: 'SKRJABLIN', licence: 'CC0', audio: true, source: 'OPENGAMEART' },
 };
 
 /** Songs used for races in shuffle mode. */
-const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine'];
+const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine', 'uptempo', 'powertrack', 'freddie', 'shanty'];
 
 export const MUSIC_MODES = ['TRACKS', 'SHUFFLE', 'OFF'] as const;
 export type MusicMode = 0 | 1 | 2;
@@ -75,7 +86,7 @@ export class Music {
 
   setVolume(v: number): void {
     this.volume = v;
-    if (this.out && this.audio.ctx) this.out.gain.setTargetAtTime(this.mode === 2 ? 0 : v * 0.55, this.audio.ctx.currentTime, 0.1);
+    if (this.out && this.audio.ctx) this.out.gain.setTargetAtTime(this.mode === 2 ? 0 : v * 0.55 * this.songGain, this.audio.ctx.currentTime, 0.1);
   }
 
   setMode(m: MusicMode): void {
@@ -131,10 +142,17 @@ export class Music {
   }
 
   stop(): void {
-    if (!this.player || !this.out || !this.audio.ctx) return;
+    // Cancel a song that is still loading.
+    this.switchToken++;
+    if (!this.out || !this.audio.ctx) return;
     this.out.gain.setTargetAtTime(0, this.audio.ctx.currentTime, 0.15);
     const p = this.player;
-    setTimeout(() => p.stop(), 600);
+    const src = this.source;
+    this.source = null;
+    setTimeout(() => {
+      p?.stop();
+      src?.stop();
+    }, 600);
     this.nowPlaying = '';
   }
 
@@ -155,22 +173,70 @@ export class Music {
 
   private async switchTo(key: string): Promise<void> {
     const token = ++this.switchToken;
-    const player = await this.ensurePlayer();
-    if (!player || token !== this.switchToken || !this.out) return;
-    const ctx = player.context;
+    const recording = !!SONGS[key]?.audio;
+    // Recordings need only the output node; modules need the worklet player.
+    const player = recording ? null : await this.ensurePlayer();
+    const ctx = this.audio.ctx;
+    if ((!recording && !player) || token !== this.switchToken || !ctx) return;
+    const out = this.ensureOut(ctx);
     // Fade out what is playing, then start the new song and fade in.
-    this.out.gain.setTargetAtTime(0, ctx.currentTime, 0.12);
-    const bytes = await this.fetchSong(key);
+    out.gain.setTargetAtTime(0, ctx.currentTime, 0.12);
+    const data = recording ? await this.fetchRecording(key, ctx) : await this.fetchSong(key);
     await new Promise((r) => setTimeout(r, 450));
-    if (!bytes || token !== this.switchToken) return;
-    player.stop();
-    player.play(bytes.slice(0));
-    this.out.gain.cancelScheduledValues(ctx.currentTime);
-    this.out.gain.setValueAtTime(0, ctx.currentTime);
-    this.out.gain.linearRampToValueAtTime(this.volume * 0.55, ctx.currentTime + 1.2);
+    if (!data || token !== this.switchToken || this.mode === 2) return;
+    this.player?.stop();
+    this.source?.stop();
+    this.source = null;
+    if (data instanceof AudioBuffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = data;
+      src.loop = true;
+      src.connect(out);
+      src.start();
+      this.source = src;
+    } else {
+      player!.play(data.slice(0));
+    }
+    out.gain.cancelScheduledValues(ctx.currentTime);
+    out.gain.setValueAtTime(0, ctx.currentTime);
+    this.songGain = SONGS[key]?.gain ?? 1;
+    out.gain.linearRampToValueAtTime(this.volume * 0.55 * this.songGain, ctx.currentTime + 1.2);
     const song = SONGS[key];
     this.nowPlaying = song ? `${song.title} - ${song.artist}` : key.replace(/^own:/, '').toUpperCase();
     this.onSong(this.nowPlaying);
+  }
+
+  private source: AudioBufferSourceNode | null = null;
+  private songGain = 1;
+  private readonly decoded = new Map<string, AudioBuffer>();
+
+  /** The music output (created once; module player and recordings both feed it). */
+  private ensureOut(ctx: AudioContext): GainNode {
+    if (!this.out) {
+      this.out = ctx.createGain();
+      this.out.gain.value = 0;
+      this.out.connect(ctx.destination);
+    }
+    return this.out;
+  }
+
+  /** Decode a recording: Ogg Vorbis first, MP3 where the browser can't. */
+  private async fetchRecording(key: string, ctx: AudioContext): Promise<AudioBuffer | null> {
+    const song = SONGS[key];
+    const hit = this.decoded.get(song.file);
+    if (hit) return hit;
+    for (const ext of ['ogg', 'mp3']) {
+      try {
+        const res = await fetch(`/music/${song.file}.${ext}`);
+        if (!res.ok) continue;
+        const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+        this.decoded.set(song.file, buf);
+        return buf;
+      } catch {
+        // Try the next format.
+      }
+    }
+    return null;
   }
 
   private async fetchSong(key: string): Promise<ArrayBuffer | null> {
@@ -206,10 +272,7 @@ export class Music {
           player.onError((e) => fail(e));
           setTimeout(() => fail(new Error('music worklet timeout')), 10000);
         });
-        const out = ctx.createGain();
-        out.gain.value = 0;
-        player.gain.connect(out).connect(ctx.destination);
-        this.out = out;
+        player.gain.connect(this.ensureOut(ctx));
         this.player = player;
         return player;
       } catch (e) {

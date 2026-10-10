@@ -10,14 +10,14 @@ export function drawCredits(g: CanvasRenderingContext2D, W: number, H: number, t
   let y = Math.round(H * 0.06);
   drawText(g, 'MUSIC CREDITS', W / 2, y, { scale: 2, color: '#ffd84a', align: 'center' });
   y += 24;
-  drawText(g, 'ALL SONGS FROM THE MOD ARCHIVE - MODARCHIVE.ORG', W / 2, y, { color: '#9fd8ff', align: 'center' });
+  drawText(g, 'MODULES FROM THE MOD ARCHIVE (MODARCHIVE.ORG), C64 SID TRACKS FROM OPENGAMEART.ORG', W / 2, y, { color: '#9fd8ff', align: 'center' });
   y += 16;
   const x0 = Math.round(W / 2 - 190);
   for (const s of Object.values(SONGS)) {
     drawText(g, s.title, x0, y, { color: '#ffffff' });
     drawText(g, s.artist, x0 + 150, y, { color: '#ffd84a' });
     drawText(g, s.licence, x0 + 380, y, { color: s.licence.startsWith('CC') ? '#9cff9c' : '#8090a8', align: 'right' });
-    y += 11;
+    y += 10;
   }
   y += 8;
   drawText(g, 'IMAGINE BY ANDREAS VIKLUND (TSEC) - CREATIVE COMMONS ATTRIBUTION 4.0', W / 2, y, { color: '#9cff9c', align: 'center' });

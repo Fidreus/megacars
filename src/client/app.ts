@@ -227,6 +227,8 @@ export class App {
     this.audio.volume = (this.settings.soundVolume / 10) * 0.9;
     this.music.onSong = () => (this.songToast = 4);
     this.optionsMenu = new Menu(this.buildOptionItems(), { onMove: beep, onChange: beep });
+    // Music on/off, volumes and next song are also in the pause menu (Esc).
+    this.pauseMenu.items.splice(2, 0, ...this.buildOptionItems().slice(0, 4));
     this.careerMenu = new Menu([
       {
         label: () => {
