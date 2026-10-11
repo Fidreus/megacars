@@ -132,6 +132,31 @@ const chrome = new THREE.MeshPhongMaterial({ color: '#b8bcc4', specular: '#fffff
 const rimMat = new THREE.MeshPhongMaterial({ color: '#c9ced6', specular: '#ffffff', shininess: 60 });
 
 let coneTexture: THREE.CanvasTexture | null = null;
+let glowTex: THREE.CanvasTexture | null = null;
+
+/** Soft rounded-rectangle glow for the underglow (shared). */
+function glowTexture(): THREE.CanvasTexture {
+  if (glowTex) return glowTex;
+  const c = document.createElement('canvas');
+  c.width = 32;
+  c.height = 64;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(32, 64);
+  for (let y = 0; y < 64; y++) {
+    for (let x = 0; x < 32; x++) {
+      const dx = Math.max(0, Math.abs(x - 15.5) - 6) / 10;
+      const dy = Math.max(0, Math.abs(y - 31.5) - 18) / 14;
+      const a = Math.max(0, 1 - Math.hypot(dx, dy)) ** 2;
+      const k = (y * 32 + x) * 4;
+      img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+      img.data[k + 3] = Math.round(a * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  glowTex = new THREE.CanvasTexture(c);
+  return glowTex;
+}
+
 function headlightCone(): THREE.CanvasTexture {
   if (coneTexture) return coneTexture;
   const S = 64;
@@ -202,7 +227,8 @@ export class CarView {
   private wrecked = false;
   private readonly paints: { mat: THREE.MeshPhongMaterial; color: THREE.Color }[] = [];
 
-  constructor(color: string, number: number, style = number % STYLES.length) {
+  /** `supercar`: the Supercars league kit (widebody, big wing, neon underglow). */
+  constructor(color: string, number: number, style = number % STYLES.length, supercar = false) {
     const st = STYLES[style];
     const paint = new THREE.MeshPhongMaterial({ color, specular: '#5a5a5a', shininess: 45 });
     const stripeHex = stripeColor(color);
@@ -252,8 +278,10 @@ export class CarView {
     ];
     add(merge(stripes), stripe);
 
-    // Wing or ducktail spoiler.
-    if (st.wing === 'duck') {
+    // Wing or ducktail spoiler (Supercars get their own, below).
+    if (supercar) {
+      this.supercarKit(add, paint, stripe, front, rear);
+    } else if (st.wing === 'duck') {
       add(new THREE.BoxGeometry(BODY_W - 0.1, 0.12, 0.3).translate(0, st.top[st.top.length - 2][1] + 0.08, rear - 0.25), stripe);
     } else {
       const h = st.wing === 'tall' ? 1.3 : 1.12;
@@ -329,6 +357,64 @@ export class CarView {
     this.cone.renderOrder = 2;
     this.cone.visible = false;
     this.root.add(this.cone);
+  }
+
+  /**
+   * Supercars: widebody haunches, a double-deck wing on swan necks, canards,
+   * side intakes, a racing stripe down each flank, an LED nose bar and a
+   * neon glow under the car in its own colour.
+   */
+  private supercarKit(
+    add: (geo: THREE.BufferGeometry, mat: THREE.Material, parent?: THREE.Object3D) => THREE.Mesh,
+    paint: THREE.Material, stripe: THREE.Material, front: number, rear: number,
+  ): void {
+    const W = BODY_W / 2;
+    add(merge([
+      new THREE.BoxGeometry(0.2, 0.44, 1.5).translate(-(W + 0.13), 0.6, 1.4),
+      new THREE.BoxGeometry(0.2, 0.44, 1.5).translate(W + 0.13, 0.6, 1.4),
+      new THREE.BoxGeometry(0.12, 0.36, 1.2).translate(-(W + 0.09), 0.6, -1.4),
+      new THREE.BoxGeometry(0.12, 0.36, 1.2).translate(W + 0.09, 0.6, -1.4),
+    ]), paint);
+    // Wing: main plane and flap, in the stripe colour, on carbon swan necks.
+    const h = 1.38;
+    const z = rear - 0.3;
+    add(merge([
+      new THREE.BoxGeometry(2.3, 0.07, 0.56).translate(0, h, z),
+      new THREE.BoxGeometry(2.3, 0.05, 0.3).rotateX(-0.45).translate(0, h + 0.14, z + 0.3),
+    ]), stripe);
+    add(merge([
+      new THREE.BoxGeometry(0.06, 0.62, 0.95).translate(-1.16, h + 0.02, z + 0.1),
+      new THREE.BoxGeometry(0.06, 0.62, 0.95).translate(1.16, h + 0.02, z + 0.1),
+      new THREE.BoxGeometry(0.07, 0.6, 0.12).translate(-0.5, h - 0.3, z - 0.15),
+      new THREE.BoxGeometry(0.07, 0.6, 0.12).translate(0.5, h - 0.3, z - 0.15),
+      // Canards on the nose corners and a deeper splitter.
+      new THREE.BoxGeometry(0.34, 0.04, 0.26).rotateZ(0.25).translate(-(W - 0.05), 0.5, front + 0.35),
+      new THREE.BoxGeometry(0.34, 0.04, 0.26).rotateZ(-0.25).translate(W - 0.05, 0.5, front + 0.35),
+      new THREE.BoxGeometry(BODY_W + 0.4, 0.05, 0.5).translate(0, BOTTOM - 0.01, front + 0.05),
+      // Side intakes ahead of the rear wheels.
+      new THREE.BoxGeometry(0.06, 0.22, 0.6).translate(-(W + 0.02), 0.62, 0.45),
+      new THREE.BoxGeometry(0.06, 0.22, 0.6).translate(W + 0.02, 0.62, 0.45),
+    ]), carbon);
+    // A stripe down each flank.
+    add(merge([
+      new THREE.BoxGeometry(0.03, 0.09, 3.4).translate(-(W + 0.015), 0.42, 0),
+      new THREE.BoxGeometry(0.03, 0.09, 3.4).translate(W + 0.015, 0.42, 0),
+    ]), stripe);
+    add(new THREE.BoxGeometry(BODY_W - 0.5, 0.05, 0.05).translate(0, 0.5, front + 0.02), this.headMat);
+    // Neon underglow: an unlit additive patch on the road under the car.
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.4, 6.2).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        map: glowTexture(),
+        color: new THREE.Color((paint as THREE.MeshPhongMaterial).color).multiplyScalar(3),
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    glow.position.y = 0.06;
+    glow.renderOrder = 2;
+    this.root.add(glow);
   }
 
   setLights(on: boolean, strength = 1): void {

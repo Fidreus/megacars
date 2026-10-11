@@ -13,17 +13,17 @@ export const LEAGUE_NAMES: Record<League, string> = { standard: 'STANDARD', supe
 
 /** Supercars: multipliers on the standard car. */
 const SUPER: Partial<Record<keyof CarTuning, number>> = {
-  accel0: 1.4,
-  vTop: 1.25,
-  brakeDecel: 1.3,
-  aGrip: 1.22,
-  aSlide: 1.22,
-  aSteerSlide: 1.2,
-  omegaPeak: 1.12,
-  kYawGrip: 1.15,
-  kYawSlide: 1.15,
-  driftMinSpeed: 1.25,
-  reverseAccel: 1.2,
+  accel0: 1.6,
+  vTop: 1.4,
+  brakeDecel: 1.45,
+  aGrip: 1.28,
+  aSlide: 1.28,
+  aSteerSlide: 1.28,
+  omegaPeak: 1.15,
+  kYawGrip: 1.2,
+  kYawSlide: 1.2,
+  driftMinSpeed: 1.3,
+  reverseAccel: 1.25,
 };
 
 export function leagueOf(v: unknown): League {

@@ -1,6 +1,8 @@
 // Online play on the client: the connection, the room we are in, and the
 // race the server is running for it.
 
+import type { CarTuning } from '../../shared/config/tuning.ts';
+import { leagueOf, type League } from '../../shared/game/leagues.ts';
 import { NetRace } from '../../shared/net/netRace.ts';
 import { priceOf, type Profile, type ShopItem } from '../../shared/game/shop.ts';
 import { cleanName, MsgType, type ClientMsg, type PublicRoom, type RoomConfig, type RoomInfo, type ServerMsg } from '../../shared/net/protocol.ts';
@@ -22,6 +24,8 @@ export class OnlineSession implements GameSession {
   readonly names: readonly string[];
   readonly colors: readonly string[];
   readonly models: readonly number[];
+  readonly league: League;
+  readonly tunings: readonly CarTuning[];
 
   constructor(net: NetRace) {
     this.net = net;
@@ -32,6 +36,8 @@ export class OnlineSession implements GameSession {
     this.names = net.names;
     this.colors = net.colors;
     this.models = net.spec.entrants.map((e) => e.loadout?.car ?? -1);
+    this.league = leagueOf(net.spec.league);
+    this.tunings = net.tunings;
   }
 }
 

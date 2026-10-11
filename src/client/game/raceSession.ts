@@ -4,7 +4,7 @@
 
 import { cloneTuning, type CarTuning } from '../../shared/config/tuning.ts';
 import { AI_NAMES, AI_SKILL, CAR_COLORS } from '../../shared/game/roster.ts';
-import { leagueOf } from '../../shared/game/leagues.ts';
+import { leagueOf, type League } from '../../shared/game/leagues.ts';
 import { createRaceWorld } from '../../shared/game/raceSetup.ts';
 import { makeRng } from '../../shared/math/rng.ts';
 import type { Entrant, RaceSpec } from '../../shared/net/protocol.ts';
@@ -27,6 +27,7 @@ export class RaceSession implements GameSession {
   readonly names: string[];
   readonly colors: string[];
   readonly models: number[];
+  readonly league: League;
 
   /**
    * A race from menu settings, or from a ready-made spec (championships).
@@ -50,6 +51,7 @@ export class RaceSession implements GameSession {
     this.names = this.spec.entrants.map((e) => e.name);
     this.colors = this.spec.entrants.map((e) => e.color);
     this.models = this.spec.entrants.map((e) => e.loadout?.car ?? -1);
+    this.league = leagueOf(this.spec.league);
   }
 
   step(): void {

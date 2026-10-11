@@ -43,7 +43,7 @@ export class RaceView {
     this.effects = new Effects(this.particles, session.track);
     for (const car of session.world.cars) {
       const model = session.models[car.id] ?? -1;
-      const view = new CarView(session.colors[car.id], car.id + 1, model >= 0 ? MODEL_STYLE[model] : undefined);
+      const view = new CarView(session.colors[car.id], car.id + 1, model >= 0 ? MODEL_STYLE[model] : undefined, session.league === 'super');
       view.setLights(lightsOn, headlight);
       this.cars.push(view);
       this.group.add(view.root);

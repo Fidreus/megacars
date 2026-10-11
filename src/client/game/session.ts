@@ -1,5 +1,6 @@
 // What the race view, HUD and app need from a race, offline or online.
 
+import type { League } from '../../shared/game/leagues.ts';
 import type { CarInput } from '../../shared/sim/input.ts';
 import type { World } from '../../shared/sim/world.ts';
 import type { Track } from '../../shared/track/types.ts';
@@ -15,4 +16,6 @@ export interface GameSession {
   readonly colors: readonly string[];
   /** Car model per car (index into CAR_MODELS), or -1 for "any look". */
   readonly models: readonly number[];
+  /** Car class: Supercars get their own look. */
+  readonly league?: League;
 }
