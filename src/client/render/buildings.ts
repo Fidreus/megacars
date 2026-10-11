@@ -18,12 +18,12 @@ export interface Kit {
 const choose = <T>(rnd: () => number, xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)];
 
 /** A box from its min corner to max corner (metres). */
-function box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): THREE.BufferGeometry {
+export function box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): THREE.BufferGeometry {
   return new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
 }
 
 /** Boxes of one colour as one mesh. */
-function parts(kit: Kit, color: string, geos: THREE.BufferGeometry[]): THREE.Mesh {
+export function parts(kit: Kit, color: string, geos: THREE.BufferGeometry[]): THREE.Mesh {
   return new THREE.Mesh(mergeGeometries(geos), kit.plain(color));
 }
 
@@ -50,7 +50,7 @@ export function windowBox(w: number, h: number, d: number, cell = 3.2): THREE.Bu
  * Gable roof along x: eaves at y0, ridge at y0 + rise, overhanging the
  * w x d footprint. Flat-shaded, closed at both ends.
  */
-function gableRoof(w: number, d: number, y0: number, rise: number, over = 0.5): THREE.BufferGeometry {
+export function gableRoof(w: number, d: number, y0: number, rise: number, over = 0.5): THREE.BufferGeometry {
   const x = w / 2 + over;
   const z = d / 2 + over;
   const y1 = y0 + rise;

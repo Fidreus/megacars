@@ -134,7 +134,7 @@ function buildRoad(track: Track): THREE.Mesh {
     k < patches.length ? new THREE.Vector4(patches[k].x, patches[k].z, patches[k].r, patches[k].runoff ? 1 : 0) : new THREE.Vector4(),
   );
   const patchColors = Array.from({ length: MAX_PATCHES }, (_, k) =>
-    new THREE.Color(k < patches.length ? SURFACE_COLORS[patches[k].surface] : '#000'),
+    new THREE.Color(k < patches.length ? (themeOf(track.def.theme).patchColors?.[patches[k].surface] ?? SURFACE_COLORS[patches[k].surface]) : '#000'),
   );
   const uniforms = {
     uPatch: { value: patchData },

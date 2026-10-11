@@ -21,6 +21,10 @@ export interface Theme {
   houses?: boolean;
   /** Power plant buildings, cooling towers and pipes. */
   industry?: boolean;
+  /** Surface patches drawn in another colour (spilled beer instead of oil). */
+  patchColors?: Partial<Record<number, string>>;
+  /** Sponsor boards: text, background, text colour. */
+  sponsors?: [string, string, string][];
 }
 
 const COUNTRYSIDE: Theme = {
@@ -80,6 +84,29 @@ export const THEMES: Record<string, Theme> = {
     runoff: '#a3a39c',
     houses: false,
     industry: true,
+  },
+  brewery: {
+    ground: '#5c9a3c',
+    trees: 'cone',
+    treeColors: ['#3c7d34', '#4a8a3a', '#2f6b2e', '#5a9a3c'],
+    treeDensity: 0.7,
+    bushColors: ['#3c7d34', '#4a8a3a', '#5a9a3c'],
+    rockColors: ['#8c8a84', '#a3a097'],
+    rockCount: 60,
+    houseWalls: ['#f0e6d2', '#e8d0b0', '#f8f0d8'],
+    houseRoofs: ['#a83a2a', '#c8502e', '#6a4a2e'],
+    pond: 'water',
+    shore: '#b49a68',
+    houses: false,
+    patchColors: { 7: '#c8902e' },
+    sponsors: [
+      ['MEGA LAGER', '#c8861a', '#ffffff'],
+      ['HOPS & CO', '#2f7a3a', '#f2e6b0'],
+      ['OLD BARREL', '#5a3420', '#f2c230'],
+      ['FROTHY ALE', '#f2e6b0', '#8a4a10'],
+      ['PILS POWER', '#1d3c8f', '#ffd84a'],
+      ['STOUT RACING', '#111111', '#e8d8a0'],
+    ],
   },
 };
 

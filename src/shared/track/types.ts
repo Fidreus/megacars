@@ -86,6 +86,8 @@ export interface TrackDef {
   patches?: readonly SurfacePatch[];
   ramps?: readonly RampDef[];
   bridges?: readonly BridgeDef[];
+  /** Scenery the theme puts at fixed spots (only looks, no effect on driving). */
+  landmarks?: readonly { kind: string; x: number; z: number }[];
   laps?: number;
   seed?: number;
 }

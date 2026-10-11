@@ -121,7 +121,7 @@ export function buildProps(track: Track): Props {
   }
 
   // --- Sponsor boards facing the camera along straights.
-  const boardMats = SPONSORS.map(([t, bg, fg]) => toon('#ffffff', { map: boardTexture(t, bg, fg) }));
+  const boardMats = (themeOf(track.def.theme).sponsors ?? SPONSORS).map(([t, bg, fg]) => toon('#ffffff', { map: boardTexture(t, bg, fg) }));
   const legMat = toon('#55585e');
   // A-frame boards leaning back ~40° so they face the high camera and stay readable.
   const boardGeo = new THREE.BoxGeometry(15, 2.4, 0.2);

@@ -15,6 +15,7 @@ import type { KeepOut } from './props.ts';
 import {
   adobe, apartment, carPark, chalet, decal, farm, field, garden, gasStation, house, shade, shopFront, warehouse, windowBox, type Kit,
 } from './buildings.ts';
+import { barrelStack, beerTent, beerTruck, brewhouse, giantMug, hopGarden, maltSilos, pub } from './brewery.ts';
 
 export interface Town {
   group: THREE.Group;
@@ -229,10 +230,15 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
   const trims = ['#e8322a', '#2f6fe0', '#ffffff', '#2a2c30', '#f2c230'];
   const signs = ['#e8322a', '#2f6fe0', '#2f8a4a', '#f2c230', '#9a7ae0'];
   const place = (count: number, r: number, h: number, minGap: number, maxGap: number, make: () => THREE.Object3D, turn = true) => {
+    let n = 0;
     for (let k = 0; k < count; k++) {
       const p = pick(r, h, minGap, maxGap);
-      if (p) add(make(), p[0], p[1], r, turn);
+      if (p) {
+        add(make(), p[0], p[1], r, turn);
+        n++;
+      }
     }
+    return n;
   };
   const block = (h: number, palette: readonly string[]) => apartment(kit, 10 + rnd() * 6, 9 + rnd() * 4, h, choose(palette), choose(trims));
 
@@ -278,6 +284,33 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
       const p = pick(r, 10, 10, 130);
       if (p) add(g, p[0], p[1], r, false);
     }
+  } else if (theme === 'brewery') {
+    // Landmarks inside the loops, where every lap passes them: the brewhouse,
+    // the giant mug and a beer tent. Then the yard, festival and pubs around.
+    const at = (make: () => THREE.Object3D, x: number, z: number, r: number, h: number) => {
+      if (far(x, z) > clear + r && free(x, z, r) && !hidesRoad(x, z, r, h)) add(make(), x, z, r, false);
+    };
+    for (const lm of track.def.landmarks ?? []) {
+      const make = lm.kind === 'brewhouse' ? () => brewhouse(kit) : lm.kind === 'mug' ? () => giantMug(kit) : () => beerTent(kit);
+      const [r, h] = lm.kind === 'brewhouse' ? [18, 26] : lm.kind === 'mug' ? [7, 16] : [13, 7];
+      at(make, lm.x, lm.z, r, h);
+    }
+    place(1, 18, 26, 6, 60, () => brewhouse(kit));
+    place(3, 9, 18, 6, 80, () => maltSilos(kit));
+    place(7, 13, 7, 3, 90, () => beerTent(kit));
+    place(16, 3.5, 4, 1, 50, () => barrelStack(kit));
+    place(5, 5, 4, 2, 60, () => beerTruck(kit));
+    place(12, 9, 10, 3, 100, () => pub(kit, choose(['#f0e6d2', '#e8d0b0', '#f8f0d8', '#c8d8b8', '#f0c8a0'])));
+    place(2, 11, 2, 4, 70, () => carPark(kit, 20, 14));
+    for (let k = 0; k < 7; k++) {
+      const p = pick(16, 7, 20, 160);
+      if (p) add(hopGarden(kit, 24 + Math.floor(rnd() * 3) * 4, 15), p[0], p[1], 16, false);
+    }
+    // Barley fields further out.
+    for (let k = 0; k < 6; k++) {
+      const p = pick(16, 2, 40, 200);
+      if (p) add(field(kit, 28 + rnd() * 10, 20 + rnd() * 8, rnd() < 0.6 ? ['#c8a850', '#d8bc68'] : ['#7a8a3a', '#9aa848']), p[0], p[1], 16, false);
+    }
   } else if (theme === 'nuclear') {
     place(4, 9, 38, 6, 80, officeTower);
     place(5, 15, 12, 4, 110, () => warehouse(kit, choose(['#c8ccd0', '#d8d4c8', '#9fa6a8', '#5ac8c8'])));
@@ -290,15 +323,18 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
     ? ['#d8956a', '#e8b07a', '#c97a52', '#5ac8c8', '#f28aa0', '#ffd84a']
     : theme === 'winter'
       ? ['#c8322a', '#e8b030', '#2f6fe0', '#2f8a4a', '#e86a2a', '#f0f0e8']
-      : theme === 'nuclear'
+      : theme === 'brewery'
+        ? ['#a8462e', '#f0e6d2', '#e8a020', '#2f6fe0', '#2f8a4a', '#f8f0d8']
+        : theme === 'nuclear'
         ? ['#c8ccd0', '#f2c230', '#5ac8c8', '#e8e8e0', '#9fa6a8']
         : pastels;
   const street = (h: number, color: string): THREE.Object3D => {
     if (theme === 'winter' && h < 14) return chalet(kit, color);
+    if (theme === 'brewery' && h < 14) return pub(kit, color);
     if (h < 10) return shopFront(kit, 9 + rnd() * 4, 8, theme === 'desert' ? color : shade(color, 1), choose(signs));
     return block(h, [color]);
   };
-  const heights = theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
+  const heights = theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : theme === 'brewery' ? [16, 9.6, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
   for (let i = 0; i < track.n; i += 30) {
     for (const side of [-1, 1]) {
       if (rnd() > 0.7) continue;
