@@ -12,6 +12,7 @@ import { Effects } from '../render/effects.ts';
 import { Particles } from '../render/particles.ts';
 import { ShotView } from '../render/shotView.ts';
 import { SkidMarks } from '../render/skidmarks.ts';
+import { drawText } from '../ui/font.ts';
 import type { GameSession } from './session.ts';
 
 const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
@@ -36,6 +37,10 @@ export class RaceView {
   private readonly group = new THREE.Group();
   private readonly scene: THREE.Scene;
   private readonly lamps: THREE.MeshBasicMaterial[] = [];
+  /** "This is you": a bouncing label and a pulsing ring over each local player's car. */
+  private readonly markers: { car: number; label: THREE.Sprite; ring: THREE.Mesh }[] = [];
+  /** Off on the title screen, where the "player" car is just a demo. */
+  markPlayers = true;
 
   constructor(scene: THREE.Scene, session: GameSession, lightsOn: boolean, headlight: number) {
     this.scene = scene;
@@ -51,6 +56,22 @@ export class RaceView {
       this.offset.push({ x: 0, z: 0, y: 0, heading: 0 });
     }
     this.group.add(this.skid.mesh, this.particles.points, this.shots.group);
+    session.playerCars.forEach((car, p) => {
+      const text = session.playerCars.length > 1 ? `P${p + 1}` : 'YOU';
+      // P1 yellow, P2 cyan (like their HUD labels).
+      const hex = p === 1 ? '#6fe0ff' : '#ffd84a';
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: markerTexture(text, hex), depthTest: false, depthWrite: false, transparent: true }));
+      label.scale.set(5.6, 4.2, 1);
+      label.renderOrder = 10;
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(2.7, 3.3, 28).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(3), transparent: true, depthWrite: false }),
+      );
+      ring.renderOrder = 3;
+      label.visible = ring.visible = false;
+      this.group.add(label, ring);
+      this.markers.push({ car, label, ring });
+    });
     scene.add(this.group);
     const gantry = scene.getObjectByName('gantry');
     for (let k = 0; k < 5; k++) {
@@ -155,6 +176,28 @@ export class RaceView {
     this.particles.dither.value = particleDither ? 1 : 0;
     this.particles.flush();
     this.updateStartLights();
+    this.updateMarkers();
+  }
+
+  /** Show which car is yours: through the countdown, the first seconds of the race and after a respawn. */
+  private updateMarkers(): void {
+    const world = this.session.world;
+    const race = world.race;
+    const t = world.tick * DT;
+    for (const m of this.markers) {
+      const car = world.cars[m.car];
+      const show = this.markPlayers && !car.finished && (
+        race.phase === RacePhase.Countdown || (race.phase === RacePhase.Racing && world.tick < race.startTick + 240) || car.ghostTicks > 0
+      );
+      m.label.visible = m.ring.visible = show;
+      if (!show) continue;
+      const pos = this.cars[m.car].root.position;
+      m.label.position.set(pos.x, pos.y + 5 + Math.abs(Math.sin(t * 5)) * 0.9, pos.z);
+      const pulse = (t * 1.6) % 1;
+      m.ring.position.set(pos.x, pos.y + 0.09, pos.z);
+      m.ring.scale.setScalar(0.75 + pulse * 0.5);
+      (m.ring.material as THREE.MeshBasicMaterial).opacity = 1 - pulse;
+    }
   }
 
   /** Five red lights come on one by one; all out = go. */
@@ -191,4 +234,29 @@ export function lightsOn(t: number, startTick: number): number {
   const first = startTick - 180;
   if (t < first) return 0;
   return Math.min(5, 1 + Math.floor((t - first) / 36));
+}
+
+/** A label with a down arrow, yellow on a dark outline. */
+function markerTexture(text: string, color: string): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 40;
+  c.height = 30;
+  const ctx = c.getContext('2d')!;
+  drawText(ctx, text, 20, 2, { scale: 2, color, align: 'center' });
+  // Arrow pointing down at the car, with a dark rim.
+  for (const [col, grow] of [['#1a1408', 1], [color, 0]] as const) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(12 - grow, 19 - grow);
+    ctx.lineTo(28 + grow, 19 - grow);
+    ctx.lineTo(20, 28 + grow);
+    ctx.closePath();
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }

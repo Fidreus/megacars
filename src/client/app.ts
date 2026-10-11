@@ -925,6 +925,7 @@ export class App {
     if (this.track !== session.track) this.setTrack(session.track);
     this.session = session;
     this.view = new RaceView(this.scene, session, this.mood.lights, this.mood.headlight);
+    this.view.markPlayers = this.mode === 'race';
     this.view.particles.density = QUALITY_PARTICLES[this.quality];
     this.view.effects.steam = this.steam;
     this.fireworks = 0;
