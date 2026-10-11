@@ -39,12 +39,21 @@ export interface TouchAmmo {
   turbos: number;
 }
 
-/** Steering thumb travel (UI pixels) for full lock. */
-const STEER_RANGE = 46;
+/** Touch steering feel (tunable in practice from the tuning panel). */
+export const TOUCH_TUNING = {
+  /** Thumb travel (UI pixels) for full lock. */
+  range: 46,
+  /** Share of the travel around the middle that counts as straight ahead. */
+  deadZone: 0.16,
+  /** >1: small movements give small corrections, full lock only at the end. */
+  curve: 1.7,
+  /** How fast the steering follows the thumb away from / back to the middle (1/s). */
+  rateOut: 12,
+  rateBack: 22,
+};
+export const TOUCH_TUNING_DEFAULTS = { ...TOUCH_TUNING };
 /** A lift by the traction control lasts at least this long (> the sim's liftTapTicks). */
 const LIFT_HOLD_TICKS = 24;
-/** Share of the travel around the middle that counts as straight ahead. */
-const DEAD_ZONE = 0.16;
 
 export class TouchControls {
   /** A touch screen has been used: show the controls. */
@@ -96,8 +105,8 @@ export class TouchControls {
       [t.x, t.y] = this.toUi(e.clientX, e.clientY);
       if (t.role === 'steer') {
         // The anchor follows a thumb that overshoots, so reversing is quick.
-        if (t.x - t.ax > STEER_RANGE) t.ax = t.x - STEER_RANGE;
-        if (t.ax - t.x > STEER_RANGE) t.ax = t.x + STEER_RANGE;
+        if (t.x - t.ax > TOUCH_TUNING.range) t.ax = t.x - TOUCH_TUNING.range;
+        if (t.ax - t.x > TOUCH_TUNING.range) t.ax = t.x + TOUCH_TUNING.range;
       } else {
         const hit = this.hit(t.x, t.y);
         t.role = hit === 'pause' ? null : (hit ?? (t.role === 'left' || t.role === 'right' || t.role === 'hold' ? this.leftThumb(t.x) : null));
@@ -159,7 +168,7 @@ export class TouchControls {
     let buttons = 0;
     for (const t of this.touches.values()) {
       if (t.role === 'steer' || t.role === 'left' || t.role === 'right' || t.role === 'hold') thumb = true;
-      if (t.role === 'steer') steer = Math.max(-1, Math.min(1, (t.x - t.ax) / STEER_RANGE));
+      if (t.role === 'steer') steer = Math.max(-1, Math.min(1, (t.x - t.ax) / TOUCH_TUNING.range));
       else if (t.role === 'gas') gas = true;
       else if (t.role === 'brake') brake = true;
       else if (t.role === 'drift') buttons |= Btn.Drift;
@@ -175,8 +184,9 @@ export class TouchControls {
     } else {
       // A wide middle that is straight ahead (thumbs wobble), then a soft
       // curve: small movements make small corrections, full lock at the end.
-      const a = Math.max(0, Math.abs(steer) - DEAD_ZONE) / (1 - DEAD_ZONE);
-      this.target = Math.sign(steer) * Math.pow(a, 1.7);
+      const dz = TOUCH_TUNING.deadZone;
+      const a = Math.max(0, Math.abs(steer) - dz) / (1 - dz);
+      this.target = Math.sign(steer) * Math.pow(a, TOUCH_TUNING.curve);
     }
     this.brake = brake ? 1 : 0;
     const auto = this.gasMode === 'always' || (this.gasMode === 'thumb' && thumb);
@@ -223,7 +233,7 @@ export class TouchControls {
     }
     // Faster back to the middle than away from it: letting go straightens up.
     const back = Math.abs(this.target) < Math.abs(this.steer);
-    const k = 1 - Math.exp(-dt * (back ? 22 : 12));
+    const k = 1 - Math.exp(-dt * (back ? TOUCH_TUNING.rateBack : TOUCH_TUNING.rateOut));
     this.steer += (this.target - this.steer) * k;
     if (Math.abs(this.steer) < 0.01 && this.target === 0) this.steer = 0;
   }
@@ -296,11 +306,11 @@ export class TouchControls {
     const cy = steer ? steer.y : this.H - Math.round(this.H * 0.2);
     const cx = steer ? steer.ax : Math.round(this.W * 0.16);
     ctx.fillStyle = 'rgba(10,12,26,0.3)';
-    ctx.fillRect(cx - STEER_RANGE - 10, cy - 12, (STEER_RANGE + 10) * 2, 24);
+    ctx.fillRect(cx - TOUCH_TUNING.range - 10, cy - 12, (TOUCH_TUNING.range + 10) * 2, 24);
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(cx - STEER_RANGE - 10 + 0.5, cy - 12 + 0.5, (STEER_RANGE + 10) * 2 - 1, 23);
-    const kx = cx + this.steer * STEER_RANGE;
+    ctx.strokeRect(cx - TOUCH_TUNING.range - 10 + 0.5, cy - 12 + 0.5, (TOUCH_TUNING.range + 10) * 2 - 1, 23);
+    const kx = cx + this.steer * TOUCH_TUNING.range;
     ctx.beginPath();
     ctx.arc(kx, cy, 15, 0, Math.PI * 2);
     ctx.fillStyle = steer ? 'rgba(255,216,74,0.6)' : 'rgba(255,255,255,0.25)';

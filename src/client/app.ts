@@ -21,7 +21,7 @@ import { ShotKind, WEAPON } from '../shared/sim/weapons.ts';
 import type { CarState } from '../shared/sim/car.ts';
 import { installDebugApi } from './debug/debugApi.ts';
 import { buildTrackDebugView } from './debug/trackDebugView.ts';
-import { loadSavedTuning, openTuningPanel } from './debug/tuningPanel.ts';
+import { isTuned, loadSavedTuning, openTuningPanel, type TuningPanel } from './debug/tuningPanel.ts';
 import { Online, OnlineSession } from './game/online.ts';
 import { attractSession, RaceSession } from './game/raceSession.ts';
 import type { GameSession } from './game/session.ts';
@@ -55,7 +55,7 @@ import { buildIndustry, type SteamSource } from './render/industry.ts';
 import { themeOf } from './render/theme.ts';
 import { buildTrackView } from './render/trackMesh.ts';
 import { drawText, LINE_H } from './ui/font.ts';
-import { Menu } from './ui/menu.ts';
+import { Menu, type MenuItem } from './ui/menu.ts';
 import { drawCountdown, drawPlayerHud, formatTime, Minimap } from './ui/screens/hud.ts';
 import { drawResults } from './ui/screens/results.ts';
 import { connText, drawLobby, inviteLink, pingColor } from './ui/screens/lobby.ts';
@@ -138,7 +138,10 @@ export class App {
   private crowd: Crowd | null = null;
   /** Airborne flag of each player car last tick (for the take-off whoosh). */
   private wasAirborne = [false, false];
-  private tuningPanel: { toggle(): void } | null = null;
+  private tuningPanel: TuningPanel | null = null;
+  /** Every pause menu item; the tuning one is shown in free practice only. */
+  private pauseAll: MenuItem[] = [];
+  private tuneItem: MenuItem | null = null;
   private readonly titleMenu: Menu;
   private readonly pauseMenu: Menu;
   private readonly onlineMenu: Menu;
@@ -265,6 +268,14 @@ export class App {
     this.pauseMenu = new Menu([
       { label: () => 'RESUME', select: () => (this.paused = false) },
       {
+        // Only offered in free practice (see pauseItems).
+        label: () => (this.tuningPanel?.visible ? 'HIDE TUNING PANEL' : 'TUNE HANDLING'),
+        select: () => {
+          this.paused = false;
+          void this.openTuning();
+        },
+      },
+      {
         label: () => 'RESTART RACE',
         disabled: () => !(this.session instanceof RaceSession),
         select: () => this.restartRace(),
@@ -316,7 +327,9 @@ export class App {
     this.recordsScreen = new RecordsScreen(() => this.toTitle(), () => playUi(this.audio, 'move'));
     this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'options'), (k) => playUi(this.audio, k));
     // Music on/off, volumes and next song are also in the pause menu (Esc).
-    this.pauseMenu.items.splice(2, 0, ...this.buildOptionItems().slice(0, 5));
+    this.pauseMenu.items.splice(3, 0, ...this.buildOptionItems().slice(0, 5));
+    this.pauseAll = this.pauseMenu.items;
+    this.tuneItem = this.pauseAll[1];
     this.careerMenu = new Menu([
       {
         label: () => {
@@ -355,7 +368,7 @@ export class App {
     if (params.debug) {
       this.showTelemetry = true;
       if (this.debugView) this.debugView.visible = true;
-      void this.openTuning();
+      void this.openTuning(true);
     }
     try {
       const saved = localStorage.getItem(AUTO_QUALITY_KEY);
@@ -764,7 +777,8 @@ export class App {
   private showAttract(mode: Mode): void {
     this.mode = mode;
     this.paused = false;
-    this.setSession(attractSession(this.settings, this.tuning));
+    this.tuningPanel?.hide();
+    this.setSession(attractSession(this.settings, cloneTuning(DEFAULT_TUNING)));
   }
 
   startRace(settings: RaceSettings, spec?: RaceSpec): void {
@@ -773,7 +787,11 @@ export class App {
     this.lastLights = 0;
     this.cupRace = !!spec;
     this.qualityWatch.grace = 4;
-    this.setSession(new RaceSession({ ...settings }, this.tuning, spec?.seed, spec));
+    // The tuning panel's handling only drives free practice; races use the stock car.
+    const practice = !!settings.practice && !spec;
+    if (!practice) this.tuningPanel?.hide();
+    else if (isTuned(this.tuning)) this.flashMessage('TUNED HANDLING (PAUSE > TUNE HANDLING)', 3);
+    this.setSession(new RaceSession({ ...settings }, practice ? this.tuning : cloneTuning(DEFAULT_TUNING), spec?.seed, spec));
     // Quick races and practice with one person and a stock car can set verified records.
     const rs = this.session as RaceSession;
     this.replay = !spec && rs.playerCars.length === 1 && specProblem(rs.spec) === null ? new ReplayRecorder() : null;
@@ -926,12 +944,31 @@ export class App {
     this.view?.setLights(mood.lights, mood.headlight);
   }
 
-  async openTuning(): Promise<void> {
+  private syncPauseMenu(): void {
+    const want = this.practicing ? this.pauseAll : this.pauseAll.filter((it) => it !== this.tuneItem);
+    if (want.length !== this.pauseMenu.items.length) this.pauseMenu.items = want;
+  }
+
+  /** Free practice on this device (where the tuning panel's handling applies). */
+  private get practicing(): boolean {
+    const s = this.session;
+    return this.mode === 'race' && !this.netRace && s instanceof RaceSession && !!s.settings.practice && !this.cupRace;
+  }
+
+  async openTuning(force = false): Promise<void> {
+    if (!force && !this.practicing) {
+      this.flashMessage('TUNING: FREE PRACTICE ONLY', 2);
+      return;
+    }
     if (this.tuningPanel) {
       this.tuningPanel.toggle();
       return;
     }
-    this.tuningPanel = await openTuningPanel(this.tuning, { cam: this.renderer.viewports[0].cam, lookAhead: this.lookAhead });
+    this.tuningPanel = await openTuningPanel(
+      this.tuning,
+      { cam: this.renderer.viewports[0].cam, lookAhead: this.lookAhead },
+      (text) => this.flashMessage(text, 2),
+    );
   }
 
   get world() {
@@ -1194,7 +1231,10 @@ export class App {
     }
     if (this.paused) {
       if (nav.back) this.paused = false;
-      else this.pauseMenu.handle(nav);
+      else {
+        this.syncPauseMenu();
+        this.pauseMenu.handle(nav);
+      }
       return;
     }
     if (nav.pause) {
@@ -1210,7 +1250,7 @@ export class App {
     if (!rec || !this.recordPending || !(s instanceof RaceSession)) return;
     this.recordPending = false;
     // The tuning panel changes the physics: such laps can't be checked.
-    if (rec.spoiled || JSON.stringify(this.tuning) !== JSON.stringify(DEFAULT_TUNING)) return;
+    if (rec.spoiled || s.tunings.some((t) => JSON.stringify(t) !== JSON.stringify(DEFAULT_TUNING))) return;
     const track = s.track.def.name.toUpperCase();
     const note = (text: string) => {
       this.recordNote = text;
@@ -1761,6 +1801,7 @@ export class App {
       const py = Math.round(H * (H < 320 ? 0.12 : 0.3));
       drawText(ctx, 'PAUSED', W / 2, py, { scale: H < 320 ? 3 : 4, color: '#ffd84a', align: 'center' });
       const my = py + (H < 320 ? 32 : 44);
+      this.syncPauseMenu();
       this.pauseMenu.draw(ctx, W / 2, my, fitScale(this.pauseMenu, my, H - 8), 0, true, H - 8);
     }
   }
