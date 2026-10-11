@@ -17,6 +17,8 @@ export interface NavState {
   pointerY: number;
   pointerMoved: boolean;
   click: boolean;
+  /** Vertical swipe (touch) or mouse wheel this frame, UI pixels; + = content moves down. */
+  scrollY: number;
   /** Text typed this frame and Backspace (only in text mode). */
   typed: string;
   erase: boolean;
@@ -24,11 +26,13 @@ export interface NavState {
 
 const REPEAT_DELAY = 0.35;
 const REPEAT_RATE = 0.09;
+/** UI pixels a finger moves before a touch counts as a swipe rather than a tap. */
+const SWIPE_START = 7;
 
 export class Nav {
   readonly state: NavState = {
     up: false, down: false, left: false, right: false, confirm: false, back: false, pause: false,
-    pointerX: -1, pointerY: -1, pointerMoved: false, click: false, typed: '', erase: false,
+    pointerX: -1, pointerY: -1, pointerMoved: false, click: false, scrollY: 0, typed: '', erase: false,
   };
   /** A text field has focus: letters type instead of navigating. */
   textMode = false;
@@ -37,19 +41,52 @@ export class Nav {
   private padButtons: boolean[] = [];
   private clicked = false;
   private moved = false;
+  private scroll = 0;
+  /** A finger on the screen: where it went down, and whether it has turned into a swipe. */
+  private touch: { id: number; y0: number; lastY: number; swiping: boolean } | null = null;
   /** Converts client coordinates to UI pixels. */
   toUi: (clientX: number, clientY: number) => [number, number] = (x, y) => [x, y];
 
   constructor(keyboard: Keyboard, canvas: HTMLCanvasElement) {
     this.keyboard = keyboard;
+    // Touch: a tap is a click when the finger lifts; dragging up or down
+    // scrolls instead. A mouse clicks on press and hovers as it moves.
     canvas.addEventListener('pointermove', (e) => {
-      [this.state.pointerX, this.state.pointerY] = this.toUi(e.clientX, e.clientY);
+      const [x, y] = this.toUi(e.clientX, e.clientY);
+      const t = this.touch;
+      if (e.pointerType === 'touch') {
+        if (!t || t.id !== e.pointerId) return;
+        if (!t.swiping && Math.abs(y - t.y0) > SWIPE_START) t.swiping = true;
+        if (t.swiping) this.scroll += y - t.lastY;
+        t.lastY = y;
+        return;
+      }
+      [this.state.pointerX, this.state.pointerY] = [x, y];
       this.moved = true;
     });
     canvas.addEventListener('pointerdown', (e) => {
-      [this.state.pointerX, this.state.pointerY] = this.toUi(e.clientX, e.clientY);
+      const [x, y] = this.toUi(e.clientX, e.clientY);
+      if (e.pointerType === 'touch') {
+        this.touch = { id: e.pointerId, y0: y, lastY: y, swiping: false };
+        return;
+      }
+      [this.state.pointerX, this.state.pointerY] = [x, y];
       this.clicked = true;
     });
+    const lift = (e: PointerEvent) => {
+      const t = this.touch;
+      if (e.pointerType !== 'touch' || !t || t.id !== e.pointerId) return;
+      this.touch = null;
+      if (t.swiping || e.type === 'pointercancel') return;
+      [this.state.pointerX, this.state.pointerY] = this.toUi(e.clientX, e.clientY);
+      this.clicked = true;
+    };
+    canvas.addEventListener('pointerup', lift);
+    canvas.addEventListener('pointercancel', lift);
+    canvas.addEventListener('wheel', (e) => {
+      // One notch is about one menu row.
+      this.scroll -= Math.sign(e.deltaY) * Math.min(40, Math.abs(e.deltaY) / 4 + 6);
+    }, { passive: true });
   }
 
   /** Read this frame's navigation actions. */
@@ -68,8 +105,10 @@ export class Nav {
     s.erase = this.textMode && kb.wasPressed('Backspace');
     s.click = this.clicked;
     s.pointerMoved = this.moved;
+    s.scrollY = this.scroll;
     this.clicked = false;
     this.moved = false;
+    this.scroll = 0;
 
     // Gamepads: d-pad / left stick with repeat, A = confirm, B / Start = back.
     const pads = navigator.getGamepads?.() ?? [];

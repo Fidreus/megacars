@@ -32,6 +32,9 @@ export class Menu {
   private window = 0;
   private readonly events: MenuEvents;
   private blink = 0;
+  /** Row height when last drawn, and swipe distance not yet turned into whole rows. */
+  private rowH = 13;
+  private swipe = 0;
 
   constructor(items: MenuItem[], events: MenuEvents = {}) {
     this.items = items;
@@ -59,6 +62,17 @@ export class Menu {
       for (const ch of nav.typed.toUpperCase()) if (field.allowed.test(ch) && v.length < field.max) v += ch;
       field.set(v);
       this.events.onChange?.();
+    }
+    if (nav.scrollY && this.window > 0) {
+      // Swipe or wheel: move the list under the finger, a row at a time.
+      this.swipe += nav.scrollY;
+      const rows = Math.trunc(this.swipe / this.rowH);
+      if (rows) {
+        this.swipe -= rows * this.rowH;
+        const shown = this.window;
+        this.first = Math.max(0, Math.min(n - shown, this.first - rows));
+        this.index = Math.max(this.first, Math.min(this.first + shown - 1, this.index));
+      }
     }
     if (nav.up) {
       this.index = (this.index - 1 + n) % n;
@@ -117,6 +131,7 @@ export class Menu {
     this.blink += dt;
     this.rects = [];
     const rowH = LINE_H * scale + 4;
+    this.rowH = rowH;
     const widest = Math.max(...this.items.map((it) => textWidth(it.label(), scale))) + 28 * scale;
     const n = this.items.length;
     let rows = Math.max(3, Math.floor((bottom - top) / rowH));
