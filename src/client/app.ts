@@ -177,6 +177,10 @@ export class App {
   private recordPending = false;
   /** What happened to the last lap sent to the boards (shown with the results). */
   private recordNote = '';
+  /** A world-board record waits for the player to type a name. */
+  private askName = false;
+  private madeUpName = '';
+  private nameMenu!: Menu;
   readonly music: Music;
   private songToast = 0;
   private cupRace = false;
@@ -285,6 +289,14 @@ export class App {
         select: () => (this.netRace ? this.leaveRoom() : this.toTitle()),
       },
     ], { onMove: beep });
+    this.nameMenu = new Menu([
+      {
+        label: () => `NAME: ${this.online.name}`,
+        text: { get: () => this.online.name, set: (v: string) => (this.online.name = v), max: 12, allowed: /[A-Z0-9 ._-]/ },
+        select: () => this.submitNamedRecord(true),
+      },
+      { label: () => 'SEND', select: () => this.submitNamedRecord(true) },
+    ], { onMove: beep, onChange: change });
     this.online = new Online({
       race: (s) => this.startOnlineRace(s),
       room: (room) => {
@@ -483,8 +495,17 @@ export class App {
       { label: () => 'OPTIONS', select: () => { this.mode = 'options'; this.optionsMenu.index = 0; } },
       { label: () => 'HOW TO PLAY', select: () => (this.mode = 'help') },
       {
+        label: () => `YOUR NAME: ${this.online.name}`,
+        text: { get: () => this.online.name, set: (v: string) => (this.online.name = v), max: 12, allowed: /[A-Z0-9 ._-]/ },
+        select: () => {
+          this.online.commitName();
+          this.flashMessage(`HELLO ${this.online.name}!`, 1.5);
+        },
+      },
+      {
         label: () => 'RECORDS',
         select: () => {
+          this.online.commitName();
           this.mode = 'records';
           this.recordsScreen.me = cleanName(this.online.name);
           this.recordsScreen.open(this.settings.track);
@@ -866,6 +887,10 @@ export class App {
   }
 
   private setSession(session: GameSession): void {
+    if (this.askName) {
+      this.askName = false;
+      this.online.name = this.madeUpName;
+    }
     this.sendRecord();
     this.replay = null;
     if (this.view) this.view.dispose();
@@ -1047,6 +1072,7 @@ export class App {
 
   /** The menu that has the keyboard on the current screen. */
   get activeMenu(): Menu | null {
+    if (this.askName && this.showingResults) return this.nameMenu;
     if (this.mode === 'title') return this.titleMenu;
     if (this.mode === 'online') return this.onlineMenu;
     if (this.mode === 'lobby') return this.lobbyMenu;
@@ -1220,6 +1246,11 @@ export class App {
       }
       return;
     }
+    if (this.showingResults && this.askName) {
+      if (nav.back) this.submitNamedRecord(false);
+      else this.nameMenu.handle(nav);
+      return;
+    }
     if (this.showingResults) {
       if (nav.confirm || nav.click || nav.back) {
         if (this.cupRace && this.cup) this.finishCupRace();
@@ -1241,6 +1272,14 @@ export class App {
       this.paused = true;
       this.pauseMenu.index = 0;
     }
+  }
+
+  /** After typing a name for the world board (or skipping it): send the record. */
+  private submitNamedRecord(named: boolean): void {
+    this.askName = false;
+    if (named && this.online.name.trim()) this.online.commitName();
+    else this.online.name = this.madeUpName;
+    this.sendRecord();
   }
 
   /** Send a new personal best lap to the world boards (the server replays the race to check it). */
@@ -1342,7 +1381,14 @@ export class App {
           if (noteRace(this.localRecords, this.session.track.def.id, w.race.laps, car.finishTick - w.race.startTick)) {
             this.recordNote = `NEW BEST RACE TIME ${formatTime((car.finishTick - w.race.startTick) * DT)}`;
           }
-          this.sendRecord();
+          // A record for the world board: first ask who set it (once, like an arcade).
+          if (this.recordPending && !this.online.nameChosen) {
+            this.askName = true;
+            this.nameMenu.index = 0;
+            // Start from an empty field rather than the made-up name.
+            this.madeUpName = this.online.name;
+            this.online.name = '';
+          } else this.sendRecord();
         }
         this.crowd?.cheer(e.other <= 3 ? 1 : 0.5, 3.2);
         if (e.other === 1 && this.mode === 'race') this.fireworks = 6;
@@ -1611,8 +1657,9 @@ export class App {
         drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
       }
       drawText(ctx, `V${VERSION}`, W - 4, H - 11, { align: 'right', color: '#5a6478' });
+      drawText(ctx, 'BY FREDRIK IDRÉUS', W - 4, H - 22, { align: 'right', color: '#5a6478' });
       if (this.update.available && Math.sin(this.time * 4) > -0.2) {
-        drawText(ctx, 'A NEW VERSION IS OUT - CHOOSE UPDATE NOW', W - 4, H - 22, { align: 'right', color: '#9cff9c' });
+        drawText(ctx, 'A NEW VERSION IS OUT - CHOOSE UPDATE NOW', W - 4, H - 33, { align: 'right', color: '#9cff9c' });
       }
     } else if (this.mode === 'online') {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -1794,7 +1841,16 @@ export class App {
     if (this.showingResults) {
       this.firstRace = false;
       drawResults(ctx, W, H, w, s.names, s.colors, s.playerCars, this.time);
-      if (this.recordNote) drawText(ctx, this.recordNote, W / 2, H - 34, { scale: 2, color: '#ffd84a', align: 'center' });
+      if (this.askName) {
+        // Below the results table, on a band of its own.
+        const k = H >= 360 ? 2 : 1;
+        const y = Math.round(H * 0.6);
+        ctx.fillStyle = 'rgba(8,10,24,0.9)';
+        ctx.fillRect(0, y - 8, W, 34 + k * 30);
+        drawText(ctx, 'NEW LAP RECORD! YOUR NAME FOR THE WORLD TOP 10:', W / 2, y, { color: '#ffd84a', align: 'center' });
+        this.nameMenu.draw(ctx, W / 2, y + 18, k, 1 / 60, false, H - 20);
+        drawText(ctx, this.touch.enabled ? 'TAP THE NAME TO TYPE' : 'TYPE YOUR NAME   ENTER SEND   ESC SKIP', W / 2, H - 14, { color: '#8090a8', align: 'center' });
+      } else if (this.recordNote) drawText(ctx, this.recordNote, W / 2, H - 34, { scale: 2, color: '#ffd84a', align: 'center' });
     } else if (this.paused) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(0, 0, W, H);

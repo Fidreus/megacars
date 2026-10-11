@@ -77,6 +77,15 @@ export class Online {
     this.conn.name = v;
   }
 
+  /** The player has typed a name of their own (not the made-up DRIVER 42). */
+  get nameChosen(): boolean {
+    try {
+      return !!localStorage.getItem(NAME_KEY);
+    } catch {
+      return false;
+    }
+  }
+
   /** Store a finished name edit and tell the server. */
   commitName(): void {
     this.conn.name = cleanName(this.conn.name);

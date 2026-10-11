@@ -8,6 +8,8 @@ export function drawCredits(g: CanvasRenderingContext2D, W: number, H: number, t
   g.fillStyle = 'rgba(8,10,24,0.88)';
   g.fillRect(0, 0, W, H);
   let y = Math.round(H * 0.06);
+  drawText(g, 'MEGACARS BY FREDRIK IDRÉUS', W / 2, y, { scale: 2, color: '#ffffff', align: 'center' });
+  y += 22;
   drawText(g, 'MUSIC CREDITS', W / 2, y, { scale: 2, color: '#ffd84a', align: 'center' });
   y += 24;
   drawText(g, 'MODULES FROM THE MOD ARCHIVE (MODARCHIVE.ORG), C64 SID TRACKS FROM OPENGAMEART.ORG', W / 2, y, { color: '#9fd8ff', align: 'center' });
