@@ -94,7 +94,7 @@ export const DEFAULT_TUNING: CarTuning = {
   steerRateOut: 9,
   steerRateFlip: 14,
 
-  aGrip: 16,
+  aGrip: 20,
   frictionCircle: 0.65,
   overloadRatio: 1.0,
   slideEnterTicks: 4,
