@@ -114,6 +114,7 @@ export async function openTuningPanel(t: CarTuning, camera: CameraSettings, noti
   add(slide, 'cScrub', 0, 2, 0.01, 'speed scrub');
   add(slide, 'aSteerSlide', 10, 120, 1, 'steer in slide');
   add(slide, 'kPow', 0, 2, 0.05, 'gas yaw in slide');
+  add(slide, 'kPowNeutral', 0, 1, 0.05, 'gas yaw, wheel straight');
   add(slide, 'assistKb', 0, 2, 0.05, 'assist keys');
   add(slide, 'assistPad', 0, 2, 0.05, 'assist pad/touch');
   add(slide, 'kYawSlide', 1, 20, 0.25, 'yaw response slide');
@@ -139,7 +140,6 @@ export async function openTuningPanel(t: CarTuning, camera: CameraSettings, noti
   add(col, 'gravity', 5, 40, 0.5, 'gravity (jumps)');
 
   const camF = gui.addFolder('Camera');
-  camF.add(camera.cam, 'viewHeight', 30, 90, 0.5).name('view height m');
   camF.add(camera.lookAhead, 'value', 0, 0.8, 0.01).name('look-ahead s');
 
   gui.add({

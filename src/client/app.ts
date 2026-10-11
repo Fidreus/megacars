@@ -98,6 +98,9 @@ const VIEW_HEIGHT = 51.3;
 /** Follow camera: how much more it shows than the classic view, and its tilt (degrees). */
 const FOLLOW_ZOOM = 1.35;
 const FOLLOW_TILT = 50;
+/** Camera height option: low, normal, high. */
+const CAM_HEIGHTS = [0.8, 1, 1.25];
+const CAM_HEIGHT_NAMES = ['LOW', 'NORMAL', 'HIGH'];
 
 /** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
 type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'controls' | 'help' | 'records' | 'rooms' | 'credits';
@@ -142,6 +145,8 @@ export class App {
   /** Airborne flag of each player car last tick (for the take-off whoosh). */
   private wasAirborne = [false, false];
   private tuningPanel: TuningPanel | null = null;
+  /** Extra zoom for looking at the scenery (debug). */
+  debugZoom = 1;
   /** Every pause menu item; the tuning one is shown in free practice only. */
   private pauseAll: MenuItem[] = [];
   private tuneItem: MenuItem | null = null;
@@ -342,7 +347,7 @@ export class App {
     this.recordsScreen = new RecordsScreen(() => this.toTitle(), () => playUi(this.audio, 'move'));
     this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'options'), (k) => playUi(this.audio, k));
     // Music on/off, volumes and next song are also in the pause menu (Esc).
-    this.pauseMenu.items.splice(3, 0, ...this.buildOptionItems().slice(0, 5));
+    this.pauseMenu.items.splice(3, 0, ...this.buildOptionItems().slice(0, 6));
     this.pauseAll = this.pauseMenu.items;
     this.tuneItem = this.pauseAll[1];
     this.careerMenu = new Menu([
@@ -709,6 +714,7 @@ export class App {
       },
       { label: () => 'NEXT SONG  (N)', select: () => this.music.next() },
       this.cameraItem(),
+      this.camHeightItem(),
       {
         label: () => `TIME: ${moodById(s.mood).name}`,
         change: (d: number) => {
@@ -772,6 +778,17 @@ export class App {
   }
 
   /** CAMERA: north-up (classic) or following the car from behind. */
+  private camHeightItem() {
+    const s = this.settings;
+    return {
+      label: () => `CAMERA HEIGHT: ${CAM_HEIGHT_NAMES[s.camHeight]}`,
+      change: (d: number) => {
+        s.camHeight = (s.camHeight + d + CAM_HEIGHTS.length) % CAM_HEIGHTS.length;
+        saveSettings(s);
+      },
+    };
+  }
+
   private cameraItem() {
     const s = this.settings;
     return {
@@ -907,8 +924,7 @@ export class App {
     const split = this.mode === 'race' && session.playerCars.length === 2;
     this.renderer.setSplit(split);
     for (const vp of this.renderer.viewports) {
-      vp.cam.viewHeight = split ? VIEW_HEIGHT * 1.25 : VIEW_HEIGHT;
-      vp.cam.follow = false; // the follow zoom is applied again on the next frame
+      vp.cam.follow = false;
     }
     this.viewCar[0] = session.playerCars[0] ?? 0;
     this.viewCar[1] = session.playerCars[1] ?? 1;
@@ -1502,7 +1518,8 @@ export class App {
     // screen, a little lower and further out than the classic view so you
     // look ahead along the road from behind the car.
     const follow = this.settings.camera === 'follow' && this.mode === 'race' && this.session.playerCars.includes(idx);
-    if (follow !== cam.follow) cam.viewHeight *= follow ? FOLLOW_ZOOM : 1 / FOLLOW_ZOOM;
+    // Zoom: the player's camera height, wider in split screen and behind the car.
+    cam.viewHeight = VIEW_HEIGHT * CAM_HEIGHTS[this.settings.camHeight] * (this.renderer.isSplit ? 1.25 : 1) * (follow ? FOLLOW_ZOOM : 1) * this.debugZoom;
     cam.follow = follow;
     cam.tilt = (follow ? FOLLOW_TILT : 57) * (Math.PI / 180);
     if (follow) {
@@ -2086,7 +2103,6 @@ export class App {
     const r = this.renderer;
     r.setSplit(!r.isSplit);
     for (const vp of r.viewports) {
-      vp.cam.viewHeight = r.isSplit ? VIEW_HEIGHT * 1.25 : VIEW_HEIGHT;
       vp.cam.follow = false;
     }
     this.camInit[1] = false;

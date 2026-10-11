@@ -197,7 +197,7 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
   if (car.sliding) {
     const b = car.slip;
     const bs = b > 0 ? 1 : b < 0 ? -1 : 0;
-    omegaT += bs * t.kPow * throttle * smoothstep(3 * DEG, 15 * DEG, Math.abs(b));
+    omegaT += powerOversteer(t, b, car.steer * dirSign, throttle);
     omegaT -= (inp.buttons & Btn.Analog ? t.assistPad : t.assistKb) * b;
   }
   const kYaw = car.sliding ? t.kYawSlide : t.kYawGrip;
@@ -284,6 +284,18 @@ export function gripBudget(t: CarTuning, surf: SurfaceMix, braking: number, aEng
 export function gripOmegaMax(t: CarTuning, s: number, budget: number, slippery: boolean): number {
   const aSteer = slippery ? t.aGrip * lerp(t.steerLo, t.steerHi, smoothstep(t.steerV0, t.steerV1, s)) : budget * t.steerGrip;
   return Math.min(s / t.rMin, t.omegaPeak, aSteer / Math.max(s, 1));
+}
+
+/**
+ * Gas in a slide swings the tail further out (a power slide), at full
+ * strength only while steering into the slide. With the wheel straight or
+ * counter-steering just a little of it is left, so the car straightens up by
+ * itself instead of circling on the throttle.
+ */
+export function powerOversteer(t: CarTuning, slip: number, steerYaw: number, throttle: number): number {
+  const bs = slip > 0 ? 1 : slip < 0 ? -1 : 0;
+  const into = Math.max(0, Math.min(1, steerYaw * bs));
+  return bs * t.kPow * throttle * smoothstep(3 * DEG, 15 * DEG, Math.abs(slip)) * (t.kPowNeutral + (1 - t.kPowNeutral) * into);
 }
 
 export function slideOmegaMax(t: CarTuning, s: number): number {

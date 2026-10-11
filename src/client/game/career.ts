@@ -54,6 +54,7 @@ function seasonSettings(division: number): RaceSettings {
     graphics: 0,
     touchGas: 'thumb',
     camera: 'classic',
+    camHeight: 1,
     touchSteer: 'slide',
   };
 }

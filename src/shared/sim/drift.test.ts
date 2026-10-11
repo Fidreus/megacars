@@ -26,7 +26,8 @@ describe('drift button', () => {
     // Straighten the wheel but keep the button down: still sideways.
     step(25, -0.2, Btn.Drift);
     expect(car.sliding).toBe(1);
-    step(90, 0);
+    // (Not much longer: the car is now angled toward the barrier.)
+    step(40, 0);
     expect(car.sliding).toBe(0);
   });
 });

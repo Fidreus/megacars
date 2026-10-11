@@ -70,7 +70,7 @@ export function installDebugApi(app: App): void {
       split: () => app.toggleSplit(),
       /** Zoom the camera out (k > 1) or in, for looking at the scenery. */
       zoom(k = 1) {
-        for (const vp of app.renderer.viewports) vp.cam.viewHeight = 51.3 * k;
+        app.debugZoom = k;
       },
       /** Visible meshes per top-level scene group (and how many cast shadows). */
       meshes() {

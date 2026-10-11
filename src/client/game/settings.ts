@@ -28,6 +28,8 @@ export interface RaceSettings {
   touchAutoGas?: boolean;
   /** Camera: north-up, or turning with the car (nose up the screen). */
   camera: 'classic' | 'follow';
+  /** Camera height (how much of the track it shows): 0 low, 1 normal, 2 high. */
+  camHeight: number;
   /** Touch steering: drag the left thumb, or two arrow buttons. */
   touchSteer: 'slide' | 'buttons';
   /** Bumped when the default volumes change, so saved settings pick them up once. */
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   graphics: 0,
   touchGas: 'thumb',
   camera: 'classic',
+  camHeight: 1,
   touchSteer: 'slide',
   audioRev: AUDIO_REV,
 };
@@ -84,6 +87,7 @@ export function loadSettings(): RaceSettings {
   delete s.touchAutoGas;
   s.touchSteer = s.touchSteer === 'buttons' ? 'buttons' : 'slide';
   s.camera = s.camera === 'follow' ? 'follow' : 'classic';
+  s.camHeight = [0, 1, 2].includes(s.camHeight) ? s.camHeight : 1;
   return s;
 }
 

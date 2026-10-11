@@ -43,7 +43,8 @@ export interface CarTuning {
   kAlign: number; // 1/s, how fast velocity swings toward the nose per radian of slip
   cScrub: number; // 1/s, speed loss factor × |sin β|
   aSteerSlide: number;
-  kPow: number; // throttle-induced extra yaw in a slide, rad/s
+  kPow: number; // throttle-induced extra yaw in a slide, rad/s (steering into the slide)
+  kPowNeutral: number; // share of it left with the wheel straight or counter-steering
   assistKb: number;
   assistPad: number;
   kYawGrip: number;
@@ -100,7 +101,7 @@ export const DEFAULT_TUNING: CarTuning = {
   slideEnterTicks: 4,
   slipEnterDeg: 7,
   slipEnterDegPaved: 12,
-  slipExitDeg: 3,
+  slipExitDeg: 5,
   slipExitTicks: 6,
 
   driftTapTicks: 15,
@@ -116,6 +117,7 @@ export const DEFAULT_TUNING: CarTuning = {
   cScrub: 0.6,
   aSteerSlide: 65,
   kPow: 0.6,
+  kPowNeutral: 0.35,
   assistKb: 0.5,
   assistPad: 0.25,
   kYawGrip: 12,

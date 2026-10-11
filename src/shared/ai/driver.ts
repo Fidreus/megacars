@@ -10,7 +10,7 @@ import { DEG, clamp, headingOf, smoothstep, wrapAngle } from '../math/angle.ts';
 import type { SurfaceMix } from '../config/surfaces.ts';
 import type { CarTuning } from '../config/tuning.ts';
 import type { Track } from '../track/types.ts';
-import { gripBudget, gripOmegaMax, slideOmegaMax, type CarState } from '../sim/car.ts';
+import { gripBudget, gripOmegaMax, powerOversteer, slideOmegaMax, type CarState } from '../sim/car.ts';
 import { Btn, type CarInput } from '../sim/input.ts';
 
 export const AiMode = { Grip: 0, Drift: 1 } as const;
@@ -167,8 +167,8 @@ export function aiDrive(
     omegaMax = gripOmegaMax(t, s, budget, surf.slippery > 0);
   } else {
     omegaMax = slideOmegaMax(t, s);
-    const bs = beta > 0 ? 1 : beta < 0 ? -1 : 0;
-    extra = bs * t.kPow * throttle * smoothstep(3 * DEG, 15 * DEG, Math.abs(beta)) - t.assistPad * beta;
+    // The power slide depends on the steering being solved for: use the wheel as it is now.
+    extra = powerOversteer(t, beta, car.steer * (fwd >= 0 ? 1 : -1), throttle) - t.assistPad * beta;
   }
   const dirSign = fwd >= 0 ? 1 : -1;
   const steer = omegaMax > 1e-3 ? clamp(((omegaDes - extra) / omegaMax) * dirSign, -1, 1) : 0;
