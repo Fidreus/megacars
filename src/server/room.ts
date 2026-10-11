@@ -4,6 +4,7 @@
 
 import type { CarTuning } from '../shared/config/tuning.ts';
 import { AI_NAMES, AI_SKILL, CAR_COLORS } from '../shared/game/roster.ts';
+import { leagueOf } from '../shared/game/leagues.ts';
 import { createRaceWorld } from '../shared/game/raceSetup.ts';
 import { makeRng } from '../shared/math/rng.ts';
 import {
@@ -78,7 +79,7 @@ export class Room {
   readonly code: string;
   readonly members: Member[] = [];
   hostId = -1;
-  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true, upgrades: true, public: false };
+  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true, upgrades: true, public: false, league: 'standard' };
   /** Public rooms: when the race starts by itself (ms, 0 = not counting down). */
   startsAt = 0;
   private now = 0;
@@ -229,6 +230,7 @@ export class Room {
     if (typeof c.upgrades === 'boolean') cfg.upgrades = c.upgrades;
     if (Number.isFinite(c.difficulty)) cfg.difficulty = Math.max(0, Math.min(2, Math.round(c.difficulty!)));
     if (typeof c.public === 'boolean') cfg.public = c.public;
+    if (c.league !== undefined) cfg.league = leagueOf(c.league);
     this.broadcastRoom();
     return null;
   }
@@ -343,6 +345,7 @@ export class Room {
       countdownTicks: COUNTDOWN_TICKS,
       weapons: this.config.weapons,
       entrants,
+      league: this.config.league,
     };
     const { world, track, tunings } = createRaceWorld(spec);
     const drivers: Driver[] = [];

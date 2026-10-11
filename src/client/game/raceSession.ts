@@ -4,6 +4,7 @@
 
 import { cloneTuning, type CarTuning } from '../../shared/config/tuning.ts';
 import { AI_NAMES, AI_SKILL, CAR_COLORS } from '../../shared/game/roster.ts';
+import { leagueOf } from '../../shared/game/leagues.ts';
 import { createRaceWorld } from '../../shared/game/raceSetup.ts';
 import { makeRng } from '../../shared/math/rng.ts';
 import type { Entrant, RaceSpec } from '../../shared/net/protocol.ts';
@@ -37,8 +38,9 @@ export class RaceSession implements GameSession {
     const built = createRaceWorld(this.spec, baseTuning);
     this.track = built.track;
     this.world = built.world;
-    // Stock cars share the live-tuned object (tuning panel); upgraded cars get their own.
-    this.tunings = this.spec.entrants.some((e) => e.loadout) ? built.tunings : [baseTuning];
+    // Stock standard cars share the live-tuned object (tuning panel); upgraded
+    // cars and other leagues get their own.
+    this.tunings = this.spec.entrants.some((e) => e.loadout) || leagueOf(this.spec.league) !== 'standard' ? built.tunings : [baseTuning];
     this.inputs = this.world.cars.map(() => neutralInput());
     this.playerCars = [];
     for (const p of [0, 1]) {
@@ -81,6 +83,7 @@ function specFromSettings(settings: RaceSettings, seed: number): RaceSpec {
     countdownTicks: settings.practice ? 0 : COUNTDOWN_TICKS,
     weapons: settings.weapons,
     entrants,
+    league: settings.league,
   };
 }
 

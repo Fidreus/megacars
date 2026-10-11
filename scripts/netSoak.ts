@@ -19,6 +19,7 @@ const { values } = parseArgs({
     laps: { type: 'string', default: '1' },
     ai: { type: 'string', default: '2' },
     track: { type: 'string', default: 'greenvalley' },
+    league: { type: 'string', default: 'standard' },
   },
 });
 
@@ -101,7 +102,7 @@ bots[0].send({ t: 'create' });
 while (!bots[0].room) await sleep(50);
 for (const b of bots.slice(1)) b.send({ t: 'join', code: bots[0].room.code });
 await sleep(500);
-bots[0].send({ t: 'config', config: { laps: Number(values.laps), ai: Number(values.ai), track: values.track, weapons: true } });
+bots[0].send({ t: 'config', config: { laps: Number(values.laps), ai: Number(values.ai), track: values.track, weapons: true, league: values.league === 'super' ? 'super' : 'standard' } });
 for (const b of bots.slice(1)) b.send({ t: 'ready', ready: true });
 await sleep(500);
 bots[0].send({ t: 'start' });

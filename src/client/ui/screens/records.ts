@@ -2,6 +2,7 @@
 // ten verified laps. Left/right (or a tap on either side) switches track.
 
 import { DT } from '../../../shared/config/constants.ts';
+import { boardKey, LEAGUE_NAMES, type League } from '../../../shared/game/leagues.ts';
 import type { Boards } from '../../../shared/game/records.ts';
 import { TRACK_LIST } from '../../../shared/track/defs/index.ts';
 import type { NavState } from '../../input/nav.ts';
@@ -16,6 +17,8 @@ export class RecordsScreen {
   private failed = false;
   /** Your name on the boards (highlighted). */
   me = '';
+  /** Boards of this league. */
+  league: League = 'standard';
   private readonly onBack: () => void;
   private readonly onMove: () => void;
   private W = 1;
@@ -26,7 +29,8 @@ export class RecordsScreen {
   }
 
   /** Open on a track and fetch the latest boards. */
-  open(track: string): void {
+  open(track: string, league: League = 'standard'): void {
+    this.league = league;
     this.index = Math.max(0, TRACK_LIST.findIndex((t) => t.id === track));
     this.loading = true;
     this.failed = false;
@@ -61,13 +65,14 @@ export class RecordsScreen {
     const k = H >= 420 && W >= 760 ? 2 : 1;
     const line = 10 * k + 1;
     let y = Math.round(H * 0.05);
-    drawText(ctx, 'RECORDS', W / 2, y, { scale: 2, color: '#ffd84a', align: 'center' });
+    drawText(ctx, this.league === 'standard' ? 'RECORDS' : `RECORDS - ${LEAGUE_NAMES[this.league]}`, W / 2, y, { scale: 2, color: '#ffd84a', align: 'center' });
     y += short ? 22 : 26;
     drawText(ctx, `←  ${def.name.toUpperCase()}  →`, W / 2, y, { scale: 2, color: '#ffffff', align: 'center' });
     y += short ? 22 : 28;
 
     // Your records.
-    const mine = trackRecords(loadLocalRecords(), def.id);
+    const key = boardKey(def.id, this.league);
+    const mine = trackRecords(loadLocalRecords(), key);
     const left = Math.round(W / 2 - (short ? 150 : 200 * k));
     const right = Math.round(W / 2 + (short ? 10 : 20 * k));
     drawText(ctx, 'YOUR BEST', left, y, { color: '#9fd8ff', scale: k });
@@ -84,7 +89,7 @@ export class RecordsScreen {
 
     // The world board.
     let wy = y + line + 3;
-    const board = this.boards?.[def.id] ?? [];
+    const board = this.boards?.[key] ?? [];
     if (this.loading && !this.boards) drawText(ctx, 'LOADING...', right, wy, { color: '#8090a8', scale: k });
     else if (this.failed && !this.boards) drawText(ctx, 'CANNOT REACH THE SERVER', right, wy, { color: '#ff6b5e', scale: k });
     else if (!board.length) drawText(ctx, 'NO RECORDS YET - BE THE FIRST!', right, wy, { color: '#8090a8', scale: k });

@@ -7,6 +7,7 @@ import { getTrack } from '../track/builder.ts';
 import { TRACKS } from '../track/defs/index.ts';
 import type { Track } from '../track/types.ts';
 import { createWorld, type World } from '../sim/world.ts';
+import { leagueTuning } from './leagues.ts';
 import { defaultLoadout, tuningFor } from './shop.ts';
 
 export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING): { track: Track; world: World; tunings: CarTuning[] } {
@@ -19,6 +20,7 @@ export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING
     weapons: spec.weapons,
   });
   const tunings: CarTuning[] = [];
+  base = leagueTuning(base, spec.league);
   spec.entrants.forEach((e, i) => {
     const car = world.cars[i];
     car.aiSkill = e.skill;

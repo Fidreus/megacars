@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
+import { boardKey } from '../shared/game/leagues.ts';
 import { insertRecord, specProblem, type Boards, type RecordSubmission } from '../shared/game/records.ts';
 import { TRACKS } from '../shared/track/defs/index.ts';
 
@@ -46,7 +47,7 @@ export class RecordStore {
     } catch (e) {
       console.warn('records: could not read', this.file, e);
     }
-    for (const id of Object.keys(this.boards)) if (!TRACKS[id]) delete this.boards[id];
+    for (const id of Object.keys(this.boards)) if (!TRACKS[id.split('@')[0]]) delete this.boards[id];
     const n = Object.values(this.boards).reduce((k, b) => k + b.length, 0);
     console.log(`records: ${n} entries in ${this.file}`);
   }
@@ -102,8 +103,7 @@ export class RecordStore {
       job.done({ ok: false, error: 'no complete lap' });
     } else {
       const best = Math.min(...result.laps);
-      const track = job.sub.spec.track;
-      const board = (this.boards[track] ??= []);
+      const board = (this.boards[boardKey(job.sub.spec.track, job.sub.spec.league)] ??= []);
       const name = cleanName(job.sub.name) || 'DRIVER';
       const rank = insertRecord(board, { name, ticks: best, at: Date.now() });
       if (rank > 0) this.scheduleSave();

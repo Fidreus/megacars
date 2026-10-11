@@ -2,6 +2,7 @@
 // after each, the shop in between. Saved in localStorage so it can be
 // continued later.
 
+import { leagueOf, type League } from '../../shared/game/leagues.ts';
 import { AI_NAMES, AI_SKILL, CAR_COLORS } from '../../shared/game/roster.ts';
 import {
   aiLoadout, averageLevel, loadoutOf, newProfile, raceResults, settle, type Profile,
@@ -34,6 +35,8 @@ export interface Championship {
   laps: number;
   difficulty: number;
   weapons: boolean;
+  /** Car class for the whole championship (older saves: standard). */
+  league?: League;
   seed: number;
   drivers: CupDriver[];
   /** Driver index for each car of the race being run. */
@@ -73,6 +76,7 @@ export function newChampionship(s: RaceSettings): Championship {
     laps: s.laps,
     difficulty: s.difficulty,
     weapons: s.weapons,
+    league: s.league,
     seed,
     drivers,
     grid: [],
@@ -107,6 +111,7 @@ export function nextRaceSpec(c: Championship): RaceSpec {
     countdownTicks: COUNTDOWN_TICKS,
     weapons: c.weapons,
     entrants,
+    league: leagueOf(c.league),
   };
 }
 

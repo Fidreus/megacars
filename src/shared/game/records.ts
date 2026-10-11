@@ -129,6 +129,7 @@ export function specProblem(spec: RaceSpec): string | null {
   if (!Number.isInteger(spec.laps) || spec.laps < 0 || spec.laps > 9) return 'bad laps';
   if (!Number.isInteger(spec.seed) || !Number.isInteger(spec.countdownTicks) || spec.countdownTicks < 0 || spec.countdownTicks > 600) return 'bad race';
   if (spec.entrants.some((e) => typeof e.skill !== 'number' || !(e.skill >= 0 && e.skill <= 1.5))) return 'bad field';
+  if (spec.league !== undefined && spec.league !== 'standard' && spec.league !== 'super') return 'bad league';
   return null;
 }
 

@@ -3,6 +3,7 @@
 
 import { SIM_VERSION } from '../config/constants.ts';
 import type { CarInput } from '../sim/input.ts';
+import type { League } from '../game/leagues.ts';
 import type { Loadout, Profile, ShopItem } from '../game/shop.ts';
 
 /** Bump when messages change incompatibly. Clients and server must match. */
@@ -64,6 +65,8 @@ export interface RoomConfig {
   upgrades: boolean;
   /** Listed for anyone to join (otherwise only with the code). */
   public: boolean;
+  /** Car class. */
+  league: League;
 }
 
 /** A public room in the room list. */
@@ -127,6 +130,8 @@ export interface RaceSpec {
   countdownTicks: number;
   weapons: boolean;
   entrants: Entrant[];
+  /** Car class (absent = standard). */
+  league?: League;
 }
 
 export type ClientMsg =

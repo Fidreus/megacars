@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { DT } from '../shared/config/constants.ts';
 import { SURFACES, Surface } from '../shared/config/surfaces.ts';
 import { cloneTuning, DEFAULT_TUNING, type CarTuning } from '../shared/config/tuning.ts';
+import { boardKey, LEAGUE_NAMES, LEAGUES, leagueOf, leagueTuning } from '../shared/game/leagues.ts';
 import { TRACKS, TRACK_LIST } from '../shared/track/defs/index.ts';
 import type { Track } from '../shared/track/types.ts';
 import { Ev } from '../shared/sim/events.ts';
@@ -500,6 +501,7 @@ export class App {
       },
       { label: () => `DIFFICULTY: ${DIFFICULTIES[s.difficulty]}`, change: (d: number) => { s.difficulty = cycle(s.difficulty, 3, d); changed(); } },
       { label: () => `WEAPONS: ${s.weapons ? 'ON' : 'OFF'}`, change: () => { s.weapons = !s.weapons; changed(); } },
+      { label: () => `LEAGUE: ${LEAGUE_NAMES[s.league]}`, change: (d: number) => { s.league = LEAGUES[cycle(LEAGUES.indexOf(s.league), LEAGUES.length, d)]; changed(); } },
       { label: () => 'OPTIONS', select: () => { this.mode = 'options'; this.optionsMenu.index = 0; } },
       { label: () => 'HOW TO PLAY', select: () => (this.mode = 'help') },
       {
@@ -516,7 +518,7 @@ export class App {
           this.online.commitName();
           this.mode = 'records';
           this.recordsScreen.me = cleanName(this.online.name);
-          this.recordsScreen.open(this.settings.track);
+          this.recordsScreen.open(this.settings.track, this.settings.league);
         },
       },
       { label: () => 'FREE PRACTICE', select: () => this.startRace({ ...s, practice: true, players: 1, opponents: 0 }) },
@@ -592,6 +594,11 @@ export class App {
         change: (d: number) => o().configure({ difficulty: cycle(cfg()?.difficulty ?? 1, 3, d) }),
       },
       { label: () => `WEAPONS: ${cfg()?.weapons === false ? 'OFF' : 'ON'}`, disabled: notHost, change: () => o().configure({ weapons: cfg()?.weapons === false }) },
+      {
+        label: () => `LEAGUE: ${LEAGUE_NAMES[leagueOf(cfg()?.league)]}`,
+        disabled: notHost,
+        change: () => o().configure({ league: leagueOf(cfg()?.league) === 'super' ? 'standard' : 'super' }),
+      },
       {
         label: () => (cfg()?.upgrades === false ? 'SHOP: CLOSED' : `SHOP  $${o().profile?.money ?? '...'}`),
         disabled: () => busy() || cfg()?.upgrades === false,
@@ -832,6 +839,7 @@ export class App {
     const practice = !!settings.practice && !spec;
     if (!practice) this.tuningPanel?.hide();
     else if (isTuned(this.tuning)) this.flashMessage('TUNED HANDLING (PAUSE > TUNE HANDLING)', 3);
+    if (leagueOf(spec?.league ?? settings.league) === 'super') this.flashMessage('SUPERCARS!', 2.5);
     this.setSession(new RaceSession({ ...settings }, practice ? this.tuning : cloneTuning(DEFAULT_TUNING), spec?.seed, spec));
     // Quick races and practice with one person and a stock car can set verified records.
     const rs = this.session as RaceSession;
@@ -1304,6 +1312,18 @@ export class App {
     this.sendRecord();
   }
 
+  /** Where this race's records go: the track, per league. */
+  private recordKey(): string {
+    const s = this.session;
+    return boardKey(s.track.def.id, s instanceof RaceSession ? s.spec.league : undefined);
+  }
+
+  /** Top speed of a car's handling (engine sound), whatever its league or upgrades. */
+  private vTop(car: number): number {
+    const t = (this.session as { tunings?: readonly CarTuning[] }).tunings;
+    return (t?.[car] ?? t?.[0] ?? this.tuning).vTop;
+  }
+
   /** Send a new personal best lap to the world boards (the server replays the race to check it). */
   private sendRecord(): void {
     const rec = this.replay;
@@ -1311,7 +1331,8 @@ export class App {
     if (!rec || !this.recordPending || !(s instanceof RaceSession)) return;
     this.recordPending = false;
     // The tuning panel changes the physics: such laps can't be checked.
-    if (rec.spoiled || s.tunings.some((t) => JSON.stringify(t) !== JSON.stringify(DEFAULT_TUNING))) return;
+    const stock = JSON.stringify(leagueTuning(DEFAULT_TUNING, s.spec.league));
+    if (rec.spoiled || s.tunings.some((t) => JSON.stringify(t) !== stock)) return;
     const track = s.track.def.name.toUpperCase();
     const note = (text: string) => {
       this.recordNote = text;
@@ -1385,7 +1406,7 @@ export class App {
       } else if (e.kind === Ev.Lap && players.includes(e.car) && this.mode === 'race') {
         const car = w.cars[e.car];
         const best = car.bestLapTicks === e.value;
-        const record = !!this.replay && !this.replay.spoiled && noteLap(this.localRecords, this.session.track.def.id, e.value);
+        const record = !!this.replay && !this.replay.spoiled && noteLap(this.localRecords, this.recordKey(), e.value);
         if (record) this.recordPending = true;
         if (record) {
           this.flashMessage(`NEW LAP RECORD ${formatTime(e.value * DT)}`, 3);
@@ -1400,7 +1421,7 @@ export class App {
         playFanfare(this.audio, e.other <= 3);
         if (this.replay && !this.replay.spoiled && this.mode === 'race') {
           const car = w.cars[e.car];
-          if (noteRace(this.localRecords, this.session.track.def.id, w.race.laps, car.finishTick - w.race.startTick)) {
+          if (noteRace(this.localRecords, this.recordKey(), w.race.laps, car.finishTick - w.race.startTick)) {
             this.recordNote = `NEW BEST RACE TIME ${formatTime((car.finishTick - w.race.startTick) * DT)}`;
           }
           // A record for the world board: first ask who set it (once, like an arcade).
@@ -1610,7 +1631,7 @@ export class App {
       const pan = this.playerPan(p);
       const throttle = this.session.inputs[id].throttle;
       const speed = Math.hypot(car.vx, car.vz);
-      const speed01 = speed / this.tuning.vTop;
+      const speed01 = speed / this.vTop(this.viewCar[0]);
       // On the grid the engine revs with the throttle.
       const slipDeg = (Math.abs(car.slip) * 180) / Math.PI;
       let slide = 0;
@@ -1645,7 +1666,7 @@ export class App {
       const doppler = Math.max(0.8, Math.min(1.25, 343 / (343 - closing * 1.6)));
       const fall = 1 - d / FAR_RANGE;
       const throttle = this.session.inputs[car.id]?.throttle ?? 1;
-      const speed01 = Math.hypot(car.vx, car.vz) / this.tuning.vTop;
+      const speed01 = Math.hypot(car.vx, car.vz) / this.vTop(car.id);
       // On the grid: a slow blip of the throttle, different for each car.
       const grid = 0.08 + 0.08 * (0.5 + 0.5 * Math.sin(this.time * 2.3 + car.id * 1.7));
       engine.update(countdown ? grid : speed01, countdown ? 0.3 : throttle, fall * fall * 0.8, dx / 25, now, doppler);

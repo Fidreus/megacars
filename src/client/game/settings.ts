@@ -1,5 +1,6 @@
 // Race settings chosen in the menu, remembered between visits.
 
+import { leagueOf, type League } from '../../shared/game/leagues.ts';
 import { DEFAULT_TRACK, TRACKS } from '../../shared/track/defs/index.ts';
 
 export const DIFFICULTIES = ['EASY', 'NORMAL', 'HARD'] as const;
@@ -28,6 +29,8 @@ export interface RaceSettings {
   touchAutoGas?: boolean;
   /** Camera: north-up, or turning with the car (nose up the screen). */
   camera: 'classic' | 'follow';
+  /** Car class: standard or Supercars. */
+  league: League;
   /** Camera height (how much of the track it shows): 0 low, 1 normal, 2 high. */
   camHeight: number;
   /** Touch steering: drag the left thumb, or two arrow buttons. */
@@ -55,6 +58,7 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   touchGas: 'thumb',
   camera: 'classic',
   camHeight: 1,
+  league: 'standard',
   touchSteer: 'slide',
   audioRev: AUDIO_REV,
 };
@@ -88,6 +92,7 @@ export function loadSettings(): RaceSettings {
   s.touchSteer = s.touchSteer === 'buttons' ? 'buttons' : 'slide';
   s.camera = s.camera === 'follow' ? 'follow' : 'classic';
   s.camHeight = [0, 1, 2].includes(s.camHeight) ? s.camHeight : 1;
+  s.league = leagueOf(s.league);
   return s;
 }
 

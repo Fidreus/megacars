@@ -11,8 +11,8 @@ import { Ev, pushEvent, type EventBuffer } from './events.ts';
 const queryBuf = new Int32Array(128);
 const closest: Closest = { x: 0, z: 0, t: 0, d2: 0 };
 
-/** Speed cap that guarantees no tunnelling: < circle radius per tick. */
-export const MAX_SPEED = 58;
+/** Speed cap against tunnelling: well under a circle's diameter per tick (Supercars on turbo reach it). */
+export const MAX_SPEED = 66;
 
 /** Minimum normal impact speed (m/s) that produces a WallHit/CarHit event. */
 const EVENT_IMPACT = 1.5;
