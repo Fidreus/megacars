@@ -95,6 +95,9 @@ const FAR_ENGINES = 3;
 const FAR_RANGE = 45;
 /** Visible height of a full-screen view, metres. Split screen zooms out a little. */
 const VIEW_HEIGHT = 51.3;
+/** Follow camera: how much more it shows than the classic view, and its tilt (degrees). */
+const FOLLOW_ZOOM = 1.35;
+const FOLLOW_TILT = 50;
 
 /** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
 type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'controls' | 'help' | 'records' | 'rooms' | 'credits';
@@ -903,7 +906,10 @@ export class App {
     this.shake = 0;
     const split = this.mode === 'race' && session.playerCars.length === 2;
     this.renderer.setSplit(split);
-    for (const vp of this.renderer.viewports) vp.cam.viewHeight = split ? VIEW_HEIGHT * 1.25 : VIEW_HEIGHT;
+    for (const vp of this.renderer.viewports) {
+      vp.cam.viewHeight = split ? VIEW_HEIGHT * 1.25 : VIEW_HEIGHT;
+      vp.cam.follow = false; // the follow zoom is applied again on the next frame
+    }
     this.viewCar[0] = session.playerCars[0] ?? 0;
     this.viewCar[1] = session.playerCars[1] ?? 1;
     this.camInit[0] = this.camInit[1] = false;
@@ -1493,11 +1499,12 @@ export class App {
     const car = this.world.cars[idx];
     const view = this.view.cars[idx].root.position;
     // Follow camera: turned with the player's car so its nose points up the
-    // screen; steeper, so buildings (placed for a north-facing view) hide
-    // less of the road.
+    // screen, a little lower and further out than the classic view so you
+    // look ahead along the road from behind the car.
     const follow = this.settings.camera === 'follow' && this.mode === 'race' && this.session.playerCars.includes(idx);
+    if (follow !== cam.follow) cam.viewHeight *= follow ? FOLLOW_ZOOM : 1 / FOLLOW_ZOOM;
     cam.follow = follow;
-    cam.tilt = (follow ? 72 : 57) * (Math.PI / 180);
+    cam.tilt = (follow ? FOLLOW_TILT : 57) * (Math.PI / 180);
     if (follow) {
       if (!this.camInit[v]) this.camYaw[v] = car.heading;
       let d = car.heading - this.camYaw[v];
@@ -1516,7 +1523,7 @@ export class App {
     }
     if (follow) {
       // The car sits low on the screen: more road ahead than behind.
-      const lead = half.depth * 0.22;
+      const lead = half.depth * 0.26;
       lx = Math.sin(cam.yaw) * lead;
       lz = -Math.cos(cam.yaw) * lead;
     }
@@ -1753,7 +1760,9 @@ export class App {
     }
     if (this.songToast > 0 && this.music.nowPlaying) {
       this.songToast -= dt;
-      drawText(ctx, `♪ ${this.music.nowPlaying}`, W - 6, H - 22, { color: '#9fd8ff', align: 'right' });
+      // On the title screen the bottom right holds the version and credit.
+      const y = this.mode === 'title' ? H - (this.update.available ? 44 : 33) : H - 22;
+      drawText(ctx, `♪ ${this.music.nowPlaying}`, W - 6, y, { color: '#9fd8ff', align: 'right' });
     }
     if (this.flashTime > 0) {
       this.flashTime -= dt;
@@ -2076,7 +2085,10 @@ export class App {
   toggleSplit(): void {
     const r = this.renderer;
     r.setSplit(!r.isSplit);
-    for (const vp of r.viewports) vp.cam.viewHeight = r.isSplit ? VIEW_HEIGHT * 1.25 : VIEW_HEIGHT;
+    for (const vp of r.viewports) {
+      vp.cam.viewHeight = r.isSplit ? VIEW_HEIGHT * 1.25 : VIEW_HEIGHT;
+      vp.cam.follow = false;
+    }
     this.camInit[1] = false;
   }
 }
