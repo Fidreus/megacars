@@ -26,7 +26,9 @@ try {
 // service worker would get in the way of the dev server's hot reload).
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    // Named after this build, so every deploy installs a fresh offline copy.
+    const build = new URL(import.meta.url).pathname.split('/').pop() ?? '';
+    navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(build)}`).catch(() => {
       // Plays fine without it.
     });
   });

@@ -12,7 +12,7 @@ export function drawCredits(g: CanvasRenderingContext2D, W: number, H: number, t
   y += 22;
   drawText(g, 'MUSIC CREDITS', W / 2, y, { scale: 2, color: '#ffd84a', align: 'center' });
   y += 24;
-  drawText(g, 'MODULES FROM THE MOD ARCHIVE (MODARCHIVE.ORG), C64 SID TRACKS FROM OPENGAMEART.ORG', W / 2, y, { color: '#9fd8ff', align: 'center' });
+  drawText(g, 'MODULES FROM THE MOD ARCHIVE (MODARCHIVE.ORG)', W / 2, y, { color: '#9fd8ff', align: 'center' });
   y += 16;
   const x0 = Math.round(W / 2 - 190);
   for (const s of Object.values(SONGS)) {

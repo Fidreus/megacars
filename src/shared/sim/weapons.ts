@@ -35,8 +35,8 @@ export const WEAPON = {
   turboAccel: 16,
   turboTopFactor: 1.3,
   /** Damage per m/s of impact above the tuning's damage speed. */
-  wallDamage: 0.011,
-  carDamage: 0.008,
+  wallDamage: 0.0055,
+  carDamage: 0.004,
   wreckTicks: 150,
   /** Damage a car comes back with after being wrecked (patched, not repaired). */
   wreckRepair: 0.6,

@@ -17,20 +17,4 @@ checked on each module's page when downloaded (October 2026).
 | simple_chip_tune.xm | Simple Chip Tune | JAM | Public Domain | https://modarchive.org/index.php?request=view_by_moduleid&query=166532 |
 | numen_in_da_chip.xm | Numen in Da Chip | JAM | Public Domain | https://modarchive.org/index.php?request=view_by_moduleid&query=169046 |
 
-## Commodore 64 SID tracks
-
-By Skrjablin, made with GoatTracker for the SID chip and recorded through a
-SID emulator (sidplayfp / sidplay2). From OpenGameArt; licences checked on
-each page (October 2026). Stored as the original .ogg plus an .mp3 copy for
-browsers without Ogg Vorbis.
-
-| File | Title | Licence | Source |
-|---|---|---|---|
-| c64_uptempo_chiptune.ogg | Uptempo Chiptune | CC0 | https://opengameart.org/content/6-genuinely-c64-soundtracks-released-as-public-domain-may-2017 |
-| freddy_the_spider.ogg | Freddie the Spider | CC0 | (same page) |
-| shanty_c64.ogg | Shanty | CC0 | (same page) |
-| melodic_power_track.ogg | Melodic Power Track C64 Style | CC0 (also offered as CC BY 3.0) | https://opengameart.org/content/melodic-power-track-c64-style |
-
-The composer asks for credit ("Skrjablin") although it is not required.
-
 Playback: libopenmpt (BSD), see /vendor/libopenmpt/.

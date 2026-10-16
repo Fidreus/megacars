@@ -33,18 +33,13 @@ export const SONGS: Record<string, Song> = {
   simplechip: { file: 'simple_chip_tune.xm', title: 'SIMPLE CHIP TUNE', artist: 'JAM', licence: 'PUBLIC DOMAIN' },
   numen: { file: 'numen_in_da_chip.xm', title: 'NUMEN IN DA CHIP', artist: 'JAM', licence: 'PUBLIC DOMAIN' },
   imagine: { file: 'imagine.xm', title: 'IMAGINE', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0' },
-  // Commodore 64 SID chip music (GoatTracker, recorded through a SID emulator).
-  uptempo: { file: 'c64_uptempo_chiptune', title: 'UPTEMPO CHIPTUNE (C64 SID)', artist: 'SKRJABLIN', licence: 'CC0', audio: true, source: 'OPENGAMEART' },
-  powertrack: { file: 'melodic_power_track', title: 'MELODIC POWER TRACK (C64 SID)', artist: 'SKRJABLIN', licence: 'CC0', audio: true, source: 'OPENGAMEART', gain: 3 },
-  freddie: { file: 'freddy_the_spider', title: 'FREDDIE THE SPIDER (C64 SID)', artist: 'SKRJABLIN', licence: 'CC0', audio: true, source: 'OPENGAMEART' },
-  shanty: { file: 'shanty_c64', title: 'SHANTY (C64 SID)', artist: 'SKRJABLIN', licence: 'CC0', audio: true, source: 'OPENGAMEART' },
 };
 
 /** Tracks without a song of their own borrow one. */
-const TRACK_SONG: Record<string, string> = { twinbridges: 'powertrack', brewerybash: 'shanty' };
+const TRACK_SONG: Record<string, string> = { twinbridges: 'bitloader', brewerybash: 'numen' };
 
 /** Songs used for races in shuffle mode. */
-const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine', 'uptempo', 'powertrack', 'freddie', 'shanty'];
+const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine'];
 
 export const MUSIC_MODES = ['TRACKS', 'SHUFFLE', 'OFF'] as const;
 export type MusicMode = 0 | 1 | 2;
