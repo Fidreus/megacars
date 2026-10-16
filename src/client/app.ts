@@ -795,6 +795,41 @@ export class App {
 
   /** CAMERA: north-up (classic) or following the car from behind. */
   /** How the left thumb steers on touch screens (Options and, on touch, the pause menu). */
+  /** Where the title screen's sound on/off button was drawn (UI pixels). */
+  private soundButton: { x: number; y: number; w: number; h: number } | null = null;
+
+  /** Sound on/off in the top right corner of the title screen. */
+  private drawSoundButton(ctx: CanvasRenderingContext2D, W: number): void {
+    const label = this.audio.muted ? 'SOUND OFF' : 'SOUND ON';
+    const w = textWidth(label) + 26;
+    const h = 15;
+    const x = W - w - 4;
+    const y = 4;
+    this.soundButton = { x, y, w, h };
+    ctx.fillStyle = 'rgba(8,10,24,0.72)';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = this.audio.muted ? '#6a7488' : '#ffd84a';
+    ctx.fillRect(x, y, w, 1);
+    ctx.fillRect(x, y + h - 1, w, 1);
+    // A little speaker: box, cone, and waves or a cross.
+    const sx = x + 5;
+    const sy = y + 5;
+    ctx.fillRect(sx, sy + 1, 2, 3);
+    ctx.fillRect(sx + 2, sy, 1, 5);
+    ctx.fillRect(sx + 3, sy - 1, 1, 7);
+    if (this.audio.muted) {
+      for (let i = 0; i < 5; i++) {
+        ctx.fillRect(sx + 6 + i, sy + i, 1, 1);
+        ctx.fillRect(sx + 10 - i, sy + i, 1, 1);
+      }
+    } else {
+      ctx.fillRect(sx + 6, sy + 1, 1, 3);
+      ctx.fillRect(sx + 8, sy, 1, 5);
+      ctx.fillRect(sx + 10, sy - 1, 1, 7);
+    }
+    drawText(ctx, label, x + 18, y + 4, { color: this.audio.muted ? '#6a7488' : '#ffffff' });
+  }
+
   /** How to drive with this device: touch, or the solo keyboard keys. */
   private controlsHelp(weapons: boolean): string[] {
     if (this.touch.enabled) {
@@ -1243,6 +1278,11 @@ export class App {
   private handleMenus(nav: NavState): void {
     const kb = this.input.keyboard;
     if (this.mode === 'title') {
+      const b = this.soundButton;
+      if (nav.click && b && nav.pointerX >= b.x && nav.pointerX < b.x + b.w && nav.pointerY >= b.y && nav.pointerY < b.y + b.h) {
+        this.audio.setMuted(!this.audio.muted);
+        return;
+      }
       this.titleMenu.handle(nav);
       return;
     }
@@ -1745,6 +1785,7 @@ export class App {
         drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
         drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
       }
+      this.drawSoundButton(ctx, W);
       drawText(ctx, `V${VERSION}`, W - 4, H - 11, { align: 'right', color: '#5a6478' });
       drawText(ctx, 'BY FREDRIK IDRÉUS', W - 4, H - 22, { align: 'right', color: '#5a6478' });
       if (this.update.available && Math.sin(this.time * 4) > -0.2) {
@@ -1848,7 +1889,7 @@ export class App {
     } else if (this.mode === 'race') {
       this.drawRaceUi(ctx, W, H);
     }
-    if (this.songToast > 0 && this.music.nowPlaying) {
+    if (this.songToast > 0 && this.music.nowPlaying && !this.audio.muted) {
       this.songToast -= dt;
       // On the title screen the bottom right holds the version and credit.
       const y = this.mode === 'title' ? H - (this.update.available ? 44 : 33) : H - 22;

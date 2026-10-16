@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { Surface } from '../../shared/config/surfaces.ts';
+import { patchShape } from '../../shared/track/patchShape.ts';
 import type { Track } from '../../shared/track/types.ts';
 import { buildRamps } from './rampMesh.ts';
 import { buildBridges } from './bridgeMesh.ts';
@@ -130,6 +131,8 @@ function buildRoad(track: Track): THREE.Mesh {
   geo.setIndex(idx);
 
   const patches = (track.def.patches ?? []).slice(0, MAX_PATCHES);
+  // Same outlines as the physics grid (patchShape.ts).
+  const shapes = patches.map((p, k) => patchShape(p, k, track.def.seed ?? 0));
   const patchData = Array.from({ length: MAX_PATCHES }, (_, k) =>
     k < patches.length ? new THREE.Vector4(patches[k].x, patches[k].z, patches[k].r, patches[k].runoff ? 1 : 0) : new THREE.Vector4(),
   );
@@ -141,6 +144,8 @@ function buildRoad(track: Track): THREE.Mesh {
     uPatchColor: { value: patchColors },
     uPatchCount: { value: patches.length },
     uPatchRect: { value: Array.from({ length: MAX_PATCHES }, (_, k) => new THREE.Vector2(patches[k]?.hx ?? 0, patches[k]?.hz ?? 0)) },
+    uPatchShapeA: { value: Array.from({ length: MAX_PATCHES }, (_, k) => (shapes[k] ? new THREE.Vector4(shapes[k].angle, shapes[k].aspect, shapes[k].a2, shapes[k].p2) : new THREE.Vector4(0, 1, 0, 0))) },
+    uPatchShapeB: { value: Array.from({ length: MAX_PATCHES }, (_, k) => (shapes[k] ? new THREE.Vector4(shapes[k].a3, shapes[k].p3, shapes[k].a5, shapes[k].p5) : new THREE.Vector4())) },
     uAsphalt: { value: new THREE.Color(SURFACE_COLORS[Surface.Asphalt]) },
     uRunoff: { value: new THREE.Color(themeOf(track.def.theme).runoff ?? SURFACE_COLORS[track.def.runoffSurface ?? Surface.Grass]) },
     uLine: { value: new THREE.Color('#e6e6e0') },
@@ -164,12 +169,23 @@ function buildRoad(track: Track): THREE.Mesh {
         uniform vec4 uPatch[MAX_PATCHES];
         uniform vec3 uPatchColor[MAX_PATCHES];
         uniform vec2 uPatchRect[MAX_PATCHES];
+        uniform vec4 uPatchShapeA[MAX_PATCHES];
+        uniform vec4 uPatchShapeB[MAX_PATCHES];
         uniform int uPatchCount;
-        bool inPatch(int k, vec2 q) {
+        // Distance from the centre over the outline's radius there (< 1 inside); see patchShape.ts.
+        float patchEdge(int k, vec2 q) {
           vec4 p = uPatch[k];
           vec2 rr = uPatchRect[k];
-          if (rr.x > 0.0) return abs(q.x - p.x) <= rr.x && abs(q.y - p.y) <= rr.y;
-          return distance(q, p.xy) < p.z;
+          if (rr.x > 0.0) return max(abs(q.x - p.x) / rr.x, abs(q.y - p.y) / rr.y);
+          vec4 sa = uPatchShapeA[k];
+          vec4 sb = uPatchShapeB[k];
+          vec2 d = q - p.xy;
+          float c = cos(sa.x), s = sin(sa.x), kk = sqrt(sa.y);
+          float u = (d.x * c + d.y * s) / kk;
+          float v = (-d.x * s + d.y * c) * kk;
+          float th = atan(v, u);
+          float lim = p.z * (1.0 + sa.z * cos(2.0 * th + sa.w) + sb.x * cos(3.0 * th + sb.y) + sb.z * cos(5.0 * th + sb.w));
+          return length(vec2(u, v)) / lim;
         }
         uniform vec3 uAsphalt;
         uniform vec3 uRunoff;
@@ -194,8 +210,9 @@ function buildRoad(track: Track): THREE.Mesh {
             col = uAsphalt * (0.9 + 0.1 * n1 + 0.08 * n2);
             for (int k = 0; k < MAX_PATCHES; k++) {
               if (k >= uPatchCount) break;
-              vec4 p = uPatch[k];
-              if (inPatch(k, vWPos.xz)) col = uPatchColor[k] * (0.88 + 0.2 * n1);
+              float e = patchEdge(k, vWPos.xz);
+              // A darker rim, like a soaked edge or a drift's shadow.
+              if (e < 1.0) col = uPatchColor[k] * (0.88 + 0.2 * n1) * (1.0 - 0.14 * smoothstep(0.78, 1.0, e));
             }
             if (a > hwv - 0.55 && a < hwv - 0.3) col = uLine;
             if (abs(kap) > 1.0 / 140.0 && a > hwv - 0.9) {
@@ -211,8 +228,7 @@ function buildRoad(track: Track): THREE.Mesh {
             col = uRunoff * (0.84 + 0.14 * n1 + 0.1 * n2);
             for (int k = 0; k < MAX_PATCHES; k++) {
               if (k >= uPatchCount) break;
-              vec4 p = uPatch[k];
-              if (p.w > 0.5 && inPatch(k, vWPos.xz)) col = uPatchColor[k] * (0.84 + 0.2 * n1);
+              if (uPatch[k].w > 0.5 && patchEdge(k, vWPos.xz) < 1.0) col = uPatchColor[k] * (0.84 + 0.2 * n1);
             }
           }
           diffuseColor.rgb = col;

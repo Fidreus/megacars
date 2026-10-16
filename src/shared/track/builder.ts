@@ -6,6 +6,7 @@ import { Surface, type SurfaceId } from '../config/surfaces.ts';
 import { headingOf, wrapAngle } from '../math/angle.ts';
 import { SegmentGrid } from '../math/spatialHash.ts';
 import { computeRacingLine } from '../ai/racingLine.ts';
+import { inPatchShape, patchReach, patchShape } from './patchShape.ts';
 import type { Bridge, GridSlot, SurfaceGrid, Track, TrackDef, Walls } from './types.ts';
 
 /** Target spacing between centreline samples, metres. */
@@ -475,10 +476,11 @@ function buildSurfaceGrid(track: Track): SurfaceGrid {
       data[k] = runoffSurface;
     }
   }
-  for (const p of def.patches ?? []) {
+  (def.patches ?? []).forEach((p, index) => {
     const rect = p.hx !== undefined && p.hz !== undefined;
-    const ex = rect ? p.hx! : p.r;
-    const ez = rect ? p.hz! : p.r;
+    const shape = patchShape(p, index, def.seed ?? 0);
+    const ex = rect ? p.hx! : patchReach(p, shape);
+    const ez = rect ? p.hz! : ex;
     const c0 = Math.max(0, Math.floor((p.x - ex - minX) / cell));
     const c1 = Math.min(cols - 1, Math.floor((p.x + ex - minX) / cell));
     const r0 = Math.max(0, Math.floor((p.z - ez - minZ) / cell));
@@ -487,7 +489,7 @@ function buildSurfaceGrid(track: Track): SurfaceGrid {
       for (let c = c0; c <= c1; c++) {
         const cx = minX + (c + 0.5) * cell;
         const cz = minZ + (r + 0.5) * cell;
-        if (rect ? Math.abs(cx - p.x) > ex || Math.abs(cz - p.z) > ez : (cx - p.x) ** 2 + (cz - p.z) ** 2 > p.r * p.r) continue;
+        if (rect ? Math.abs(cx - p.x) > ex || Math.abs(cz - p.z) > ez : !inPatchShape(p, shape, cx, cz)) continue;
         const k = r * cols + c;
         const i = nearest[k];
         if (i < 0) continue;
@@ -496,7 +498,7 @@ function buildSurfaceGrid(track: Track): SurfaceGrid {
         if (onRoad || (p.runoff && onRunoff)) data[k] = p.surface;
       }
     }
-  }
+  });
   return { minX, minZ, cell, cols, rows, data, dist };
 }
 

@@ -68,6 +68,14 @@ export function installDebugApi(app: App): void {
       /** Average ms per simulated + rendered frame. */
       bench: (frames = 120) => app.bench(frames),
       split: () => app.toggleSplit(),
+      /** Put the first player's car at (x, z), standing still (for looking at a spot). */
+      place(x: number, z: number) {
+        const car = app.world.cars[app.session.playerCars[0]];
+        if (!car) return;
+        car.x = x;
+        car.z = z;
+        car.vx = car.vz = car.angVel = 0;
+      },
       /** Zoom the camera out (k > 1) or in, for looking at the scenery. */
       zoom(k = 1) {
         app.debugZoom = k;

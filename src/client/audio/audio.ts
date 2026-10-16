@@ -1,6 +1,16 @@
 // Web Audio setup. Browsers only allow sound after a user gesture, so the
 // context is created on the first key press or click.
 
+const MUTED_KEY = 'megacars.muted';
+
+function loadMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export class AudioSystem {
   ctx: AudioContext | null = null;
   master: GainNode | null = null;
@@ -15,6 +25,8 @@ export class AudioSystem {
   reverb: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   volume = 0.7;
+  /** Everything silent (music too), remembered between visits. */
+  muted = loadMuted();
 
   unlock(): void {
     if (!this.ctx) {
@@ -25,6 +37,7 @@ export class AudioSystem {
       comp.threshold.value = -14;
       comp.ratio.value = 6;
       const bus = ctx.createGain();
+      bus.gain.value = this.muted ? 0 : 1;
       const limiter = ctx.createDynamicsCompressor();
       limiter.threshold.value = -3;
       limiter.knee.value = 0;
@@ -69,6 +82,16 @@ export class AudioSystem {
       }
     }
     return this.noise;
+  }
+
+  setMuted(m: boolean): void {
+    this.muted = m;
+    try {
+      localStorage.setItem(MUTED_KEY, m ? '1' : '0');
+    } catch {
+      // Storage blocked: muted for this visit only.
+    }
+    if (this.bus && this.ctx) this.bus.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.03);
   }
 
   setVolume(v: number): void {
