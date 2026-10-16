@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING } from '../config/tuning.ts';
 import { getTrack, pointAt } from '../track/builder.ts';
 import { TWIN_BRIDGES } from '../track/defs/twinBridges.ts';
+import { BREWERY_BASH } from '../track/defs/breweryBash.ts';
+import { leagueTuning } from '../game/leagues.ts';
+import { safeRespawnS } from './ramps.ts';
 import { validateTrack } from '../track/validate.ts';
 import { Ev } from './events.ts';
 import { neutralInput } from './input.ts';
@@ -74,4 +77,31 @@ describe('bridges', () => {
     expect(slow.fell).toBe(true);
     expect(slow.car.trackS).toBeLessThan(start);
   });
+
+  it('a car at 99% damage still clears every broken bridge from where a fall puts it back', () => {
+    for (const def of [TWIN_BRIDGES, BREWERY_BASH]) {
+      const t = getTrack(def);
+      for (const league of ['standard', 'super'] as const) {
+        const tuning = leagueTuning(DEFAULT_TUNING, league);
+        for (const b of t.bridges.filter((x) => x.gap)) {
+          const w = createWorld(t, 1, 1, { laps: 9, countdownTicks: 0 });
+          stepWorld(w, t, [], [tuning]);
+          const car = w.cars[0];
+          car.aiDriven = 1;
+          const p = { x: 0, z: 0, heading: 0 };
+          pointAt(t, safeRespawnS(t, b.s), p);
+          Object.assign(car, { x: p.x, z: p.z, heading: p.heading, vx: 0, vz: 0 });
+          resetProgress(car, t);
+          let fell = false;
+          for (let k = 0; k < 60 * 15 && !fell && car.trackS < b.s + b.span + b.ramp + 20; k++) {
+            car.damage = 0.99;
+            stepWorld(w, t, [], [tuning]);
+            for (let e = 0; e < w.events.count; e++) if (w.events.list[e].kind === Ev.Respawn && w.events.list[e].value === 3) fell = true;
+          }
+          expect(fell, `${def.id} ${league} gap at ${b.s.toFixed(0)}`).toBe(false);
+        }
+      }
+    }
+  });
 });
+

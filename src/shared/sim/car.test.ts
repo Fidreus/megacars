@@ -7,7 +7,7 @@ import { buildTrack, distanceToCentreline } from '../track/builder.ts';
 import { GREEN_VALLEY } from '../track/defs/greenValley.ts';
 import { closestOnSegment } from '../math/geom.ts';
 import type { Track } from '../track/types.ts';
-import { applyDamage, createCar, stepCarDynamics } from './car.ts';
+import { applyDamage, createCar, DAMAGE_WEAR, stepCarDynamics } from './car.ts';
 import { inPitArea } from '../track/pit.ts';
 import { neutralInput } from './input.ts';
 import { stepWorld } from './step.ts';
@@ -217,7 +217,7 @@ describe('damage', () => {
       return surf;
     };
     expect(top(0.2, 1).vTop).toBe(top(0, 1).vTop);
-    expect(top(1, 1).vTop).toBeCloseTo(top(0, 1).vTop * 0.75, 6);
+    expect(top(1, 1).vTop).toBeCloseTo(top(0, 1).vTop * (1 - DAMAGE_WEAR.engine), 6);
     expect(top(1, 1).grip).toBeLessThan(top(0, 1).grip);
     expect(top(1, 0)).toEqual(top(0, 0));
   });

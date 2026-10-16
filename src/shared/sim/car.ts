@@ -116,7 +116,7 @@ export function carSpeed(c: CarState): number {
 export const DAMAGE_WEAR = {
   from: 0.2,
   /** Engine and top speed lost. */
-  engine: 0.25,
+  engine: 0.18,
   /** Grip lost, gripping and sliding. */
   grip: 0.1,
 };

@@ -135,8 +135,10 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     } else {
       car.pitTicks = 0;
     }
-    if (speed < 1.2 && trying && race.phase === RacePhase.Racing && !inPit) car.stuckTicks++;
-    else if (inPit || car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading) > 4) car.stuckTicks = 0;
+    // People may park in the box; a computer car standing there is stuck (nose in a wall) and backs out.
+    const parked = inPit && !car.aiDriven;
+    if (speed < 1.2 && trying && race.phase === RacePhase.Racing && !parked) car.stuckTicks++;
+    else if (parked || car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading) > 4) car.stuckTicks = 0;
     if (car.ghostTicks > 0) car.ghostTicks--;
   }
   if (race.weapons) stepShots(w.shots, cars, track, tunings, DT, w.events);
