@@ -16,6 +16,7 @@ import { Btn, NEUTRAL_INPUT, neutralInput, type CarInput } from './input.ts';
 import { resetProgress, updateProgress } from './race.ts';
 import { RacePhase, respawnCar, standings, type World } from './world.ts';
 import { fellOff, groundUnder, makeGround, safeRespawnS, stepRamps } from './ramps.ts';
+import { inPitBox, PIT } from '../track/pit.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
@@ -123,8 +124,19 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     // Stuck: nearly stopped while trying to drive.
     const speed = Math.hypot(car.vx, car.vz);
     const trying = (car.aiDriven || inp.throttle > 0.3 || inp.brake > 0.3) && !car.airborne;
-    if (speed < 1.2 && trying && race.phase === RacePhase.Racing) car.stuckTicks++;
-    else if (car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading) > 4) car.stuckTicks = 0;
+    // Pit box: every full second there repairs the car (standing still is allowed).
+    const inPit = !car.airborne && car.y < 1 && inPitBox(track.pit, car.x, car.z);
+    if (inPit) {
+      car.pitTicks++;
+      if (car.pitTicks % 60 === 0 && car.damage > 0) {
+        car.damage = Math.max(0, +(car.damage - PIT.repair).toFixed(4));
+        pushEvent(w.events, Ev.Repair, car.id, -1, car.damage, car.x, car.z);
+      }
+    } else {
+      car.pitTicks = 0;
+    }
+    if (speed < 1.2 && trying && race.phase === RacePhase.Racing && !inPit) car.stuckTicks++;
+    else if (inPit || car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading) > 4) car.stuckTicks = 0;
     if (car.ghostTicks > 0) car.ghostTicks--;
   }
   if (race.weapons) stepShots(w.shots, cars, track, tunings, DT, w.events);

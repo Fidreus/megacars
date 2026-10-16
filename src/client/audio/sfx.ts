@@ -571,6 +571,17 @@ export function playUi(audio: AudioSystem, kind: 'move' | 'change' | 'select' | 
   }
 }
 
+/** Pit repair: an impact wrench rattle and a little bell. */
+export function playRepair(audio: AudioSystem): void {
+  const ctx = running(audio);
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  for (let i = 0; i < 7; i++) {
+    out(audio, tone(ctx, 'sawtooth', 240, 150, t + i * 0.034, 0.026).connect(decayGain(ctx, 0.05, t + i * 0.034, 0.026, 0.001)), 0.05);
+  }
+  out(audio, tone(ctx, 'sine', 1568, 1568, t + 0.26, 0.3).connect(decayGain(ctx, 0.07, t + 0.26, 0.3, 0.002)), 0.2);
+}
+
 /** Rising arpeggio for crossing the finish line. */
 export function playFanfare(audio: AudioSystem, good: boolean): void {
   const notes = good ? [523, 659, 784, 1047, 784, 1047] : [392, 494, 587, 523];

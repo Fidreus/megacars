@@ -49,6 +49,8 @@ export interface CarState {
   kills: number;
   /** Times wrecked this race (each one is a tow, charged in money modes). */
   wrecks: number;
+  /** Ticks spent in the pit box without a break (each full second repairs). */
+  pitTicks: number;
   /** Who hit this car last (-1 = nobody), credited if it is wrecked. */
   lastHitBy: number;
   // Control
@@ -97,7 +99,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
   return {
     id, x, z, y: 0, vx: 0, vz: 0, vy: 0, heading, angVel: 0, steer: 0,
     sliding: 0, modeTicks: 0, spinTicks: 0, spinCool: 0, airborne: 0,
-    damage: 0, missiles: 0, mines: 0, turbos: 0, turboTicks: 0, fireCool: 0, mineCool: 0, wreckTicks: 0, hits: 0, kills: 0, wrecks: 0, lastHitBy: -1,
+    damage: 0, missiles: 0, mines: 0, turbos: 0, turboTicks: 0, fireCool: 0, mineCool: 0, wreckTicks: 0, hits: 0, kills: 0, wrecks: 0, pitTicks: 0, lastHitBy: -1,
     prevButtons: 0, brakeTicks: 0, liftTicks: 60, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1, aiReverseTicks: 0, human: 0,
     trackIdx: 0, trackS: 0, raceDist: 0, lap: 0, nextCp: 0,
     lapStartTick: 0, lastLapTicks: 0, bestLapTicks: 0, wrongWayTicks: 0, finished: 0,

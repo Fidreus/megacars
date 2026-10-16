@@ -15,7 +15,7 @@ import { RacePhase, respawnCar, standings } from '../shared/sim/world.ts';
 import { AudioSystem, type MuteScope } from './audio/audio.ts';
 import { EngineSound } from './audio/engine.ts';
 import {
-  Crowd, playBackfire, playDebris, playExplosion, playFanfare, playImpact, playLanding, playLaunch, playMineDrop,
+  Crowd, playBackfire, playDebris, playExplosion, playFanfare, playImpact, playLanding, playLaunch, playMineDrop, playRepair,
   playSplash, playStartBeep, playTurbo, playUi, playWhoosh, playZap, TyreSound, TyreSurface,
 } from './audio/sfx.ts';
 import { ShotKind, WEAPON } from '../shared/sim/weapons.ts';
@@ -221,6 +221,8 @@ export class App {
   private padIndex = -1;
   private lastLights = 0;
   private firstRace = true;
+  /** The "go to the pits" tip was shown this race. */
+  private pitHinted = false;
 
   constructor(canvas: HTMLCanvasElement, params: Params) {
     this.params = params;
@@ -920,6 +922,7 @@ export class App {
   startRace(settings: RaceSettings, spec?: RaceSpec): void {
     this.mode = 'race';
     this.paused = false;
+    this.pitHinted = false;
     this.lastLights = 0;
     this.cupRace = !!spec;
     this.qualityWatch.grace = 4;
@@ -1489,6 +1492,11 @@ export class App {
     const ev = w.events;
     const players = this.session.playerCars;
     const me = this.player;
+    // Once a race, the first time the car is badly hurt: where to fix it.
+    if (!this.pitHinted && this.mode === 'race' && this.session.track.pit && me.damage >= 0.5 && me.wreckTicks === 0) {
+      this.pitHinted = true;
+      this.flashMessage('BADLY DAMAGED - DRIVE THROUGH THE PIT LANE AT THE START TO REPAIR', 3);
+    }
     for (let k = 0; k < ev.count; k++) {
       const e = ev.list[k];
       if ((e.kind === Ev.WallHit || e.kind === Ev.CarHit) && this.audio.ready) {
@@ -1504,6 +1512,9 @@ export class App {
           else if (e.value === 3) this.flashMessage('TOO SLOW - INTO THE HOLE!', 2);
           playZap(this.audio);
         }
+      } else if (e.kind === Ev.Repair && players.includes(e.car) && this.mode === 'race') {
+        playRepair(this.audio);
+        this.flashMessage(e.value > 0 ? `PIT REPAIR - DAMAGE ${Math.round(e.value * 100)}%` : 'PIT REPAIR - GOOD AS NEW', 1.2);
       } else if (e.kind === Ev.Lap && players.includes(e.car) && this.mode === 'race') {
         const car = w.cars[e.car];
         const best = car.bestLapTicks === e.value;

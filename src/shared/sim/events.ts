@@ -18,6 +18,8 @@ export const Ev = {
   Wreck: 12,
   /** Back on the ground after a jump; `value` = vertical impact speed. */
   Land: 13,
+  /** Repaired in the pit box; `value` = damage left. */
+  Repair: 14,
 } as const;
 
 export interface SimEvent {

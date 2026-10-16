@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { distanceToCentreline } from '../../shared/track/builder.ts';
+import { PIT } from '../../shared/track/pit.ts';
 import type { Track } from '../../shared/track/types.ts';
 import { makeRng } from '../../shared/math/rng.ts';
 import { drawText } from '../ui/font.ts';
@@ -117,7 +118,10 @@ export function buildProps(track: Track): Props {
     const out = -side;
     const startAlong = Math.max(0, (main.i0 > main.i1 ? track.n - main.i0 : 0) - 45);
     const len = Math.min(70, main.length - 10);
-    buildGrandstand(group, track, main.i0, startAlong, len, out, wallOff + 3, keepOut);
+    // Behind the pit garages when the pit lane is on this side.
+    const pit = track.pit;
+    const base = pit && pit.side === out ? pit.pitOff + PIT.laneHalf + PIT.garage + 1 : wallOff + 3;
+    buildGrandstand(group, track, main.i0, startAlong, len, out, base, keepOut);
   }
 
   // --- Sponsor boards facing the camera along straights.

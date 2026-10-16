@@ -8,6 +8,7 @@
 
 import { DEG, clamp, headingOf, smoothstep, wrapAngle } from '../math/angle.ts';
 import { hash3 } from '../math/rng.ts';
+import { laneOffset, pitLocal, pitWallOffset, sampleU } from '../track/pit.ts';
 import type { SurfaceMix } from '../config/surfaces.ts';
 import type { CarTuning } from '../config/tuning.ts';
 import type { Track } from '../track/types.ts';
@@ -47,6 +48,20 @@ export const SKILL_PARAMS = {
   /** Ticks between wander targets. */
   wanderTicks: 90,
 };
+
+/** When computer drivers take the pit lane, and how fast they drive in it. */
+export const AI_PIT = {
+  /** Damage that sends a car in. */
+  damage: 0.5,
+  /** Distance before the lane where it lines up for the entry. */
+  approach: 70,
+  vEntry: 22,
+  vLane: 18,
+  /** In the box: slow enough for several seconds of repairs. */
+  vBox: 11,
+};
+
+const pitLoc = { u: 0, lat: 0 };
 
 /** A slow, smooth -1..1 drift off the racing line, the same on every machine. */
 function wander(id: number, tick: number): number {
@@ -131,14 +146,33 @@ export function aiDrive(
     }
   }
 
+  // --- Pit stop: a battered car takes the pit lane, and once off the road it stays in it.
+  const pit = track.pit;
+  let pitting = false;
+  if (pit) {
+    // Only near the start straight (the lap's progress says so), not wherever
+    // another part of the track happens to line up with it.
+    const uTrack = sampleU(track, car.trackIdx);
+    if (uTrack >= pit.a - AI_PIT.approach && uTrack <= pit.b + 10) {
+      pitLocal(pit, car.x, car.z, pitLoc);
+      const inLane = pitLoc.u >= pit.a && pitLoc.u <= pit.b && pitLoc.lat > pit.barrier && pitLoc.lat <= pitWallOffset(pit, pitLoc.u) + 1;
+      pitting = inLane || (car.damage >= AI_PIT.damage && uTrack <= pit.a + pit.ramp * 0.5);
+    }
+  }
+
   // --- Speed: brake early enough for every corner within planning range.
   const aLat = (drift ? t.aSlide * AI_PARAMS.latSlide : t.aGrip * AI_PARAMS.latGrip) * skill;
-  const vAllowed = Math.min(
+  let vAllowed = Math.min(
     vTraffic,
     plannedSpeed(track, car.trackIdx, aLat, t.brakeDecel * AI_PARAMS.brakeUse * (1 - lack * SKILL_PARAMS.brake), t.vTop * 1.5),
   );
   let throttle = 1;
   let brake = 0;
+  if (pitting && pit) {
+    const u = pitLoc.u;
+    const cap = u < pit.a ? AI_PIT.vEntry : u >= pit.box0 && u <= pit.box1 ? AI_PIT.vBox : AI_PIT.vLane;
+    vAllowed = Math.min(vAllowed, cap);
+  }
   if (s > vAllowed + 0.3) {
     throttle = 0;
     brake = clamp((s - vAllowed) / 1.5, 0.3, 1);
@@ -162,8 +196,17 @@ export function aiDrive(
   const stray = lack > 0 ? clamp(wander(car.id, tick) * lack * SKILL_PARAMS.wander, -lim / 2, lim / 2) : 0;
   const off = dodge + stray;
   const shift = clamp(line.off[j] + off, -lim, lim) - line.off[j];
-  const dx = line.x[j] + track.nx[j] * shift - car.x;
-  const dz = line.z[j] + track.nz[j] * shift - car.z;
+  let dx = line.x[j] + track.nx[j] * shift - car.x;
+  let dz = line.z[j] + track.nz[j] * shift - car.z;
+  if (pitting && pit) {
+    // Follow the middle of the pit lane (back onto the racing line past its end).
+    const ut = pitLoc.u + look;
+    if (ut < pit.b) {
+      const lat = (ut < pit.a ? pit.roadOff : laneOffset(pit, ut)) * pit.side;
+      dx = pit.ox + pit.tx * ut + pit.nx * lat - car.x;
+      dz = pit.oz + pit.tz * ut + pit.nz * lat - car.z;
+    }
+  }
   const ld = Math.hypot(dx, dz);
   const travel = s > 2 ? headingOf(car.vx, car.vz) : car.heading;
   const alpha = wrapAngle(headingOf(dx, dz) - travel);

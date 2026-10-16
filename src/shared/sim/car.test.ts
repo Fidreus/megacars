@@ -8,6 +8,7 @@ import { GREEN_VALLEY } from '../track/defs/greenValley.ts';
 import { closestOnSegment } from '../math/geom.ts';
 import type { Track } from '../track/types.ts';
 import { applyDamage, createCar, stepCarDynamics } from './car.ts';
+import { inPitArea } from '../track/pit.ts';
 import { neutralInput } from './input.ts';
 import { stepWorld } from './step.ts';
 import { createWorld } from './world.ts';
@@ -176,7 +177,8 @@ describe('car dynamics', () => {
         for (const v of [car.x, car.z, car.vx, car.vz, car.heading, car.angVel]) {
           if (!Number.isFinite(v)) throw new Error(`non-finite state at tick ${tick}`);
         }
-        worst = Math.max(worst, distanceToCentreline(track, car.x, car.z));
+        // The pit lane is outside the road's barrier on purpose.
+        if (!inPitArea(track.pit, car.x, car.z)) worst = Math.max(worst, distanceToCentreline(track, car.x, car.z));
       }
     }
     expect(worst).toBeLessThanOrEqual(limit);

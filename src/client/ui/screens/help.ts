@@ -19,6 +19,7 @@ const TIPS = [
   'LIFT OFF AND HIT THE GAS AGAIN MID-CORNER TO KICK THE TAIL OUT.',
   'RAMPS LAUNCH YOU - LAND STRAIGHT OR LOSE SPEED.',
   'DAMAGE SLOWS YOUR CAR. A WRECK COSTS TIME AND A TOW FEE - REPAIR IN THE SHOP.',
+  'THE PIT LANE BESIDE THE START REPAIRS 10% A SECOND - STOP THERE TO FIX IT ALL.',
   'CAREER: A TOP-THREE SEASON MOVES YOU UP A DIVISION. WIN DIVISION 1!',
   'KEY 5 TURNS THE SOUND OFF OR ON - MENUS AND RACES EACH HAVE THEIR OWN.',
 ];
@@ -51,9 +52,12 @@ export function drawHelp(ctx: CanvasRenderingContext2D, W: number, H: number, c:
   drawText(ctx, 'ESC / P', col[1], y, { color: '#ffffff' });
   drawText(ctx, 'START', col[2], y, { color: '#ffffff' });
   y += 18;
+  // Tighter lines on short (phone) screens; tips that still don't fit are left out.
+  const step = Math.max(9, Math.min(11, Math.floor((H - 26 - y) / TIPS.length)));
   for (const t of TIPS) {
+    if (y > H - 26) break;
     drawText(ctx, `- ${t}`, W / 2, y, { color: '#c8d0dc', align: 'center' });
-    y += 11;
+    y += step;
   }
   drawText(ctx, 'CHANGE KEYS UNDER OPTIONS > CONTROLS        PRESS ANY KEY TO GO BACK', W / 2, H - 14, { color: '#8090a8', align: 'center' });
 }

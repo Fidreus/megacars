@@ -7,6 +7,7 @@ import { headingOf, wrapAngle } from '../math/angle.ts';
 import { SegmentGrid } from '../math/spatialHash.ts';
 import { computeRacingLine } from '../ai/racingLine.ts';
 import { inPatchShape, patchReach, patchShape } from './patchShape.ts';
+import { buildPit, laneOffset, PIT, pitLocal, pitWallOffset, sampleU, type Pit } from './pit.ts';
 import type { Bridge, GridSlot, SurfaceGrid, Track, TrackDef, Walls } from './types.ts';
 
 /** Target spacing between centreline samples, metres. */
@@ -122,10 +123,27 @@ export function buildTrack(def: TrackDef): Track {
     elev: new Float64Array(n),
     deck: new Uint8Array(n),
     line: null as unknown as Track['line'],
+    pit: null,
     bounds: { minX, minZ, maxX, maxZ },
     errors,
   };
   buildBridges(track);
+  track.pit = buildPit(track);
+  const pit = track.pit;
+  if (pit) {
+    // Room for the lane, its wall and the garages.
+    const far = pit.pitOff + PIT.laneHalf + PIT.garage;
+    for (const u of [pit.a, pit.b]) {
+      for (const lat of [0, far]) {
+        const x = pit.ox + pit.tx * u + pit.nx * lat * pit.side;
+        const z = pit.oz + pit.tz * u + pit.nz * lat * pit.side;
+        track.bounds.minX = Math.min(track.bounds.minX, x);
+        track.bounds.maxX = Math.max(track.bounds.maxX, x);
+        track.bounds.minZ = Math.min(track.bounds.minZ, z);
+        track.bounds.maxZ = Math.max(track.bounds.maxZ, z);
+      }
+    }
+  }
   track.walls = buildWalls(track);
   track.surface = buildSurfaceGrid(track);
   const ncp = Math.max(6, Math.round(length / 120));
@@ -234,8 +252,10 @@ function buildWalls(track: Track): Walls {
   for (const side of [1, -1]) {
     const ox = new Float64Array(n);
     const oz = new Float64Array(n);
+    const pit = track.pit && track.pit.side === side ? track.pit : null;
     for (let i = 0; i < n; i++) {
-      const d = (hw[i] + runoff) * side;
+      // On the pit side the barrier bulges out around the pit lane.
+      const d = (pit ? pitWallOffset(pit, sampleU(track, i)) : hw[i] + runoff) * side;
       ox[i] = px[i] + nx[i] * d;
       oz[i] = pz[i] + nz[i] * d;
     }
@@ -283,6 +303,7 @@ function buildWalls(track: Track): Walls {
       }
     }
   }
+  if (track.pit) islandWalls(track.pit, segs);
   const count = segs.length / 8;
   const w: Omit<Walls, 'grid'> = {
     count,
@@ -303,6 +324,44 @@ function buildWalls(track: Track): Walls {
     w.hi[i] = segs[i * 8 + 7];
   }
   return { ...w, grid: new SegmentGrid(w.ax, w.az, w.bx, w.bz, count, 8) };
+}
+
+/** The pit island: a concrete block between the road and the pit box, solid from every side. */
+function islandWalls(p: Pit, segs: number[]): void {
+  const at = (u: number, lat: number) => [p.ox + p.tx * u + p.nx * lat * p.side, p.oz + p.tz * u + p.nz * lat * p.side];
+  const [ax, az] = at(p.box0, p.barrier);
+  const [bx, bz] = at(p.box1, p.barrier);
+  const [cx, cz] = at(p.box1, p.barrier + PIT.island);
+  const [dx, dz] = at(p.box0, p.barrier + PIT.island);
+  const ox = p.nx * p.side;
+  const oz = p.nz * p.side;
+  // Road face (pushes toward the road), lane face (toward the lane), and the two ends.
+  segs.push(ax, az, bx, bz, -ox, -oz, -WALL_ALL, WALL_ALL);
+  segs.push(dx, dz, cx, cz, ox, oz, -WALL_ALL, WALL_ALL);
+  segs.push(ax, az, dx, dz, -p.tx, -p.tz, -WALL_ALL, WALL_ALL);
+  segs.push(bx, bz, cx, cz, p.tx, p.tz, -WALL_ALL, WALL_ALL);
+}
+
+/**
+ * Pave the pit lane and keep scenery off it (scenery stays where the
+ * distance to the road is more than the barrier's).
+ */
+function stampPitLane(
+  p: Pit, minX: number, minZ: number, cell: number, cols: number, rows: number, data: Uint8Array, dist: Float32Array,
+): void {
+  const far = p.pitOff + PIT.laneHalf + PIT.garage;
+  const loc = { u: 0, lat: 0 };
+  for (let r = 0; r < rows; r++) {
+    const cz = minZ + (r + 0.5) * cell;
+    for (let c = 0; c < cols; c++) {
+      const cx = minX + (c + 0.5) * cell;
+      pitLocal(p, cx, cz, loc);
+      if (loc.u < p.a - 6 || loc.u > p.b + 6 || loc.lat < 0 || loc.lat > far) continue;
+      const k = r * cols + c;
+      if (loc.lat > p.barrier - 0.5) dist[k] = Math.min(dist[k], p.barrier - 0.5);
+      if (loc.u >= p.a && loc.u <= p.b && Math.abs(loc.lat - laneOffset(p, loc.u)) <= PIT.laneHalf) data[k] = Surface.Asphalt;
+    }
+  }
 }
 
 /** Signed distance from `from` to `to` along a closed loop of length L. */
@@ -476,6 +535,7 @@ function buildSurfaceGrid(track: Track): SurfaceGrid {
       data[k] = runoffSurface;
     }
   }
+  if (track.pit) stampPitLane(track.pit, minX, minZ, cell, cols, rows, data, dist);
   (def.patches ?? []).forEach((p, index) => {
     const rect = p.hx !== undefined && p.hz !== undefined;
     const shape = patchShape(p, index, def.seed ?? 0);
