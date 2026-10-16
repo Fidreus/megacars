@@ -351,9 +351,20 @@ function stampPitLane(
 ): void {
   const far = p.pitOff + PIT.laneHalf + PIT.garage;
   const loc = { u: 0, lat: 0 };
-  for (let r = 0; r < rows; r++) {
+  // Only the cells around the pit (its corners, with a margin).
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const u of [p.a - 8, p.b + 8]) {
+    for (const lat of [0, far + 2]) {
+      const x = p.ox + p.tx * u + p.nx * lat * p.side;
+      const z = p.oz + p.tz * u + p.nz * lat * p.side;
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+    }
+  }
+  const c0 = Math.max(0, Math.floor((x0 - minX) / cell)), c1 = Math.min(cols - 1, Math.ceil((x1 - minX) / cell));
+  const r0 = Math.max(0, Math.floor((z0 - minZ) / cell)), r1 = Math.min(rows - 1, Math.ceil((z1 - minZ) / cell));
+  for (let r = r0; r <= r1; r++) {
     const cz = minZ + (r + 0.5) * cell;
-    for (let c = 0; c < cols; c++) {
+    for (let c = c0; c <= c1; c++) {
       const cx = minX + (c + 0.5) * cell;
       pitLocal(p, cx, cz, loc);
       if (loc.u < p.a - 6 || loc.u > p.b + 6 || loc.lat < 0 || loc.lat > far) continue;

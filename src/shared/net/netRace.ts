@@ -43,6 +43,22 @@ export class NetRace {
   rate = 1;
   /** Corrections accumulated since the view last took them (per car). */
   readonly drift: { dx: number; dz: number; dh: number }[];
+  /**
+   * Connection health for the on-screen diagnostics (key 2): clock jumps,
+   * frames over 0.1 s, and how far your own car was corrected (metres in
+   * the last second, and the largest single correction then).
+   */
+  readonly stats = {
+    jumps: 0, slowFrames: 0, corrPerSec: 0, corrMax: 0,
+    /** Totals over the race: server corrections of your own car (count, metres, how many over 0.3 m, the largest). */
+    fixes: 0, fixMetres: 0, bigFixes: 0, worstFix: 0,
+  };
+  private corrAcc = 0;
+  private corrMaxAcc = 0;
+  private corrTime = 0;
+  /** Ticks still to shed by running slow (instead of freezing the clock). */
+  private shed = 0;
+  private readonly pose: Float64Array;
   private pending: Uint8Array | null = null;
   private acc = 0;
   private readonly local: CarInput[];
@@ -65,6 +81,7 @@ export class NetRace {
     this.predictor = new Predictor(world, track, tunings, this.localCars);
     this.local = this.localCars.map(() => neutralInput());
     this.drift = world.cars.map(() => ({ dx: 0, dz: 0, dh: 0 }));
+    this.pose = new Float64Array(world.cars.length * 3);
   }
 
   get spectating(): boolean {
@@ -91,6 +108,13 @@ export class NetRace {
 
   /** Advance by `dt` seconds of real time. Returns the number of new ticks simulated. */
   update(dt: number, hooks: StepHooks): number {
+    if (dt > 0.1) this.stats.slowFrames++;
+    this.corrTime += dt;
+    if (this.corrTime >= 1) {
+      this.stats.corrPerSec = this.corrAcc / this.corrTime;
+      this.stats.corrMax = this.corrMaxAcc;
+      this.corrAcc = this.corrMaxAcc = this.corrTime = 0;
+    }
     if (this.pending) {
       this.applyPending();
       if (hooks.corrected) {
@@ -100,15 +124,43 @@ export class NetRace {
     }
     if (!this.synced) return 0;
     let extra = 0;
+    if (this.lead.jump !== 0) this.stats.jumps++;
     if (this.lead.jump > 0) extra = Math.min(this.lead.jump, 120);
-    else if (this.lead.jump < 0) this.acc += this.lead.jump * DT;
+    // Too far ahead: run slow until it's shed (freezing the clock froze the car).
+    else if (this.lead.jump < 0) this.shed = -this.lead.jump;
     this.lead.jump = 0;
-    this.acc += dt * this.rate;
+    let rate = this.rate;
+    if (this.shed > 0) {
+      rate = Math.min(rate, 0.75);
+      this.shed = Math.max(0, this.shed - dt * (1 - rate) / DT);
+    }
+    this.acc += dt * rate;
     let steps = 0;
-    while (extra > 0) {
-      this.stepOnce(hooks);
-      extra--;
-      steps++;
+    if (extra > 0) {
+      // Catching up in one go: let the cars glide forward rather than leap.
+      const cars = this.world.cars;
+      for (let i = 0; i < cars.length; i++) {
+        this.pose[i * 3] = cars[i].x;
+        this.pose[i * 3 + 1] = cars[i].z;
+        this.pose[i * 3 + 2] = cars[i].heading;
+      }
+      while (extra > 0) {
+        this.stepOnce(hooks);
+        extra--;
+        steps++;
+      }
+      for (let i = 0; i < cars.length; i++) {
+        const d = this.drift[i];
+        d.dx += this.pose[i * 3] - cars[i].x;
+        d.dz += this.pose[i * 3 + 1] - cars[i].z;
+        let dh = this.pose[i * 3 + 2] - cars[i].heading;
+        dh -= Math.round(dh / (Math.PI * 2)) * Math.PI * 2;
+        d.dh += dh;
+      }
+      if (hooks.corrected) {
+        hooks.corrected(this.drift);
+        for (const d of this.drift) d.dx = d.dz = d.dh = 0;
+      }
     }
     while (this.acc >= DT && steps < MAX_STEPS) {
       this.stepOnce(hooks);
@@ -150,6 +202,17 @@ export class NetRace {
       d.dx += c.dx;
       d.dz += c.dz;
       d.dh += c.dh;
+    }
+    for (const i of this.localCars) {
+      const m = Math.hypot(p.corrections[i].dx, p.corrections[i].dz);
+      this.corrAcc += m;
+      this.corrMaxAcc = Math.max(this.corrMaxAcc, m);
+      if (this.world.tick > this.world.race.startTick + 120) {
+        this.stats.fixes++;
+        this.stats.fixMetres += m;
+        if (m > 0.3) this.stats.bigFixes++;
+        this.stats.worstFix = Math.max(this.stats.worstFix, m);
+      }
     }
     if (this.spectating) {
       // Show the race about where the server is now.

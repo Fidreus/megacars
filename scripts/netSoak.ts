@@ -4,7 +4,8 @@
 // Bad networks: --lag 60 --jitter 40 --loss 0.02 (one-way ms; a lost TCP
 // packet holds everything behind it for a retransmit, ~200 ms).
 // Slow devices: --hitch 150 --hitchEvery 90 (a frame that blocks for 150 ms
-// every 90 frames) and --clamp 0.1 (longest frame step, like the browser game).
+// every 90 frames) and --clamp 0.1 (longest frame step, like the browser game
+// used to). DEBUG_JUMPS=1 logs the first snapshots' sync and every clock jump.
 
 import { parseArgs } from 'node:util';
 import WebSocket from 'ws';
@@ -101,7 +102,21 @@ class Bot {
   onMsg(m: ServerMsg) {
     if (m.t === 'welcome') this.id = m.id;
     else if (m.t === 'room') this.room = m.room;
-    else if (m.t === 'race') this.race = new NetRace(m.spec, this.id, (d) => { const c = d.slice(); this.up.deliver(() => this.ws.send(c)); });
+    else if (m.t === 'race') {
+      this.race = new NetRace(m.spec, this.id, (d) => { const c = d.slice(); this.up.deliver(() => this.ws.send(c)); });
+      if (process.env.DEBUG_JUMPS) {
+        const lc = this.race.lead;
+        const orig = lc.update.bind(lc);
+        const race = this.race;
+        let shown = 0;
+        lc.update = (lead: number, rtt: number) => {
+          const r = orig(lead, rtt);
+          if (shown++ < 25) console.log(this.name, 'snap server', race.predictor.serverTick, 'client', race.world.tick, 'lead', lead, 'target', lc.target, 'rate', r.toFixed(3), 'rtt', rtt.toFixed(1));
+          if (lc.jump !== 0) console.log(this.name, 'tick', race.world.tick, 'start', race.world.race.startTick, 'lead', lead, 'target', lc.target, 'jump', lc.jump);
+          return r;
+        };
+      }
+    }
     else if (m.t === 'error') console.log(this.name, 'error', m.msg);
   }
   private frames = 0;
@@ -125,15 +140,8 @@ class Bot {
         aiDrive(car, race.track, DEFAULT_TUNING, this.surf, race.world.cars, race.world.tick, out);
         out.buttons = 0;
       },
-      corrected: (drift) => {
+      corrected: () => {
         if (race.world.tick < race.world.race.startTick + 120) return;
-        for (const i of race.localCars) {
-          const m = Math.hypot(drift[i].dx, drift[i].dz);
-          this.maxOwn = Math.max(this.maxOwn, m);
-          if (m > 0.3) this.jumps++;
-          this.sumOwn += m;
-          this.n++;
-        }
         this.leads.push(race.predictor.lead);
         if (race.predictor.lead < 0) this.late++;
       },
@@ -166,7 +174,8 @@ for (const b of bots) {
   console.log(
     `${b.name} rtt ${b.rtt.toFixed(1)}ms finish ${JSON.stringify(r.world.race.finishOrder)} ` +
       `lead min/avg ${Math.min(...leads)}/${(leads.reduce((a, c) => a + c, 0) / leads.length).toFixed(1)} ` +
-      `own corr avg ${(b.sumOwn / Math.max(1, b.n)).toFixed(4)} max ${b.maxOwn.toFixed(3)} m, visible jumps ${b.jumps} (late inputs ${b.late})`,
+      `own corr avg ${(r.stats.fixMetres / Math.max(1, r.stats.fixes)).toFixed(4)} max ${r.stats.worstFix.toFixed(3)} m, visible jumps ${r.stats.bigFixes} ` +
+        `(late inputs ${b.late}, clock jumps ${r.stats.jumps})`,
   );
 }
 process.exit(0);

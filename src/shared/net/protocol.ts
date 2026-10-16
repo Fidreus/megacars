@@ -24,6 +24,8 @@ export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 export const CODE_LENGTH = 4;
 /** The server sends a snapshot every this many ticks (20 per second). */
 export const SNAPSHOT_EVERY = 3;
+/** Ticks over which the server reports the smallest input lead (the client's feedback lags by this much). */
+export const LEAD_WINDOW = 30;
 
 // ------------------------------------------------------------------ inputs
 

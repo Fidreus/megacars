@@ -12,6 +12,7 @@ import { stepWorld } from '../sim/step.ts';
 import type { Track } from '../track/types.ts';
 import type { World } from '../sim/world.ts';
 import { applySnapshot, peekSnapshot } from './snapshot.ts';
+import { LEAD_WINDOW } from './protocol.ts';
 
 const HISTORY = 256;
 /** Don't re-simulate more than this many ticks for one snapshot. */
@@ -19,9 +20,13 @@ const MAX_RESIM = 240;
 /** How far ahead of need (ticks) inputs aim to reach the server: at least, and at most. */
 const MIN_TARGET = 3;
 const MAX_TARGET = 12;
-/** Error (ticks) beyond which the clock jumps instead of changing pace. */
-const JUMP_AHEAD = 12;
-const JUMP_BACK = -24;
+/**
+ * Error (ticks) beyond which the clock jumps instead of changing pace. A
+ * stalled connection (a TCP retransmit) briefly looks like a big error too,
+ * so mid-race the pace does the work and jumps are for being far off.
+ */
+const JUMP_AHEAD = 30;
+const JUMP_BACK = -45;
 /** Pace change per tick of error, and its limits (catching up is allowed to be quicker). */
 const RATE_GAIN = 0.02;
 const RATE_UP = 0.12;
@@ -169,8 +174,9 @@ export class LeadControl {
     const err = this.target - lead;
     if (err > JUMP_AHEAD || err < JUMP_BACK) {
       this.jump = err;
-      // Snapshots arrive every 3 ticks; skip feedback that predates the jump.
-      this.cooldown = Math.ceil((rttTicks + 6) / 3);
+      // Snapshots arrive every 3 ticks; skip feedback that predates the jump
+      // (a round trip, plus the server's window of lead samples).
+      this.cooldown = Math.ceil((rttTicks + LEAD_WINDOW + 6) / 3);
       return 1;
     }
     // Late inputs make the server guess (and the car jump when the truth comes
@@ -199,8 +205,8 @@ export class LeadControl {
     }
   }
 
-  /** Ignore feedback for about one round trip (after (re)starting the clock). */
+  /** Ignore feedback until it reflects the restarted clock (a round trip plus the server's lead window). */
   hold(rttTicks: number): void {
-    this.cooldown = Math.ceil((rttTicks + 6) / 3);
+    this.cooldown = Math.ceil((rttTicks + LEAD_WINDOW + 6) / 3);
   }
 }

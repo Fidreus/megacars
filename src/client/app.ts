@@ -2097,6 +2097,31 @@ export class App {
     if (net.spectating && !this.showingResults) {
       drawText(ctx, 'WATCHING - YOU JOIN THE NEXT RACE', W / 2, H - 24, { color: '#ffd84a', align: 'center' });
     }
+    if (this.showTelemetry) this.drawNetStats(ctx, W - 132, 8 + Math.round(Math.round(Math.min(110, W * 0.2)) * 0.75) + 16);
+  }
+
+  /** Key 2 online: how the connection is doing (for chasing jumpy cars). */
+  private drawNetStats(ctx: CanvasRenderingContext2D, x: number, top: number): void {
+    const net = this.netRace!.net;
+    const s = net.stats;
+    const lead = net.predictor.lead;
+    let y = top;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(x - 4, y - 3, 128, 84);
+    const row = (label: string, value: string, bad = false) => {
+      drawText(ctx, label, x, y, { color: '#9aa4b8' });
+      drawText(ctx, value, x + 120, y, { color: bad ? '#ff6a5a' : '#ffffff', align: 'right' });
+      y += 9;
+    };
+    row('FPS', `${Math.round(this.fps)}`, this.fps < 40);
+    row('PING MS', `${Math.round(this.online.conn.rtt)}`, this.online.conn.rtt > 150);
+    row('INPUT LEAD', `${lead} / ${net.lead.target}`, lead < 0);
+    row('CLOCK RATE', net.rate.toFixed(3), Math.abs(net.rate - 1) > 0.06);
+    row('CLOCK JUMPS', `${s.jumps}`);
+    row('SLOW FRAMES', `${s.slowFrames}`);
+    row('FIX M/S', s.corrPerSec.toFixed(2), s.corrPerSec > 0.5);
+    row('BIGGEST FIX M', s.corrMax.toFixed(2), s.corrMax > 0.5);
+    row('RESIM TICKS', `${net.predictor.lastResim}`);
   }
 
   private drawTelemetry(ctx: CanvasRenderingContext2D, x: number, top: number): void {

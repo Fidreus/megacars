@@ -8,7 +8,7 @@ import { leagueOf } from '../shared/game/leagues.ts';
 import { createRaceWorld } from '../shared/game/raceSetup.ts';
 import { makeRng } from '../shared/math/rng.ts';
 import {
-  AUTO_START_MS, MAX_PLAYERS, SNAPSHOT_EVERY,
+  AUTO_START_MS, LEAD_WINDOW, MAX_PLAYERS, SNAPSHOT_EVERY,
   type Entrant, type PlayerInfo, type PublicRoom, type RaceSpec, type RoomConfig, type RoomInfo, type ServerMsg,
 } from '../shared/net/protocol.ts';
 import { encodeSnapshot } from '../shared/net/snapshot.ts';
@@ -49,7 +49,6 @@ const MAX_LEAD = 120;
 /** Without fresh input for this long a car coasts instead of repeating the last input. */
 const STARVE_NEUTRAL = 12;
 /** Lead is reported as the minimum over this many ticks. */
-const LEAD_WINDOW = 30;
 /** The room returns to the lobby this long after a race ends. */
 const AFTER_RACE_TICKS = 120;
 
@@ -165,6 +164,7 @@ export class Room {
       }
       d.lastTick = -1;
       d.ringTick.fill(-1);
+      d.leadSamples.fill(-999);
     }
     this.broadcastRoom();
     peer.send({ t: 'profile', profile: m.profile });
@@ -419,7 +419,8 @@ export class Room {
         // Gone quiet: let go of everything rather than drive blind.
         copyInput(target, neutralInput());
       }
-      d.leadSamples[t % LEAD_WINDOW] = Math.max(-999, Math.min(999, d.lastTick - t));
+      // No input yet (just started, or rejoined): unknown, not "hopelessly late".
+      d.leadSamples[t % LEAD_WINDOW] = d.lastTick < 0 ? -999 : Math.max(-998, Math.min(999, d.lastTick - t));
     }
     stepWorld(w, race.track, race.inputs, race.tunings);
     this.simTicks++;
