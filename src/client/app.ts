@@ -800,7 +800,8 @@ export class App {
 
   /** Sound on/off in the top right corner of the title screen. */
   private drawSoundButton(ctx: CanvasRenderingContext2D, W: number): void {
-    const label = this.audio.muted ? 'SOUND OFF' : 'SOUND ON';
+    // Keyboards toggle it with 5 (the mouse pointer hides while playing).
+    const label = `${this.audio.muted ? 'SOUND OFF' : 'SOUND ON'}${this.touch.enabled ? '' : ' (5)'}`;
     const w = textWidth(label) + 26;
     const h = 15;
     const x = W - w - 4;
@@ -1218,6 +1219,10 @@ export class App {
     if (kb.wasPressed('KeyM')) {
       this.setMood(MOODS[(MOODS.indexOf(this.mood) + 1) % MOODS.length]);
       this.flashMessage(this.mood.name);
+    }
+    if (kb.wasPressed('Digit5')) {
+      this.audio.setMuted(!this.audio.muted);
+      this.flashMessage(this.audio.muted ? 'SOUND OFF' : 'SOUND ON');
     }
     if (kb.wasPressed('Digit0')) void this.openTuning();
     if (kb.wasPressed('KeyN')) this.music.next();
@@ -1783,7 +1788,7 @@ export class App {
         drawText(ctx, 'TAP TO CHOOSE   TAP THE LEFT / RIGHT END OF A SETTING TO CHANGE IT', W / 2, H - 11, { align: 'center', color: '#8090a8' });
       } else {
         drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
-        drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+        drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS   5 SOUND', W / 2, H - 11, { align: 'center', color: '#8090a8' });
       }
       this.drawSoundButton(ctx, W);
       drawText(ctx, `V${VERSION}`, W - 4, H - 11, { align: 'right', color: '#5a6478' });
