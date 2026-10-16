@@ -16,5 +16,8 @@ checked on each module's page when downloaded (October 2026).
 | bit_loader.xm | Bit Loader | Drozerix | Public Domain | https://modarchive.org/index.php?request=view_by_moduleid&query=178415 |
 | simple_chip_tune.xm | Simple Chip Tune | JAM | Public Domain | https://modarchive.org/index.php?request=view_by_moduleid&query=166532 |
 | numen_in_da_chip.xm | Numen in Da Chip | JAM | Public Domain | https://modarchive.org/index.php?request=view_by_moduleid&query=169046 |
+| dreams.xm | *** Dreams *** | Andreas Viklund (TSEC) | CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) | https://modarchive.org/index.php?request=view_by_moduleid&query=40503 |
+| dreams_2.xm | *** Dreams 2 *** | Andreas Viklund (TSEC) | CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) | https://modarchive.org/index.php?request=view_by_moduleid&query=40515 |
+| dreams_3.xm | *** Dreams 3 *** | Andreas Viklund (TSEC) | CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) | https://modarchive.org/index.php?request=view_by_moduleid&query=40518 |
 
 Playback: libopenmpt (BSD), see /vendor/libopenmpt/.

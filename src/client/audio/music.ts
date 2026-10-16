@@ -16,7 +16,7 @@ export interface Song {
   audio?: boolean;
   /** Where it comes from (credits). */
   source?: string;
-  /** Loudness correction for quiet recordings. */
+  /** Loudness correction for quiet songs. */
   gain?: number;
 }
 
@@ -32,14 +32,17 @@ export const SONGS: Record<string, Song> = {
   bitloader: { file: 'bit_loader.xm', title: 'BIT LOADER', artist: 'DROZERIX', licence: 'PUBLIC DOMAIN' },
   simplechip: { file: 'simple_chip_tune.xm', title: 'SIMPLE CHIP TUNE', artist: 'JAM', licence: 'PUBLIC DOMAIN' },
   numen: { file: 'numen_in_da_chip.xm', title: 'NUMEN IN DA CHIP', artist: 'JAM', licence: 'PUBLIC DOMAIN' },
-  imagine: { file: 'imagine.xm', title: 'IMAGINE', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0' },
+  imagine: { file: 'imagine.xm', title: 'IMAGINE', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0', gain: 2.5 },
+  dreams: { file: 'dreams.xm', title: 'DREAMS', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0', gain: 2.5 },
+  dreams2: { file: 'dreams_2.xm', title: 'DREAMS 2', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0', gain: 1.7 },
+  dreams3: { file: 'dreams_3.xm', title: 'DREAMS 3', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0', gain: 2.5 },
 };
 
 /** Tracks without a song of their own borrow one. */
 const TRACK_SONG: Record<string, string> = { twinbridges: 'bitloader', brewerybash: 'numen' };
 
 /** Songs used for races in shuffle mode. */
-const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine'];
+const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine', 'dreams', 'dreams2', 'dreams3'];
 
 export const MUSIC_MODES = ['TRACKS', 'SHUFFLE', 'OFF'] as const;
 export type MusicMode = 0 | 1 | 2;
