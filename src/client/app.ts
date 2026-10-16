@@ -55,7 +55,7 @@ import { drawCredits } from './ui/screens/credits.ts';
 import { buildIndustry, type SteamSource } from './render/industry.ts';
 import { themeOf } from './render/theme.ts';
 import { buildTrackView } from './render/trackMesh.ts';
-import { drawText, LINE_H } from './ui/font.ts';
+import { drawText, LINE_H, textWidth } from './ui/font.ts';
 import { Menu, type MenuItem } from './ui/menu.ts';
 import { drawCountdown, drawPlayerHud, formatTime, Minimap } from './ui/screens/hud.ts';
 import { drawResults } from './ui/screens/results.ts';
@@ -795,6 +795,25 @@ export class App {
 
   /** CAMERA: north-up (classic) or following the car from behind. */
   /** How the left thumb steers on touch screens (Options and, on touch, the pause menu). */
+  /** How to drive with this device: touch, or the solo keyboard keys. */
+  private controlsHelp(weapons: boolean): string[] {
+    if (this.touch.enabled) {
+      const how = { point: 'STEER: PUSH YOUR LEFT THUMB WHERE YOU WANT TO GO', slide: 'STEER: DRAG YOUR LEFT THUMB LEFT/RIGHT', buttons: 'STEER: THE ARROW BUTTONS' }[this.touch.steerMode];
+      const gas = { thumb: 'GAS: ON WHILE YOUR THUMB IS DOWN', always: 'GAS: THE CAR ACCELERATES BY ITSELF', button: 'GAS: HOLD THE GAS BUTTON' }[this.touch.gasMode];
+      const lines = [how, `${gas}   DRIFT: HOLD DRIFT WHILE TURNING`];
+      if (weapons) lines.push('WEAPONS: THE MISSILE, MINE AND TURBO BUTTONS');
+      return lines;
+    }
+    const c = this.controls.solo;
+    const k = (a: Parameters<typeof keysLabel>[1]) => keysLabel(c, a);
+    const lines = [
+      `STEER ${k('left')} ${k('right')}   GAS ${k('gas')}   BRAKE ${k('brake')}`,
+      `DRIFT: HOLD ${k('drift')} WHILE TURNING (OR LIFT OFF + GAS AGAIN)`,
+    ];
+    if (weapons) lines.push(`WEAPONS: ${k('fireFront')} MISSILE  ${k('fireRear')} MINE  ${k('turbo')} TURBO`);
+    return lines;
+  }
+
   private touchSteerItem() {
     const s = this.settings;
     return {
@@ -1808,7 +1827,15 @@ export class App {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
       const top = drawLobby(ctx, W, H, this.online.room, this.online.me, this.time);
-      this.lobbyMenu.draw(ctx, W / 2, top, fitScale(this.lobbyMenu, top, H - 26), dt, true, H - 26);
+      // How to drive, readable while waiting for the start.
+      const help = this.controlsHelp(this.online.room.config.weapons !== false);
+      const helpTop = H - 26 - help.length * 10;
+      const helpW = Math.max(...help.map((l) => textWidth(l))) + 12;
+      ctx.fillStyle = 'rgba(8,10,24,0.72)';
+      ctx.fillRect(Math.round(W / 2 - helpW / 2), helpTop - 4, Math.round(helpW), help.length * 10 + 2);
+      help.forEach((line, i) => drawText(ctx, line, W / 2, helpTop + i * 10, { align: 'center', color: '#ffd84a' }));
+      const bottom = helpTop - 6;
+      this.lobbyMenu.draw(ctx, W / 2, top, fitScale(this.lobbyMenu, top, bottom), dt, true, bottom);
       const st = connText(this.online.state, this.online.conn.rtt);
       drawText(ctx, st.text, 6, H - 11, { color: st.color });
       const pubRoom = !!this.online.room.config.public;
