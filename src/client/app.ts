@@ -795,6 +795,11 @@ export class App {
 
   /** CAMERA: north-up (classic) or following the car from behind. */
   /** How the left thumb steers on touch screens (Options and, on touch, the pause menu). */
+  /** Menu sound is switched off and we're in the menus (races always have sound). */
+  private get menuSilent(): boolean {
+    return this.audio.muted && this.mode !== 'race';
+  }
+
   /** Where the title screen's sound on/off button was drawn (UI pixels). */
   private soundButton: { x: number; y: number; w: number; h: number } | null = null;
 
@@ -1197,6 +1202,7 @@ export class App {
 
   private handleKeys(dt: number): void {
     const kb = this.input.keyboard;
+    this.audio.setSilent(this.menuSilent);
     this.nav.textMode = this.activeMenu?.typing ?? false;
     const nav = this.nav.poll(dt);
     this.updateTouch(nav);
@@ -1220,7 +1226,7 @@ export class App {
       this.setMood(MOODS[(MOODS.indexOf(this.mood) + 1) % MOODS.length]);
       this.flashMessage(this.mood.name);
     }
-    if (kb.wasPressed('Digit5')) {
+    if (kb.wasPressed('Digit5') && this.mode !== 'race') {
       this.audio.setMuted(!this.audio.muted);
       this.flashMessage(this.audio.muted ? 'SOUND OFF' : 'SOUND ON');
     }
@@ -1894,7 +1900,7 @@ export class App {
     } else if (this.mode === 'race') {
       this.drawRaceUi(ctx, W, H);
     }
-    if (this.songToast > 0 && this.music.nowPlaying && !this.audio.muted) {
+    if (this.songToast > 0 && this.music.nowPlaying && !this.menuSilent) {
       this.songToast -= dt;
       // On the title screen the bottom right holds the version and credit.
       const y = this.mode === 'title' ? H - (this.update.available ? 44 : 33) : H - 22;

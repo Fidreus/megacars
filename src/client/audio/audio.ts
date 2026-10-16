@@ -25,8 +25,10 @@ export class AudioSystem {
   reverb: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   volume = 0.7;
-  /** Everything silent (music too), remembered between visits. */
+  /** Menus silent (music too), remembered between visits; races always have sound. */
   muted = loadMuted();
+  /** Everything is silent right now. */
+  private silent = false;
 
   unlock(): void {
     if (!this.ctx) {
@@ -37,7 +39,7 @@ export class AudioSystem {
       comp.threshold.value = -14;
       comp.ratio.value = 6;
       const bus = ctx.createGain();
-      bus.gain.value = this.muted ? 0 : 1;
+      bus.gain.value = this.silent ? 0 : 1;
       const limiter = ctx.createDynamicsCompressor();
       limiter.threshold.value = -3;
       limiter.knee.value = 0;
@@ -91,7 +93,13 @@ export class AudioSystem {
     } catch {
       // Storage blocked: muted for this visit only.
     }
-    if (this.bus && this.ctx) this.bus.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.03);
+  }
+
+  /** Silence everything or bring it back (cheap to call every frame). */
+  setSilent(s: boolean): void {
+    if (s === this.silent) return;
+    this.silent = s;
+    if (this.bus && this.ctx) this.bus.gain.setTargetAtTime(s ? 0 : 1, this.ctx.currentTime, 0.03);
   }
 
   setVolume(v: number): void {
