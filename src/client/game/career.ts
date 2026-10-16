@@ -56,7 +56,7 @@ function seasonSettings(division: number): RaceSettings {
     camera: 'classic',
     camHeight: 1,
     league: 'standard',
-    touchSteer: 'slide',
+    touchSteer: 'point',
   };
 }
 

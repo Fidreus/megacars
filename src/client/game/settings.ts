@@ -1,5 +1,6 @@
 // Race settings chosen in the menu, remembered between visits.
 
+import type { SteerMode } from '../input/touch.ts';
 import { leagueOf, type League } from '../../shared/game/leagues.ts';
 import { DEFAULT_TRACK, TRACKS } from '../../shared/track/defs/index.ts';
 
@@ -34,13 +35,16 @@ export interface RaceSettings {
   /** Camera height (how much of the track it shows): 0 low, 1 normal, 2 high. */
   camHeight: number;
   /** Touch steering: drag the left thumb, or two arrow buttons. */
-  touchSteer: 'slide' | 'buttons';
+  touchSteer: SteerMode;
+  /** Bumped when the default touch steering changes, so saved settings pick it up once. */
+  touchRev?: number;
   /** Bumped when the default volumes change, so saved settings pick them up once. */
   audioRev?: number;
 }
 
 /** Current default-volume revision (2: music starts on the second lowest step). */
 const AUDIO_REV = 2;
+const TOUCH_REV = 1;
 
 export const DEFAULT_SETTINGS: RaceSettings = {
   track: DEFAULT_TRACK,
@@ -59,7 +63,8 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   camera: 'classic',
   camHeight: 1,
   league: 'standard',
-  touchSteer: 'slide',
+  touchSteer: 'point',
+  touchRev: TOUCH_REV,
   audioRev: AUDIO_REV,
 };
 
@@ -89,7 +94,12 @@ export function loadSettings(): RaceSettings {
   s.graphics = [0, 1, 2, 3].includes(s.graphics) ? s.graphics : 0;
   if (!['thumb', 'always', 'button'].includes(s.touchGas)) s.touchGas = s.touchAutoGas === false ? 'button' : 'thumb';
   delete s.touchAutoGas;
-  s.touchSteer = s.touchSteer === 'buttons' ? 'buttons' : 'slide';
+  if ((s.touchRev ?? 0) < TOUCH_REV) {
+    // POINT steering is new and easier: everybody gets it once.
+    s.touchSteer = 'point';
+    s.touchRev = TOUCH_REV;
+  }
+  s.touchSteer = s.touchSteer === 'buttons' || s.touchSteer === 'slide' ? s.touchSteer : 'point';
   s.camera = s.camera === 'follow' ? 'follow' : 'classic';
   s.camHeight = [0, 1, 2].includes(s.camHeight) ? s.camHeight : 1;
   s.league = leagueOf(s.league);

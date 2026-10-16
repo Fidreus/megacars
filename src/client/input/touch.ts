@@ -1,5 +1,7 @@
-// On-screen touch controls for phones and tablets. The left thumb steers by
-// dragging sideways from wherever it lands (analog, like a stick); the right
+// On-screen touch controls for phones and tablets. The left thumb steers:
+// POINT (default) - push it the way you want to go on the screen and the car
+// turns that way by itself; SLIDE - drag sideways from wherever it lands
+// (left/right relative to the car); or two arrow buttons. The right
 // thumb has buttons for gas, brake, drift and the weapons. With AUTO GAS on
 // (the default) the car accelerates by itself unless braking, which leaves
 // the right thumb free for the weapons. Sliding a finger from one button to
@@ -30,8 +32,16 @@ interface Touch {
   role: Role | 'steer' | null;
   x: number;
   y: number;
+  /** Where the steering thumb's stick is centred. */
   ax: number;
+  ay: number;
 }
+
+export type SteerMode = 'point' | 'slide' | 'buttons';
+
+/** POINT steering: stick radius (UI pixels) and the share of it that is "no direction". */
+const POINT_RANGE = 34;
+const POINT_DEAD = 0.28;
 
 export interface TouchAmmo {
   missiles: number;
@@ -59,8 +69,13 @@ export class TouchControls {
   /** A touch screen has been used: show the controls. */
   enabled = false;
   gasMode: GasMode = 'thumb';
-  /** 'slide': drag the left thumb (analog); 'buttons': two arrow buttons (like keys). */
-  steerMode: 'slide' | 'buttons' = 'slide';
+  /** How the left thumb steers (see the top of the file). */
+  steerMode: SteerMode = 'point';
+  /**
+   * POINT steering: the direction the thumb pushes, on the screen (x right,
+   * y down, unit length), or null when it isn't pushing anywhere.
+   */
+  point: { x: number; y: number } | null = null;
   /** Controls are drawn and react (racing, not paused or on the results). */
   visible = false;
   steer = 0;
@@ -95,7 +110,7 @@ export class TouchControls {
       // Anything on the left side that isn't a button is the steering thumb
       // (with arrow buttons: a thumb resting between them, which still gasses).
       const role = hit ?? this.leftThumb(x);
-      this.touches.set(e.pointerId, { role, x, y, ax: x });
+      this.touches.set(e.pointerId, { role, x, y, ax: x, ay: y });
       this.update();
     };
     const move = (e: PointerEvent) => {
@@ -103,7 +118,17 @@ export class TouchControls {
       if (!t) return;
       e.preventDefault();
       [t.x, t.y] = this.toUi(e.clientX, e.clientY);
-      if (t.role === 'steer') {
+      if (t.role === 'steer' && this.steerMode === 'point') {
+        // The stick's centre trails a thumb that goes past its rim, so a
+        // new direction is always a short push away.
+        const dx = t.x - t.ax;
+        const dy = t.y - t.ay;
+        const d = Math.hypot(dx, dy);
+        if (d > POINT_RANGE) {
+          t.ax = t.x - (dx / d) * POINT_RANGE;
+          t.ay = t.y - (dy / d) * POINT_RANGE;
+        }
+      } else if (t.role === 'steer') {
         // The anchor follows a thumb that overshoots, so reversing is quick.
         if (t.x - t.ax > TOUCH_TUNING.range) t.ax = t.x - TOUCH_TUNING.range;
         if (t.ax - t.x > TOUCH_TUNING.range) t.ax = t.x + TOUCH_TUNING.range;
@@ -132,7 +157,7 @@ export class TouchControls {
   /** What a touch on the left side that misses the buttons is. */
   private leftThumb(x: number): Role | 'steer' | null {
     if (x >= this.W * 0.45) return null;
-    return this.steerMode === 'slide' ? 'steer' : 'hold';
+    return this.steerMode === 'buttons' ? 'hold' : 'steer';
   }
 
   /** Hide or show (and drop held touches when hidden). */
@@ -166,9 +191,15 @@ export class TouchControls {
     let thumb = false;
     let brake = false;
     let buttons = 0;
+    this.point = null;
     for (const t of this.touches.values()) {
       if (t.role === 'steer' || t.role === 'left' || t.role === 'right' || t.role === 'hold') thumb = true;
-      if (t.role === 'steer') steer = Math.max(-1, Math.min(1, (t.x - t.ax) / TOUCH_TUNING.range));
+      if (t.role === 'steer' && this.steerMode === 'point') {
+        const dx = t.x - t.ax;
+        const dy = t.y - t.ay;
+        const d = Math.hypot(dx, dy);
+        if (d > POINT_RANGE * POINT_DEAD) this.point = { x: dx / d, y: dy / d };
+      } else if (t.role === 'steer') steer = Math.max(-1, Math.min(1, (t.x - t.ax) / TOUCH_TUNING.range));
       else if (t.role === 'gas') gas = true;
       else if (t.role === 'brake') brake = true;
       else if (t.role === 'drift') buttons |= Btn.Drift;
@@ -181,6 +212,8 @@ export class TouchControls {
     }
     if (this.steerMode === 'buttons') {
       this.target = Math.max(-1, Math.min(1, digital));
+    } else if (this.steerMode === 'point') {
+      this.target = 0; // steered from the car's state (see pointSteer)
     } else {
       // A wide middle that is straight ahead (thumbs wobble), then a soft
       // curve: small movements make small corrections, full lock at the end.
@@ -224,8 +257,26 @@ export class TouchControls {
     return gas;
   }
 
+  /**
+   * POINT steering: the wheel that turns a car with this `heading` and yaw
+   * rate toward the world `goal` heading. Full lock from ~25° off; the yaw
+   * rate damps it so the nose settles instead of swinging past.
+   */
+  static pointSteer(goal: number, heading: number, angVel: number, forward: number): number {
+    let err = goal - heading;
+    err -= Math.round(err / (Math.PI * 2)) * Math.PI * 2;
+    let steer = Math.max(-1, Math.min(1, err * 2.3 - angVel * 0.22));
+    if (Math.abs(err) < 0.03 && Math.abs(angVel) < 0.2) steer = 0;
+    // Rolling backwards the wheel works the other way round.
+    return forward < -1 ? -steer : steer;
+  }
+
   /** Steering follows the thumb smoothly (call once per frame). */
   tick(dt: number): void {
+    if (this.steerMode === 'point') {
+      this.steer = 0;
+      return;
+    }
     if (this.steerMode === 'buttons') {
       // Digital, like keys: the simulation ramps it.
       this.steer = this.target;
@@ -238,9 +289,9 @@ export class TouchControls {
     if (Math.abs(this.steer) < 0.01 && this.target === 0) this.steer = 0;
   }
 
-  /** The steering is analog (slide) rather than left/right keys. */
+  /** The steering is analog (slide, point) rather than left/right keys. */
   get analog(): boolean {
-    return this.steerMode === 'slide';
+    return this.steerMode !== 'buttons';
   }
 
   /** Lay the buttons out for a W x H UI (call every frame; cheap). */
@@ -301,8 +352,29 @@ export class TouchControls {
       if (count !== null) drawText(ctx, String(count), b.x, b.y + 2, { scale: 2, color, align: 'center' });
     }
     if (this.steerMode === 'buttons') return;
-    // Steering: a base and a knob where the thumb is, or a hint where it goes.
     const steer = [...this.touches.values()].find((t) => t.role === 'steer');
+    if (this.steerMode === 'point') {
+      // A round stick: the knob shows the way you are pushing.
+      const cx = steer ? steer.ax : Math.round(this.W * 0.16);
+      const cy = steer ? steer.ay : this.H - Math.round(this.H * 0.24);
+      ctx.beginPath();
+      ctx.arc(cx, cy, POINT_RANGE + 8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(10,12,26,0.3)';
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.stroke();
+      const p = this.point;
+      const kx = steer ? cx + (p ? p.x * POINT_RANGE : 0) : cx;
+      const ky = steer ? cy + (p ? p.y * POINT_RANGE : 0) : cy;
+      ctx.beginPath();
+      ctx.arc(kx, ky, 14, 0, Math.PI * 2);
+      ctx.fillStyle = steer ? 'rgba(255,216,74,0.6)' : 'rgba(255,255,255,0.25)';
+      ctx.fill();
+      if (!steer) drawText(ctx, 'PUSH WHERE TO GO', cx, cy - POINT_RANGE - 20, { color: 'rgba(255,255,255,0.7)', align: 'center' });
+      return;
+    }
+    // Steering: a base and a knob where the thumb is, or a hint where it goes.
     const cy = steer ? steer.y : this.H - Math.round(this.H * 0.2);
     const cx = steer ? steer.ax : Math.round(this.W * 0.16);
     ctx.fillStyle = 'rgba(10,12,26,0.3)';

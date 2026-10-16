@@ -250,6 +250,13 @@ export class App {
       const id = this.session?.playerCars[0];
       return id === undefined ? null : this.world.cars[id];
     };
+    // A direction on the screen to a heading on the ground: the view is
+    // squashed vertically by its tilt, and turned with the car in FOLLOW.
+    this.input.touchHeading = (x, y) => {
+      const cam = this.renderer.viewports[0].cam;
+      const along = -y / Math.sin(cam.tilt);
+      return (cam.follow ? cam.yaw : 0) + Math.atan2(x, along);
+    };
     this.textBridge = new TextBridge(canvas);
     this.textBridge.pick = (cx, cy) => {
       const menu = this.activeMenu;
@@ -749,9 +756,10 @@ export class App {
         },
       },
       {
-        label: () => `TOUCH STEERING: ${s.touchSteer === 'buttons' ? 'ARROW BUTTONS' : 'SLIDE THUMB'}`,
-        change: () => {
-          s.touchSteer = s.touchSteer === 'buttons' ? 'slide' : 'buttons';
+        label: () => `TOUCH STEERING: ${{ point: 'POINT WHERE TO GO', slide: 'SLIDE LEFT/RIGHT', buttons: 'ARROW BUTTONS' }[s.touchSteer]}`,
+        change: (d: number) => {
+          const modes = ['point', 'slide', 'buttons'] as const;
+          s.touchSteer = modes[(modes.indexOf(s.touchSteer) + d + modes.length) % modes.length];
           this.touch.steerMode = s.touchSteer;
           this.touch.relayout();
           changed();
@@ -1869,7 +1877,7 @@ export class App {
       if (this.touch.visible) this.touch.draw(ctx, { missiles: me.missiles, mines: me.mines, turbos: me.turbos }, !!w.race.weapons);
       if (this.firstRace && w.tick < w.race.startTick + 60 * 12) {
         const gas = { thumb: 'IT GASSES WHILE YOUR THUMB IS DOWN', always: 'THE CAR ACCELERATES BY ITSELF', button: 'HOLD GAS' }[this.touch.gasMode];
-        const how = this.touch.steerMode === 'buttons' ? 'STEER WITH THE ARROWS' : 'DRAG YOUR LEFT THUMB TO STEER';
+        const how = { point: 'PUSH YOUR LEFT THUMB WHERE YOU WANT TO GO', slide: 'DRAG YOUR LEFT THUMB TO STEER', buttons: 'STEER WITH THE ARROWS' }[this.touch.steerMode];
         drawText(ctx, `${how} - ${gas}`, W / 2, Math.round(H * 0.62), { color: '#ffd84a', align: 'center' });
         drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, Math.round(H * 0.62) + 11, { color: '#ffd84a', align: 'center' });
       }

@@ -4,7 +4,7 @@ import { Btn, quantizeInput, type CarInput } from '../../shared/sim/input.ts';
 import { PAD_DEFAULT, type KeyBinding, type PadBinding } from './bindings.ts';
 import { makePadState, readPad } from './gamepad.ts';
 import { Keyboard } from './keyboard.ts';
-import type { TouchControls } from './touch.ts';
+import { TouchControls } from './touch.ts';
 
 export interface LocalPlayerInput {
   keys: KeyBinding | null;
@@ -21,8 +21,10 @@ export class InputManager {
   overrideTicks = 0;
   /** On-screen touch controls (drive player 1 while they are shown). */
   touch: TouchControls | null = null;
-  /** Player 1's car, for the touch traction control. */
-  touchCar: (() => { slip: number; sliding: number; surfRear: number } | null) | null = null;
+  /** Player 1's car, for the touch traction control and POINT steering. */
+  touchCar: (() => { slip: number; sliding: number; surfRear: number; heading: number; angVel: number; vx: number; vz: number } | null) | null = null;
+  /** World heading of a direction on the screen (x right, y down) in player 1's view. */
+  touchHeading: ((x: number, y: number) => number) | null = null;
   /** Pads that were the most recently used device of their player. */
   private readonly padInUse = new Set<number>();
 
@@ -74,7 +76,14 @@ export class InputManager {
     }
     const t = this.touch;
     if (first && t?.enabled && t.visible) {
-      if (t.steer !== 0 || !(buttons & Btn.Analog)) {
+      const me = this.touchCar?.();
+      if (t.steerMode === 'point' && t.point && me && this.touchHeading) {
+        // Push the thumb where you want to go: the wheel turns the car there.
+        const goal = this.touchHeading(t.point.x, t.point.y);
+        const forward = me.vx * Math.sin(me.heading) - me.vz * Math.cos(me.heading);
+        steer = TouchControls.pointSteer(goal, me.heading, me.angVel, forward);
+        buttons |= Btn.Analog;
+      } else if (t.steer !== 0 || !(buttons & Btn.Analog)) {
         steer = t.steer;
         // Arrow buttons are digital like keys: the simulation ramps them.
         if (t.analog) buttons |= Btn.Analog;
