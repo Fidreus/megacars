@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING } from '../config/tuning.ts';
 import { Ev } from '../sim/events.ts';
-import { neutralInput } from '../sim/input.ts';
+import { Btn, neutralInput } from '../sim/input.ts';
+import { WEAPON } from '../sim/weapons.ts';
 import { resetProgress } from '../sim/race.ts';
 import { stepWorld } from '../sim/step.ts';
 import { createWorld, RacePhase } from '../sim/world.ts';
@@ -40,7 +41,7 @@ describe('pit lane', () => {
       if (k === 59) expect(car.damage).toBeCloseTo(0.55 - PIT.repair, 6);
     }
     expect(car.damage).toBe(0);
-    expect(repairs).toBe(6);
+    expect(repairs).toBe(Math.ceil(0.55 / PIT.repair));
     expect(car.respawns).toBe(0);
     expect(inPitBox(p, car.x, car.z)).toBe(true);
   });
@@ -71,4 +72,25 @@ describe('pit lane', () => {
       expect(hardHits, def.id).toBe(0);
     }
   });
+
+  it('no weapons in the pit lane', () => {
+    const track = getTrack(GREEN_VALLEY);
+    const p = track.pit!;
+    const w = createWorld(track, 2, 1, { laps: 3, countdownTicks: 0, weapons: true });
+    w.race.startTick = -WEAPON.startGrace;
+    const lat = p.pitOff * p.side;
+    const heading = Math.atan2(p.tx, -p.tz);
+    // Two cars in the box, one 20 m behind the other, firing at it.
+    for (const [c, u] of [[w.cars[0], -10], [w.cars[1], 10]] as const) {
+      Object.assign(c, { x: p.ox + p.tx * u + p.nx * lat, z: p.oz + p.tz * u + p.nz * lat, heading, vx: 0, vz: 0 });
+      resetProgress(c, track);
+    }
+    const fire = { ...neutralInput(), buttons: Btn.FireFront | Btn.FireRear };
+    const before = w.cars[0].missiles + w.cars[0].mines;
+    for (let k = 0; k < 30; k++) stepWorld(w, track, [fire, neutralInput()], [DEFAULT_TUNING]);
+    expect(w.cars[0].missiles + w.cars[0].mines).toBe(before);
+    expect(w.shots.some((s) => s.kind !== 0)).toBe(false);
+    expect(w.cars[1].damage).toBe(0);
+  });
 });
+

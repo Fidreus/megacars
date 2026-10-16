@@ -3,6 +3,8 @@
 //   node scripts/netSoak.ts --url ws://localhost:8787/ws --clients 3 --laps 1 --track dustbowl
 // Bad networks: --lag 60 --jitter 40 --loss 0.02 (one-way ms; a lost TCP
 // packet holds everything behind it for a retransmit, ~200 ms).
+// Slow devices: --hitch 150 --hitchEvery 90 (a frame that blocks for 150 ms
+// every 90 frames) and --clamp 0.1 (longest frame step, like the browser game).
 
 import { parseArgs } from 'node:util';
 import WebSocket from 'ws';
@@ -25,12 +27,18 @@ const { values } = parseArgs({
     lag: { type: 'string', default: '0' },
     jitter: { type: 'string', default: '0' },
     loss: { type: 'string', default: '0' },
+    hitch: { type: 'string', default: '0' },
+    hitchEvery: { type: 'string', default: '90' },
+    clamp: { type: 'string', default: '1' },
   },
 });
 
 const LAG = Number(values.lag);
 const JITTER = Number(values.jitter);
 const LOSS = Number(values.loss);
+const HITCH = Number(values.hitch);
+const HITCH_EVERY = Number(values.hitchEvery);
+const CLAMP = Number(values.clamp);
 
 /** In-order delivery with lag, jitter and retransmit stalls, like TCP on a bad line. */
 class Pipe {
@@ -96,9 +104,15 @@ class Bot {
     else if (m.t === 'race') this.race = new NetRace(m.spec, this.id, (d) => { const c = d.slice(); this.up.deliver(() => this.ws.send(c)); });
     else if (m.t === 'error') console.log(this.name, 'error', m.msg);
   }
+  private frames = 0;
   frame() {
+    if (HITCH > 0 && ++this.frames % HITCH_EVERY === 0) {
+      // A slow frame: the whole thread is busy (garbage collection, a big draw).
+      const until = performance.now() + HITCH;
+      while (performance.now() < until);
+    }
     const now = performance.now();
-    const dt = (now - this.last) / 1000;
+    const dt = Math.min(CLAMP, (now - this.last) / 1000);
     this.last = now;
     const race = this.race;
     if (!race) return;

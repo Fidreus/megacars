@@ -321,6 +321,8 @@ export class App {
       room: (room) => {
         if (room && (this.mode === 'online' || this.mode === 'rooms')) this.toLobby();
         else if (!room && this.mode === 'lobby') this.mode = 'online';
+        // The host picked another track or class: show it behind the lobby (and build it now, not at the start).
+        else if (room && this.mode === 'lobby' && this.lobbyShows !== `${room.config.track}@${room.config.league}`) this.toLobby(false);
       },
       notice: (text) => this.flashMessage(text, 2.5),
     });
@@ -690,9 +692,19 @@ export class App {
     this.online.connect();
   }
 
-  private toLobby(): void {
-    this.showAttract('lobby');
-    this.lobbyMenu.index = 0;
+  /** Track and class the lobby background shows. */
+  private lobbyShows = '';
+
+  /**
+   * The lobby shows the room's track racing in the background, so its meshes
+   * and shaders are ready when the race starts (building them then made the
+   * first seconds of an online race stutter).
+   */
+  private toLobby(resetMenu = true): void {
+    const cfg = this.online.room?.config;
+    this.lobbyShows = cfg ? `${cfg.track}@${cfg.league}` : '';
+    this.showAttract('lobby', cfg ? { track: cfg.track, league: leagueOf(cfg.league) } : undefined);
+    if (resetMenu) this.lobbyMenu.index = 0;
   }
 
   leaveRoom(): void {
@@ -912,11 +924,11 @@ export class App {
   }
 
   /** A menu screen over the attract-mode race. */
-  private showAttract(mode: Mode): void {
+  private showAttract(mode: Mode, over?: Partial<RaceSettings>): void {
     this.mode = mode;
     this.paused = false;
     this.tuningPanel?.hide();
-    this.setSession(attractSession(this.settings, cloneTuning(DEFAULT_TUNING)));
+    this.setSession(attractSession({ ...this.settings, ...over }, cloneTuning(DEFAULT_TUNING)));
   }
 
   startRace(settings: RaceSettings, spec?: RaceSpec): void {
@@ -1143,7 +1155,10 @@ export class App {
     requestAnimationFrame(this.frame);
     const now = nowMs / 1000;
     if (this.last < 0) this.last = now;
-    const dt = Math.min(0.1, now - this.last);
+    // The online clock gets the real time that passed (a slow frame must not
+    // lose time against the server); everything else at most 0.1 s a frame.
+    const realDt = Math.min(1, now - this.last);
+    const dt = Math.min(0.1, realDt);
     this.last = now;
     this.time += dt;
     this.touch.tick(dt);
@@ -1153,7 +1168,7 @@ export class App {
     if (net) {
       // Online the race never pauses; the server's clock rules.
       this.online.update();
-      net.net.update(dt, this.netHooks);
+      net.net.update(realDt, this.netHooks);
       alpha = net.net.alpha;
     } else {
       this.acc = this.paused ? 0 : this.acc + dt;

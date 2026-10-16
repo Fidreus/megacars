@@ -9,6 +9,7 @@ import type { Track, Walls } from '../track/types.ts';
 import type { CarState } from './car.ts';
 import { Ev, pushEvent, type EventBuffer } from './events.ts';
 import { Btn, type CarInput } from './input.ts';
+import { inPitArea } from '../track/pit.ts';
 
 export const ShotKind = { None: 0, Missile: 1, Mine: 2 } as const;
 
@@ -40,6 +41,8 @@ export const WEAPON = {
   wreckTicks: 150,
   /** Damage a car comes back with after being wrecked (patched, not repaired). */
   wreckRepair: 0.6,
+  /** Damage mended per second of drifting (style pays a little). */
+  driftRepair: 0.02,
 };
 
 export const MAX_SHOTS = 64;
@@ -89,10 +92,11 @@ function allocShot(shots: Shot[]): Shot {
 }
 
 /** Fire / drop / boost on button presses. Called before the car's dynamics. */
-export function useWeapons(car: CarState, inp: CarInput, shots: Shot[], ev: EventBuffer): void {
+export function useWeapons(car: CarState, inp: CarInput, shots: Shot[], ev: EventBuffer, allowed = true): void {
   if (car.fireCool > 0) car.fireCool--;
   if (car.mineCool > 0) car.mineCool--;
-  if (car.finished || car.wreckTicks > 0 || car.ghostTicks > 0) return;
+  // Not allowed: in the pit lane, where nobody shoots or gets shot.
+  if (!allowed || car.finished || car.wreckTicks > 0 || car.ghostTicks > 0) return;
   const pressed = inp.buttons & ~car.prevButtons;
   const fx = Math.sin(car.heading);
   const fz = -Math.cos(car.heading);
@@ -240,6 +244,7 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
       let hit = -1;
       for (const c of cars) {
         if ((c.id === s.owner && s.age < 20) || c.ghostTicks > 0 || c.wreckTicks > 0 || c.finished || Math.abs(c.y - s.y) > 1.2) continue;
+        if (inPitArea(track.pit, c.x, c.z)) continue;
         const t = tunings[c.id] ?? tunings[0];
         const fx = Math.sin(c.heading);
         const fz = -Math.cos(c.heading);
@@ -266,6 +271,7 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
       if (s.age < WEAPON.mineArm) continue;
       for (const c of cars) {
         if (c.ghostTicks > 0 || c.wreckTicks > 0 || c.finished || Math.abs(c.y - s.y) > 0.5) continue;
+        if (inPitArea(track.pit, c.x, c.z)) continue;
         const t = tunings[c.id] ?? tunings[0];
         const fx = Math.sin(c.heading);
         const fz = -Math.cos(c.heading);

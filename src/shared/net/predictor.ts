@@ -17,8 +17,15 @@ const HISTORY = 256;
 /** Don't re-simulate more than this many ticks for one snapshot. */
 const MAX_RESIM = 240;
 /** How far ahead of need (ticks) inputs aim to reach the server: at least, and at most. */
-const MIN_TARGET = 2;
-const MAX_TARGET = 10;
+const MIN_TARGET = 3;
+const MAX_TARGET = 12;
+/** Error (ticks) beyond which the clock jumps instead of changing pace. */
+const JUMP_AHEAD = 12;
+const JUMP_BACK = -24;
+/** Pace change per tick of error, and its limits (catching up is allowed to be quicker). */
+const RATE_GAIN = 0.02;
+const RATE_UP = 0.12;
+const RATE_DOWN = 0.06;
 
 export interface Correction {
   dx: number;
@@ -160,13 +167,16 @@ export class LeadControl {
       return 1;
     }
     const err = this.target - lead;
-    if (err > 8 || err < -20) {
+    if (err > JUMP_AHEAD || err < JUMP_BACK) {
       this.jump = err;
       // Snapshots arrive every 3 ticks; skip feedback that predates the jump.
       this.cooldown = Math.ceil((rttTicks + 6) / 3);
       return 1;
     }
-    return 1 + Math.max(-0.05, Math.min(0.05, err * 0.012));
+    // Late inputs make the server guess (and the car jump when the truth comes
+    // back), so falling behind is caught up briskly; being early only costs a
+    // little delay for the others and is eased off gently.
+    return 1 + Math.max(-RATE_DOWN, Math.min(RATE_UP, err * RATE_GAIN));
   }
 
   /**

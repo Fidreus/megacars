@@ -16,7 +16,7 @@ export const PIT = {
   /** Width of the concrete island between the road and the lane (more than a car is wide). */
   island: 3,
   /** Damage repaired per full second in the pit box. */
-  repair: 0.1,
+  repair: 0.2,
   /** Room behind the outer wall for the garages. */
   garage: 10,
   /** Longest lane (each way from the start line) and the shortest that is worth it. */
@@ -84,11 +84,12 @@ export function onPitLane(p: Pit | null, x: number, z: number): boolean {
   return local.u >= p.a && local.u <= p.b && Math.abs(local.lat - laneOffset(p, local.u)) <= PIT.laneHalf + 0.5;
 }
 
-/** Anywhere between the road and the pit's outer wall (lane, island, the open grass by the bends). */
+/** Beyond the road, up to the pit's outer wall (lane, island, the open grass by the bends): no weapons here. */
 export function inPitArea(p: Pit | null, x: number, z: number): boolean {
   if (!p) return false;
   pitLocal(p, x, z, local);
-  return local.u >= p.a && local.u <= p.b && local.lat > 0 && local.lat <= pitWallOffset(p, local.u) + 0.1;
+  // From (just inside) the road's barrier line out: the road itself is never pit area.
+  return local.u >= p.a && local.u <= p.b && local.lat > p.barrier - 1 && local.lat <= pitWallOffset(p, local.u) + 0.1;
 }
 
 /** Along-distance (u) of a centreline sample: the distance from the start line, negative before it. */
