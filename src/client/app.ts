@@ -12,7 +12,7 @@ import { Ev } from '../shared/sim/events.ts';
 import { copyInput, NEUTRAL_INPUT, type CarInput } from '../shared/sim/input.ts';
 import { resetProgress } from '../shared/sim/race.ts';
 import { RacePhase, respawnCar, standings } from '../shared/sim/world.ts';
-import { AudioSystem } from './audio/audio.ts';
+import { AudioSystem, type MuteScope } from './audio/audio.ts';
 import { EngineSound } from './audio/engine.ts';
 import {
   Crowd, playBackfire, playDebris, playExplosion, playFanfare, playImpact, playLanding, playLaunch, playMineDrop,
@@ -795,9 +795,13 @@ export class App {
 
   /** CAMERA: north-up (classic) or following the car from behind. */
   /** How the left thumb steers on touch screens (Options and, on touch, the pause menu). */
-  /** Menu sound is switched off and we're in the menus (races always have sound). */
-  private get menuSilent(): boolean {
-    return this.audio.muted && this.mode !== 'race';
+  private get muteScope(): MuteScope {
+    return this.mode === 'race' ? 'race' : 'menu';
+  }
+
+  /** Sound is switched off where we are (menus and races each have their own switch). */
+  private get silentHere(): boolean {
+    return this.audio.muted[this.muteScope];
   }
 
   /** Where the title screen's sound on/off button was drawn (UI pixels). */
@@ -806,7 +810,7 @@ export class App {
   /** Sound on/off in the top right corner of the title screen. */
   private drawSoundButton(ctx: CanvasRenderingContext2D, W: number): void {
     // Keyboards toggle it with 5 (the mouse pointer hides while playing).
-    const label = `${this.audio.muted ? 'SOUND OFF' : 'SOUND ON'}${this.touch.enabled ? '' : ' (5)'}`;
+    const label = `${this.audio.muted.menu ? 'SOUND OFF' : 'SOUND ON'}${this.touch.enabled ? '' : ' (5)'}`;
     const w = textWidth(label) + 26;
     const h = 15;
     const x = W - w - 4;
@@ -814,7 +818,7 @@ export class App {
     this.soundButton = { x, y, w, h };
     ctx.fillStyle = 'rgba(8,10,24,0.72)';
     ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = this.audio.muted ? '#6a7488' : '#ffd84a';
+    ctx.fillStyle = this.audio.muted.menu ? '#6a7488' : '#ffd84a';
     ctx.fillRect(x, y, w, 1);
     ctx.fillRect(x, y + h - 1, w, 1);
     // A little speaker: box, cone, and waves or a cross.
@@ -823,7 +827,7 @@ export class App {
     ctx.fillRect(sx, sy + 1, 2, 3);
     ctx.fillRect(sx + 2, sy, 1, 5);
     ctx.fillRect(sx + 3, sy - 1, 1, 7);
-    if (this.audio.muted) {
+    if (this.audio.muted.menu) {
       for (let i = 0; i < 5; i++) {
         ctx.fillRect(sx + 6 + i, sy + i, 1, 1);
         ctx.fillRect(sx + 10 - i, sy + i, 1, 1);
@@ -833,7 +837,7 @@ export class App {
       ctx.fillRect(sx + 8, sy, 1, 5);
       ctx.fillRect(sx + 10, sy - 1, 1, 7);
     }
-    drawText(ctx, label, x + 18, y + 4, { color: this.audio.muted ? '#6a7488' : '#ffffff' });
+    drawText(ctx, label, x + 18, y + 4, { color: this.audio.muted.menu ? '#6a7488' : '#ffffff' });
   }
 
   /** How to drive with this device: touch, or the solo keyboard keys. */
@@ -1202,7 +1206,7 @@ export class App {
 
   private handleKeys(dt: number): void {
     const kb = this.input.keyboard;
-    this.audio.setSilent(this.menuSilent);
+    this.audio.setSilent(this.silentHere);
     this.nav.textMode = this.activeMenu?.typing ?? false;
     const nav = this.nav.poll(dt);
     this.updateTouch(nav);
@@ -1226,9 +1230,11 @@ export class App {
       this.setMood(MOODS[(MOODS.indexOf(this.mood) + 1) % MOODS.length]);
       this.flashMessage(this.mood.name);
     }
-    if (kb.wasPressed('Digit5') && this.mode !== 'race') {
-      this.audio.setMuted(!this.audio.muted);
-      this.flashMessage(this.audio.muted ? 'SOUND OFF' : 'SOUND ON');
+    if (kb.wasPressed('Digit5')) {
+      // Menus and races each keep their own on/off.
+      const scope = this.muteScope;
+      this.audio.setMuted(scope, !this.audio.muted[scope]);
+      this.flashMessage(`${scope === 'race' ? 'RACE ' : ''}SOUND ${this.audio.muted[scope] ? 'OFF' : 'ON'}`);
     }
     if (kb.wasPressed('Digit0')) void this.openTuning();
     if (kb.wasPressed('KeyN')) this.music.next();
@@ -1291,7 +1297,7 @@ export class App {
     if (this.mode === 'title') {
       const b = this.soundButton;
       if (nav.click && b && nav.pointerX >= b.x && nav.pointerX < b.x + b.w && nav.pointerY >= b.y && nav.pointerY < b.y + b.h) {
-        this.audio.setMuted(!this.audio.muted);
+        this.audio.setMuted('menu', !this.audio.muted.menu);
         return;
       }
       this.titleMenu.handle(nav);
@@ -1900,7 +1906,7 @@ export class App {
     } else if (this.mode === 'race') {
       this.drawRaceUi(ctx, W, H);
     }
-    if (this.songToast > 0 && this.music.nowPlaying && !this.menuSilent) {
+    if (this.songToast > 0 && this.music.nowPlaying && !this.silentHere) {
       this.songToast -= dt;
       // On the title screen the bottom right holds the version and credit.
       const y = this.mode === 'title' ? H - (this.update.available ? 44 : 33) : H - 22;

@@ -1,11 +1,13 @@
 // Web Audio setup. Browsers only allow sound after a user gesture, so the
 // context is created on the first key press or click.
 
-const MUTED_KEY = 'megacars.muted';
+const MUTED_KEY = { menu: 'megacars.muted', race: 'megacars.mutedRace' };
 
-function loadMuted(): boolean {
+export type MuteScope = keyof typeof MUTED_KEY;
+
+function loadMuted(scope: MuteScope): boolean {
   try {
-    return localStorage.getItem(MUTED_KEY) === '1';
+    return localStorage.getItem(MUTED_KEY[scope]) === '1';
   } catch {
     return false;
   }
@@ -25,8 +27,8 @@ export class AudioSystem {
   reverb: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   volume = 0.7;
-  /** Menus silent (music too), remembered between visits; races always have sound. */
-  muted = loadMuted();
+  /** Sound switched off in the menus and in races, each on its own, remembered between visits. */
+  readonly muted: Record<MuteScope, boolean> = { menu: loadMuted('menu'), race: loadMuted('race') };
   /** Everything is silent right now. */
   private silent = false;
 
@@ -86,10 +88,10 @@ export class AudioSystem {
     return this.noise;
   }
 
-  setMuted(m: boolean): void {
-    this.muted = m;
+  setMuted(scope: MuteScope, m: boolean): void {
+    this.muted[scope] = m;
     try {
-      localStorage.setItem(MUTED_KEY, m ? '1' : '0');
+      localStorage.setItem(MUTED_KEY[scope], m ? '1' : '0');
     } catch {
       // Storage blocked: muted for this visit only.
     }
