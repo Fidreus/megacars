@@ -21,6 +21,7 @@ export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING
   });
   const tunings: CarTuning[] = [];
   base = leagueTuning(base, spec.league);
+  if (spec.damageSlows === false) base = { ...base, damageSlow: 0 };
   spec.entrants.forEach((e, i) => {
     const car = world.cars[i];
     car.aiSkill = e.skill;

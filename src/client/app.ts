@@ -151,6 +151,7 @@ export class App {
   /** Every pause menu item; the tuning one is shown in free practice only. */
   private pauseAll: MenuItem[] = [];
   private tuneItem: MenuItem | null = null;
+  private touchItem: MenuItem | null = null;
   private readonly titleMenu: Menu;
   private readonly pauseMenu: Menu;
   private readonly onlineMenu: Menu;
@@ -356,6 +357,9 @@ export class App {
     this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'options'), (k) => playUi(this.audio, k));
     // Music on/off, volumes and next song are also in the pause menu (Esc).
     this.pauseMenu.items.splice(3, 0, ...this.buildOptionItems().slice(0, 6));
+    // Touch screens: the steering choice right after the camera settings.
+    this.touchItem = this.touchSteerItem();
+    this.pauseMenu.items.splice(9, 0, this.touchItem);
     this.pauseAll = this.pauseMenu.items;
     this.tuneItem = this.pauseAll[1];
     this.careerMenu = new Menu([
@@ -602,6 +606,12 @@ export class App {
       },
       { label: () => `WEAPONS: ${cfg()?.weapons === false ? 'OFF' : 'ON'}`, disabled: notHost, change: () => o().configure({ weapons: cfg()?.weapons === false }) },
       {
+        // Damage wears the car, or only a wreck (and its tow) costs time.
+        label: () => `DAMAGE: ${cfg()?.damageSlows === false ? 'TOW ONLY' : 'SLOWS CAR'}`,
+        disabled: notHost,
+        change: () => o().configure({ damageSlows: cfg()?.damageSlows === false }),
+      },
+      {
         label: () => `LEAGUE: ${LEAGUE_NAMES[leagueOf(cfg()?.league)]}`,
         disabled: notHost,
         change: () => o().configure({ league: leagueOf(cfg()?.league) === 'super' ? 'standard' : 'super' }),
@@ -755,16 +765,7 @@ export class App {
           changed();
         },
       },
-      {
-        label: () => `TOUCH STEERING: ${{ point: 'POINT WHERE TO GO', slide: 'SLIDE LEFT/RIGHT', buttons: 'ARROW BUTTONS' }[s.touchSteer]}`,
-        change: (d: number) => {
-          const modes = ['point', 'slide', 'buttons'] as const;
-          s.touchSteer = modes[(modes.indexOf(s.touchSteer) + d + modes.length) % modes.length];
-          this.touch.steerMode = s.touchSteer;
-          this.touch.relayout();
-          changed();
-        },
-      },
+      this.touchSteerItem(),
       {
         label: () => `TOUCH GAS: ${{ thumb: 'AUTO WHILE THUMB IS DOWN', always: 'AUTO ALWAYS', button: 'GAS BUTTON' }[s.touchGas]}`,
         change: (d: number) => {
@@ -793,6 +794,21 @@ export class App {
   }
 
   /** CAMERA: north-up (classic) or following the car from behind. */
+  /** How the left thumb steers on touch screens (Options and, on touch, the pause menu). */
+  private touchSteerItem() {
+    const s = this.settings;
+    return {
+      label: () => `TOUCH STEERING: ${{ point: 'POINT WHERE TO GO', slide: 'SLIDE LEFT/RIGHT', buttons: 'ARROW BUTTONS' }[s.touchSteer]}`,
+      change: (d: number) => {
+        const modes = ['point', 'slide', 'buttons'] as const;
+        s.touchSteer = modes[(modes.indexOf(s.touchSteer) + d + modes.length) % modes.length];
+        this.touch.steerMode = s.touchSteer;
+        this.touch.relayout();
+        saveSettings(s);
+      },
+    };
+  }
+
   private camHeightItem() {
     const s = this.settings;
     return {
@@ -1009,7 +1025,7 @@ export class App {
   }
 
   private syncPauseMenu(): void {
-    const want = this.practicing ? this.pauseAll : this.pauseAll.filter((it) => it !== this.tuneItem);
+    const want = this.pauseAll.filter((it) => (it !== this.tuneItem || this.practicing) && (it !== this.touchItem || this.touch.enabled));
     if (want.length !== this.pauseMenu.items.length) this.pauseMenu.items = want;
   }
 

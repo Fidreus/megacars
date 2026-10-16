@@ -38,8 +38,8 @@ export const WEAPON = {
   wallDamage: 0.011,
   carDamage: 0.008,
   wreckTicks: 150,
-  /** Damage a car comes back with after being wrecked. */
-  wreckRepair: 0.3,
+  /** Damage a car comes back with after being wrecked (patched, not repaired). */
+  wreckRepair: 0.6,
 };
 
 export const MAX_SHOTS = 64;
@@ -310,6 +310,7 @@ export function applyImpactDamage(cars: CarState[], tunings: readonly CarTuning[
 export function checkWreck(car: CarState, cars: CarState[], ev: EventBuffer): boolean {
   if (car.damage < 1 || car.wreckTicks > 0 || car.finished) return false;
   car.wreckTicks = WEAPON.wreckTicks;
+  car.wrecks++;
   car.turboTicks = 0;
   const by = car.lastHitBy;
   if (by >= 0 && cars[by]) cars[by].kills++;

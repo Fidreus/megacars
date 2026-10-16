@@ -149,7 +149,7 @@ class TestClient {
     const t = DEFAULT_TUNING;
     sampleCarSurface(car, race.track, t);
     mixSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, this.surf);
-    aiDrive(car, race.track, t, this.surf, race.world.cars, out);
+    aiDrive(car, race.track, t, this.surf, race.world.cars, race.world.tick, out);
     out.buttons = 0;
   }
 }
@@ -252,7 +252,8 @@ describe('online race', () => {
       expect(c.race!.world.race.phase).toBe(RacePhase.Finished);
       // Everybody agrees on the result.
       expect(c.race!.world.race.finishOrder).toEqual(cs[0].race!.world.race.finishOrder);
-      expect(c.race!.world.race.finishOrder.length).toBe(4);
+      // Both people finish (the race ends 3 s later, so a computer car far behind may not).
+      expect(c.race!.world.race.finishOrder.length).toBeGreaterThanOrEqual(2);
       // Corrections come only from the other person's unpredictable inputs.
       expect(c.ownCorrectionSum / Math.max(1, c.corrections)).toBeLessThan(0.05);
     }

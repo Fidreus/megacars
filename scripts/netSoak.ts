@@ -108,7 +108,7 @@ class Bot {
         const car = { ...race.world.cars[race.localCars[p]] };
         sampleCarSurface(car, race.track, DEFAULT_TUNING);
         mixSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, this.surf);
-        aiDrive(car, race.track, DEFAULT_TUNING, this.surf, race.world.cars, out);
+        aiDrive(car, race.track, DEFAULT_TUNING, this.surf, race.world.cars, race.world.tick, out);
         out.buttons = 0;
       },
       corrected: (drift) => {

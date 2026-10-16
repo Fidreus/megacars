@@ -67,6 +67,8 @@ export interface RoomConfig {
   public: boolean;
   /** Car class. */
   league: League;
+  /** Damage wears the car (otherwise a wreck's tow is the only cost). */
+  damageSlows: boolean;
 }
 
 /** A public room in the room list. */
@@ -132,6 +134,8 @@ export interface RaceSpec {
   entrants: Entrant[];
   /** Car class (absent = standard). */
   league?: League;
+  /** false = damage doesn't wear the car, only wrecks cost time (absent = it does). */
+  damageSlows?: boolean;
 }
 
 export type ClientMsg =

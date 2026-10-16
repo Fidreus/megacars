@@ -7,7 +7,7 @@ import { buildTrack, distanceToCentreline } from '../track/builder.ts';
 import { GREEN_VALLEY } from '../track/defs/greenValley.ts';
 import { closestOnSegment } from '../math/geom.ts';
 import type { Track } from '../track/types.ts';
-import { createCar, stepCarDynamics } from './car.ts';
+import { applyDamage, createCar, stepCarDynamics } from './car.ts';
 import { neutralInput } from './input.ts';
 import { stepWorld } from './step.ts';
 import { createWorld } from './world.ts';
@@ -203,5 +203,20 @@ describe('car dynamics', () => {
         expect(exactDistance(track, car.x, car.z)).toBeLessThanOrEqual(limit);
       }
     }
+  });
+});
+
+describe('damage', () => {
+  it('wears engine and grip past 20 %, unless the race turns it off', () => {
+    const top = (damage: number, slow: number) => {
+      const surf = makeSurfaceMix();
+      mixSurfaces(Surface.Asphalt, Surface.Asphalt, surf);
+      applyDamage(surf, damage, { ...DEFAULT_TUNING, damageSlow: slow });
+      return surf;
+    };
+    expect(top(0.2, 1).vTop).toBe(top(0, 1).vTop);
+    expect(top(1, 1).vTop).toBeCloseTo(top(0, 1).vTop * 0.75, 6);
+    expect(top(1, 1).grip).toBeLessThan(top(0, 1).grip);
+    expect(top(1, 0)).toEqual(top(0, 0));
   });
 });

@@ -124,7 +124,7 @@ export function settleRace(c: Championship, world: World): void {
       settle(d.profile, world, r);
     } else {
       d.profile.points += r.points;
-      d.profile.lastEarned = r.prize + r.bonus;
+      d.profile.lastEarned = r.prize + r.bonus - r.tow;
       if (r.place === 1) d.profile.wins++;
     }
   }

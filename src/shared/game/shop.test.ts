@@ -3,7 +3,7 @@ import { DEFAULT_TUNING } from '../config/tuning.ts';
 import { AI_SKILL } from './roster.ts';
 import { createRaceWorld } from './raceSetup.ts';
 import {
-  AMMO_MAX, buy, CAR_MODELS, defaultLoadout, newProfile, POINTS, priceOf, raceResults, REPAIR_PRICE, settle, START_MONEY, tuningFor,
+  AMMO_MAX, buy, CAR_MODELS, defaultLoadout, newProfile, POINTS, priceOf, raceResults, REPAIR_PRICE, settle, START_MONEY, TOW_FEE, tuningFor,
   UPGRADE_PRICES, type Loadout,
 } from './shop.ts';
 import { stepWorld } from '../sim/step.ts';
@@ -96,12 +96,25 @@ describe('shop', () => {
     const r = results[0];
     const p = newProfile();
     settle(p, world, r);
-    expect(p.money).toBe(START_MONEY + r.prize + r.bonus);
+    expect(p.money).toBe(START_MONEY + r.prize + r.bonus - r.tow);
     expect(p.points).toBe(10);
     expect(p.wins).toBe(1);
     expect(p.missiles).toBe(world.cars[r.car].missiles);
     expect(p.damage).toBeCloseTo(world.cars[r.car].damage, 3);
     // Somebody scored hits with the weapons.
     expect(results.some((x) => x.bonus > 0)).toBe(true);
+  });
+
+  it('charges a tow for every wreck, never below zero cash', () => {
+    const { world } = run(aiRace('dustbowl', [undefined, undefined]));
+    const r = raceResults(world)[1];
+    world.cars[r.car].wrecks = 2;
+    const [again] = raceResults(world).filter((x) => x.car === r.car);
+    expect(again.tow).toBe(2 * TOW_FEE);
+    const p = newProfile();
+    p.money = 0;
+    settle(p, world, { ...again, prize: 0, bonus: 0 });
+    expect(p.money).toBe(0);
+    expect(p.lastEarned).toBe(0);
   });
 });

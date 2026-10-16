@@ -43,7 +43,7 @@ function seasonSettings(division: number): RaceSettings {
     players: 1,
     opponents: 7,
     laps: 3,
-    // Division 3 is EASY, 2 NORMAL, 1 HARD.
+    // Division 3 is EASY, 2 MEDIUM, 1 HARD.
     difficulty: DIVISIONS - division,
     mood: 'day',
     practice: false,

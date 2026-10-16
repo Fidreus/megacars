@@ -191,7 +191,7 @@ export function drawStandings(
     g.fillRect(x0 + 20, y, 6, 7);
     drawText(g, r.name, x0 + 30, y, { color: r.human ? '#ffd84a' : '#ffffff' });
     drawText(g, r.racePlace ? `${r.racePlace}.` : '-', x0 + boxW - 120, y, { align: 'right' });
-    drawText(g, r.human ? `$${r.earned}` : '', x0 + boxW - 60, y, { align: 'right', color: '#9cff9c' });
+    drawText(g, r.human ? (r.earned < 0 ? `-$${-r.earned}` : `$${r.earned}`) : '', x0 + boxW - 60, y, { align: 'right', color: '#9cff9c' });
     drawText(g, String(r.points), x0 + boxW - 10, y, { align: 'right', color: '#ffffff' });
   });
   if (Math.sin(time * 5) > -0.2) drawText(g, footer, W / 2, y0 + boxH - 14, { color: '#c8d0dc', align: 'center' });

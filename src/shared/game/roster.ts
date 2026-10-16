@@ -9,5 +9,5 @@ export const AI_NAMES = [
   'BLITZ', 'NITRO NINA', 'TURBO TOM', 'VIXEN', 'DIESEL DAN', 'ROXY', 'MAX POWER', 'ACE', 'SPARKY', 'LUCKY LOU',
 ];
 
-/** AI skill by difficulty (EASY, NORMAL, HARD). */
-export const AI_SKILL = [0.86, 0.93, 1.0];
+/** AI skill by difficulty (EASY, MEDIUM, HARD); HARD is the flawless driver. */
+export const AI_SKILL = [0.72, 0.86, 1.0];

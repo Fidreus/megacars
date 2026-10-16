@@ -47,6 +47,8 @@ export interface CarState {
   /** Missile and mine hits landed on others, and wrecks caused (prize money). */
   hits: number;
   kills: number;
+  /** Times wrecked this race (each one is a tow, charged in money modes). */
+  wrecks: number;
   /** Who hit this car last (-1 = nobody), credited if it is wrecked. */
   lastHitBy: number;
   // Control
@@ -95,7 +97,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
   return {
     id, x, z, y: 0, vx: 0, vz: 0, vy: 0, heading, angVel: 0, steer: 0,
     sliding: 0, modeTicks: 0, spinTicks: 0, spinCool: 0, airborne: 0,
-    damage: 0, missiles: 0, mines: 0, turbos: 0, turboTicks: 0, fireCool: 0, mineCool: 0, wreckTicks: 0, hits: 0, kills: 0, lastHitBy: -1,
+    damage: 0, missiles: 0, mines: 0, turbos: 0, turboTicks: 0, fireCool: 0, mineCool: 0, wreckTicks: 0, hits: 0, kills: 0, wrecks: 0, lastHitBy: -1,
     prevButtons: 0, brakeTicks: 0, liftTicks: 60, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1, aiReverseTicks: 0, human: 0,
     trackIdx: 0, trackS: 0, raceDist: 0, lap: 0, nextCp: 0,
     lapStartTick: 0, lastLapTicks: 0, bestLapTicks: 0, wrongWayTicks: 0, finished: 0,
@@ -108,9 +110,23 @@ export function carSpeed(c: CarState): number {
   return Math.hypot(c.vx, c.vz);
 }
 
-/** Engine and top-speed multiplier from accumulated damage (0..1). */
-export function damagePerformance(damage: number): number {
-  return damage <= 0.4 ? 1 : 1 - 0.15 * Math.min(1, (damage - 0.4) / 0.6);
+/** How damage wears the car: nothing up to `from`, the full loss at 100 %. */
+export const DAMAGE_WEAR = {
+  from: 0.2,
+  /** Engine and top speed lost. */
+  engine: 0.25,
+  /** Grip lost, gripping and sliding. */
+  grip: 0.1,
+};
+
+/** Fold the car's damage into the surface it drives on (tuning.damageSlow 0 = no effect). */
+export function applyDamage(surf: SurfaceMix, damage: number, t: CarTuning): void {
+  const k = t.damageSlow * Math.max(0, Math.min(1, (damage - DAMAGE_WEAR.from) / (1 - DAMAGE_WEAR.from)));
+  if (k <= 0) return;
+  surf.accel *= 1 - DAMAGE_WEAR.engine * k;
+  surf.vTop *= 1 - DAMAGE_WEAR.engine * k;
+  surf.grip *= 1 - DAMAGE_WEAR.grip * k;
+  surf.slide *= 1 - DAMAGE_WEAR.grip * k;
 }
 
 export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf: SurfaceMix, dt: number): void {
@@ -139,9 +155,8 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
 
   // 1. Longitudinal: applied as a vector along the nose, so in a drift the
   //    throttle also bends the path (power slide).
-  const perf = damagePerformance(car.damage);
-  const vTop = t.vTop * surf.vTop * perf;
-  const accel = t.accel0 * surf.accel * perf;
+  const vTop = t.vTop * surf.vTop;
+  const accel = t.accel0 * surf.accel;
   let aLong = 0;
   let aEng = 0;
   let braking = 0;

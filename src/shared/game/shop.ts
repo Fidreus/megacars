@@ -149,6 +149,8 @@ export const POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
 export const PRIZES = [1200, 900, 700, 550, 450, 350, 250, 200];
 export const HIT_BONUS = 40;
 export const KILL_BONUS = 150;
+/** Charged for every tow after a wreck. */
+export const TOW_FEE = 150;
 
 export interface CarResult {
   car: number;
@@ -156,6 +158,8 @@ export interface CarResult {
   points: number;
   prize: number;
   bonus: number;
+  /** Towing charges for wrecks. */
+  tow: number;
 }
 
 /** Points and money for every car from a finished world. */
@@ -169,6 +173,7 @@ export function raceResults(w: World): CarResult[] {
       points: POINTS[i] ?? 0,
       prize: PRIZES[i] ?? 0,
       bonus: c.hits * HIT_BONUS + c.kills * KILL_BONUS,
+      tow: c.wrecks * TOW_FEE,
     };
   });
 }
@@ -176,7 +181,9 @@ export function raceResults(w: World): CarResult[] {
 /** Fold one car's race into its driver's profile: cash, points, ammo left, damage. */
 export function settle(p: Profile, w: World, r: CarResult): void {
   const c = w.cars[r.car];
-  p.lastEarned = r.prize + r.bonus;
+  // Towing comes out of the winnings (never below zero cash).
+  const earned = r.prize + r.bonus - r.tow;
+  p.lastEarned = p.money + earned < 0 ? 0 - p.money : earned;
   p.money += p.lastEarned;
   p.points += r.points;
   p.races++;

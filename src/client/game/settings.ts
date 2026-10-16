@@ -4,7 +4,7 @@ import type { SteerMode } from '../input/touch.ts';
 import { leagueOf, type League } from '../../shared/game/leagues.ts';
 import { DEFAULT_TRACK, TRACKS } from '../../shared/track/defs/index.ts';
 
-export const DIFFICULTIES = ['EASY', 'NORMAL', 'HARD'] as const;
+export const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD'] as const;
 
 export interface RaceSettings {
   track: string;

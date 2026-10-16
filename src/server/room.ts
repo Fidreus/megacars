@@ -79,7 +79,7 @@ export class Room {
   readonly code: string;
   readonly members: Member[] = [];
   hostId = -1;
-  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true, upgrades: true, public: false, league: 'standard' };
+  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true, upgrades: true, public: false, league: 'standard', damageSlows: true };
   /** Public rooms: when the race starts by itself (ms, 0 = not counting down). */
   startsAt = 0;
   private now = 0;
@@ -228,6 +228,7 @@ export class Room {
     if (Number.isFinite(c.ai)) cfg.ai = Math.max(0, Math.min(MAX_PLAYERS - 1, Math.round(c.ai!)));
     if (typeof c.weapons === 'boolean') cfg.weapons = c.weapons;
     if (typeof c.upgrades === 'boolean') cfg.upgrades = c.upgrades;
+    if (typeof c.damageSlows === 'boolean') cfg.damageSlows = c.damageSlows;
     if (Number.isFinite(c.difficulty)) cfg.difficulty = Math.max(0, Math.min(2, Math.round(c.difficulty!)));
     if (typeof c.public === 'boolean') cfg.public = c.public;
     if (c.league !== undefined) cfg.league = leagueOf(c.league);
@@ -346,6 +347,7 @@ export class Room {
       weapons: this.config.weapons,
       entrants,
       league: this.config.league,
+      damageSlows: this.config.damageSlows,
     };
     const { world, track, tunings } = createRaceWorld(spec);
     const drivers: Driver[] = [];

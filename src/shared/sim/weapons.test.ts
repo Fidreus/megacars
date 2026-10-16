@@ -91,6 +91,7 @@ describe('weapons', () => {
     run(w, WEAPON.wreckTicks, [neutralInput(), neutralInput()]);
     expect(w.cars[1].wreckTicks).toBe(0);
     expect(w.cars[1].damage).toBe(WEAPON.wreckRepair);
+    expect(w.cars[1].wrecks).toBe(1);
     expect(w.cars[1].ghostTicks).toBeGreaterThan(0);
   });
 

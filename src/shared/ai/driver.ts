@@ -7,6 +7,7 @@
 // from the same physics players use.
 
 import { DEG, clamp, headingOf, smoothstep, wrapAngle } from '../math/angle.ts';
+import { hash3 } from '../math/rng.ts';
 import type { SurfaceMix } from '../config/surfaces.ts';
 import type { CarTuning } from '../config/tuning.ts';
 import type { Track } from '../track/types.ts';
@@ -35,6 +36,27 @@ export const AI_PARAMS = {
   tapTicks: 4,
 };
 
+/** Skill shortfall (0 = flawless, the old default) that each knob scales with. */
+export const SKILL_PARAMS = {
+  /** Share of top speed given up per unit of shortfall. */
+  straight: 0.5,
+  /** Share of braking given up (brakes earlier) per unit of shortfall. */
+  brake: 1,
+  /** Metres the line wanders per unit of shortfall. */
+  wander: 8,
+  /** Ticks between wander targets. */
+  wanderTicks: 90,
+};
+
+/** A slow, smooth -1..1 drift off the racing line, the same on every machine. */
+function wander(id: number, tick: number): number {
+  const seg = Math.floor(tick / SKILL_PARAMS.wanderTicks);
+  const f = smoothstep(0, 1, (tick - seg * SKILL_PARAMS.wanderTicks) / SKILL_PARAMS.wanderTicks);
+  const a = hash3(id, seg, 77);
+  const b = hash3(id, seg + 1, 77);
+  return (a + (b - a) * f) * 2 - 1;
+}
+
 function lineStep(track: Track, i: number): number {
   const line = track.line;
   const j = i + 1 === track.n ? 0 : i + 1;
@@ -62,7 +84,7 @@ export function plannedSpeed(track: Track, from: number, aLat: number, aBrake: n
 }
 
 export function aiDrive(
-  car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, cars: readonly CarState[], out: CarInput,
+  car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, cars: readonly CarState[], tick: number, out: CarInput,
 ): void {
   const line = track.line;
   const n = track.n;
@@ -72,6 +94,8 @@ export function aiDrive(
   const fwd = car.vx * fx + car.vz * fz;
   const drift = car.aiMode === AiMode.Drift;
   const skill = car.aiSkill;
+  // Weaker drivers corner slower, brake earlier, hold less top speed and wander off the line.
+  const lack = clamp(1 - skill, 0, 1);
   const rx = Math.cos(car.heading);
   const rz = Math.sin(car.heading);
 
@@ -111,7 +135,7 @@ export function aiDrive(
   const aLat = (drift ? t.aSlide * AI_PARAMS.latSlide : t.aGrip * AI_PARAMS.latGrip) * skill;
   const vAllowed = Math.min(
     vTraffic,
-    plannedSpeed(track, car.trackIdx, aLat, t.brakeDecel * AI_PARAMS.brakeUse, t.vTop * 1.5),
+    plannedSpeed(track, car.trackIdx, aLat, t.brakeDecel * AI_PARAMS.brakeUse * (1 - lack * SKILL_PARAMS.brake), t.vTop * 1.5),
   );
   let throttle = 1;
   let brake = 0;
@@ -121,6 +145,8 @@ export function aiDrive(
   } else if (s > vAllowed - 0.5) {
     throttle = 0.35;
   }
+  // Weaker drivers ease off below top speed (rolling, never braking for it).
+  if (lack > 0 && s > t.vTop * (1 - lack * SKILL_PARAMS.straight)) throttle = Math.min(throttle, 0.3);
 
   // --- Steering: pure pursuit toward a point ahead on the racing line.
   const look = clamp(AI_PARAMS.lookBase + AI_PARAMS.lookTime * s, AI_PARAMS.lookMin, AI_PARAMS.lookMax);
@@ -132,7 +158,10 @@ export function aiDrive(
   }
   // Pursue the racing line, shifted sideways when dodging traffic.
   const lim = track.hw[j] - 1.6;
-  const shift = clamp(line.off[j] + dodge, -lim, lim) - line.off[j];
+  // The wander never takes the car closer than half the road to the edge.
+  const stray = lack > 0 ? clamp(wander(car.id, tick) * lack * SKILL_PARAMS.wander, -lim / 2, lim / 2) : 0;
+  const off = dodge + stray;
+  const shift = clamp(line.off[j] + off, -lim, lim) - line.off[j];
   const dx = line.x[j] + track.nx[j] * shift - car.x;
   const dz = line.z[j] + track.nz[j] * shift - car.z;
   const ld = Math.hypot(dx, dz);
@@ -189,6 +218,8 @@ export function aiDrive(
     }
     if (car.liftTicks > 0 && car.liftTicks <= t.liftTapTicks && throttle > 0.5) throttle = 0.5;
   }
+  // Weaker drivers never flick into a slide by lifting off and back on.
+  if (drift && lack > 0 && brake === 0 && car.liftTicks > 0 && car.liftTicks <= t.liftTapTicks && throttle > 0.5) throttle = 0.5;
 
   // Drift entry: when the corner needs more grip than the tyres have, tap the
   // brake while steering (press a few ticks, release) like a player would.

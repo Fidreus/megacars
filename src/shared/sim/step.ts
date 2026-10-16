@@ -9,7 +9,7 @@ import { aiDrive } from '../ai/driver.ts';
 import { aiWeapons } from '../ai/weapons.ts';
 import { surfaceAt } from '../track/builder.ts';
 import type { Track } from '../track/types.ts';
-import { stepCarDynamics, type CarState } from './car.ts';
+import { applyDamage, stepCarDynamics, type CarState } from './car.ts';
 import { clampSpeed, collideCarWithWalls, collideCars } from './collision.ts';
 import { Ev, pushEvent } from './events.ts';
 import { Btn, NEUTRAL_INPUT, neutralInput, type CarInput } from './input.ts';
@@ -86,8 +86,9 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     }
     sampleCarSurface(car, track, t);
     mixSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, surfMix);
+    applyDamage(surfMix, car.damage, t);
     if (car.aiDriven) {
-      aiDrive(car, track, t, surfMix, cars, aiInput);
+      aiDrive(car, track, t, surfMix, cars, w.tick, aiInput);
       if (armed) aiWeapons(car, cars, track, w.tick, t.vTop, aiInput);
       inp = aiInput;
     } else if (inp.buttons & Btn.Reset && !(car.prevButtons & Btn.Reset) && race.phase === RacePhase.Racing && !car.finished) {

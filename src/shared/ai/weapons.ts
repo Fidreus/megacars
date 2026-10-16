@@ -8,7 +8,7 @@ import { Btn, type CarInput } from '../sim/input.ts';
 
 /** Share of good chances a driver of this skill takes (checked a few times a second). */
 function eagerness(skill: number): number {
-  return Math.max(0.1, Math.min(0.35, (skill - 0.8) * 2));
+  return Math.max(0.1, Math.min(0.35, 0.1 + (skill - 0.72) * 0.9));
 }
 
 export function aiWeapons(car: CarState, cars: readonly CarState[], track: Track, tick: number, vTop: number, out: CarInput): void {
