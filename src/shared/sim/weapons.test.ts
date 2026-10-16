@@ -3,10 +3,11 @@ import { DEFAULT_TUNING } from '../config/tuning.ts';
 import { simulateRace } from '../game/raceSim.ts';
 import { getTrack } from '../track/builder.ts';
 import { GREEN_VALLEY } from '../track/defs/greenValley.ts';
-import { Ev } from './events.ts';
+import { createCar } from './car.ts';
+import { Ev, makeEventBuffer } from './events.ts';
 import { Btn, neutralInput, type CarInput } from './input.ts';
 import { stepWorld } from './step.ts';
-import { ShotKind, START_AMMO, WEAPON } from './weapons.ts';
+import { ShotKind, START_AMMO, stepBoostAndAir, WEAPON } from './weapons.ts';
 import { createWorld, type World } from './world.ts';
 
 const track = getTrack(GREEN_VALLEY);
@@ -99,5 +100,28 @@ describe('weapons', () => {
       expect(r.finished, `seed ${seed}: ${JSON.stringify(r)}`).toBe(r.cars);
       expect(r.shots).toBeGreaterThan(10);
     }
+  });
+});
+
+describe('landings', () => {
+  const land = (headingOff: number) => {
+    const car = createCar(0, 0, 0, Math.PI / 2 + headingOff);
+    Object.assign(car, { vx: 40, vz: 0, y: 0.1, vy: -16, airborne: 1 });
+    const ev = makeEventBuffer();
+    stepBoostAndAir(car, DEFAULT_TUNING, 1 / 60, ev, true, 0, 0);
+    return car;
+  };
+
+  it('a straight landing does no damage and keeps nearly all the speed', () => {
+    const car = land(0.1);
+    expect(car.airborne).toBe(0);
+    expect(car.damage).toBe(0);
+    expect(car.vx).toBeGreaterThan(38.5);
+  });
+
+  it('a sideways landing hurts and costs speed', () => {
+    const car = land(Math.PI / 2);
+    expect(car.damage).toBeGreaterThan(0.05);
+    expect(car.vx).toBeLessThan(36);
   });
 });

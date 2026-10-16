@@ -141,15 +141,18 @@ export class RaceView {
   update(alpha: number, dt: number, pxScale: number, particleDither: boolean): void {
     const world = this.session.world;
     const cars = world.cars;
-    // Corrections fade out over ~0.1-0.2 s.
+    // Corrections fade out over ~0.1-0.2 s; your own car glides more gently
+    // (~0.3 s), so a shaky connection reads as a nudge rather than a jump.
     const fade = Math.exp(-dt * 12);
+    const fadeOwn = Math.exp(-dt * 5);
     for (let i = 0; i < cars.length; i++) {
       const c = cars[i];
       const p = this.prev[i];
       const o = this.offset[i];
-      o.x *= fade;
-      o.z *= fade;
-      o.heading *= fade;
+      const k = this.session.playerCars.includes(i) ? fadeOwn : fade;
+      o.x *= k;
+      o.z *= k;
+      o.heading *= k;
       let dh = c.heading - p.heading;
       if (dh > Math.PI) dh -= Math.PI * 2;
       else if (dh < -Math.PI) dh += Math.PI * 2;

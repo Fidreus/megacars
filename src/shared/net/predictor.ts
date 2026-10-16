@@ -16,6 +16,9 @@ import { applySnapshot, peekSnapshot } from './snapshot.ts';
 const HISTORY = 256;
 /** Don't re-simulate more than this many ticks for one snapshot. */
 const MAX_RESIM = 240;
+/** How far ahead of need (ticks) inputs aim to reach the server: at least, and at most. */
+const MIN_TARGET = 2;
+const MAX_TARGET = 10;
 
 export interface Correction {
   dx: number;
@@ -136,10 +139,13 @@ export class Predictor {
  */
 export class LeadControl {
   /** Desired minimum lead (ticks) of inputs arriving at the server. */
-  target = 2;
+  target = MIN_TARGET;
   /** Ticks to add right now (positive: run ahead; negative: hold back). */
   jump = 0;
   private cooldown = 0;
+  /** Snapshots until the target may rise again, and since inputs were last late. */
+  private raiseCool = 0;
+  private calm = 0;
 
   /**
    * Called once per received snapshot with the lead the server measured.
@@ -148,6 +154,7 @@ export class LeadControl {
   update(lead: number, rttTicks: number): number {
     // -999: the server has no input from us yet.
     if (lead <= -999) return 1;
+    this.adapt(lead);
     if (this.cooldown > 0) {
       this.cooldown--;
       return 1;
@@ -160,6 +167,26 @@ export class LeadControl {
       return 1;
     }
     return 1 + Math.max(-0.05, Math.min(0.05, err * 0.012));
+  }
+
+  /**
+   * A shaky connection delivers some inputs late, and the server then has to
+   * guess them: the car jumps when the truth comes back. So when inputs are
+   * late, aim to send them further ahead; when they have been on time for a
+   * while, creep back (a smaller lead keeps other cars closer to the truth).
+   */
+  private adapt(lead: number): void {
+    if (this.raiseCool > 0) this.raiseCool--;
+    if (lead < 1) {
+      this.calm = 0;
+      if (this.raiseCool === 0 && this.target < MAX_TARGET) {
+        this.target = Math.min(MAX_TARGET, this.target + 2);
+        this.raiseCool = 40;
+      }
+    } else if (++this.calm > 300 && this.target > MIN_TARGET) {
+      this.target--;
+      this.calm = 0;
+    }
   }
 
   /** Ignore feedback for about one round trip (after (re)starting the clock). */

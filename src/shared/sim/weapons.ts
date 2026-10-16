@@ -160,16 +160,32 @@ export function stepBoostAndAir(
       car.y = ground;
       car.vy = groundVy;
       car.airborne = 0;
-      // Hard landings hurt a little and cost some speed.
+      // Coming down straight, nose the way you fly, is what jumps are for:
+      // just a little speed lost. A crooked or backwards landing hurts and
+      // costs a lot more.
       if (impact > 4) {
         pushEvent(ev, Ev.Land, car.id, -1, impact, car.x, car.z);
-        if (damage && impact > 9) car.damage = Math.min(1, car.damage + (impact - 9) * 0.01 * t.armour);
-        const k = Math.max(0.85, 1 - impact * 0.008);
+        const crooked = landingCrooked(car);
+        if (damage && crooked > 0) car.damage = Math.min(1, car.damage + crooked * Math.max(0, impact - 6) * 0.012 * t.armour);
+        const k = 1 - (0.02 + crooked * 0.12) * Math.min(1, impact / 15);
         car.vx *= k;
         car.vz *= k;
       }
     }
   }
+}
+
+/** 0 when a car lands pointing the way it flies, 1 when sideways or backwards. */
+export function landingCrooked(car: CarState): number {
+  const s = Math.hypot(car.vx, car.vz);
+  if (s < 3) return 0;
+  const along = (car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading)) / s;
+  if (along <= 0) return 1;
+  const angle = Math.acos(Math.min(1, along));
+  const lo = (25 * Math.PI) / 180;
+  const hi = (70 * Math.PI) / 180;
+  const x = Math.max(0, Math.min(1, (angle - lo) / (hi - lo)));
+  return x * x * (3 - 2 * x);
 }
 
 /** A hit: damage, a spin and a shove in the given direction. */

@@ -1,6 +1,8 @@
 // Headless online clients against a running server over real WebSockets:
 // create a room, race with N bots driving like people, report sync health.
 //   node scripts/netSoak.ts --url ws://localhost:8787/ws --clients 3 --laps 1 --track dustbowl
+// Bad networks: --lag 60 --jitter 40 --loss 0.02 (one-way ms; a lost TCP
+// packet holds everything behind it for a retransmit, ~200 ms).
 
 import { parseArgs } from 'node:util';
 import WebSocket from 'ws';
@@ -20,19 +22,44 @@ const { values } = parseArgs({
     ai: { type: 'string', default: '2' },
     track: { type: 'string', default: 'greenvalley' },
     league: { type: 'string', default: 'standard' },
+    lag: { type: 'string', default: '0' },
+    jitter: { type: 'string', default: '0' },
+    loss: { type: 'string', default: '0' },
   },
 });
 
+const LAG = Number(values.lag);
+const JITTER = Number(values.jitter);
+const LOSS = Number(values.loss);
+
+/** In-order delivery with lag, jitter and retransmit stalls, like TCP on a bad line. */
+class Pipe {
+  private at = 0;
+  deliver(f: () => void): void {
+    if (LAG === 0 && JITTER === 0 && LOSS === 0) return f();
+    const now = performance.now();
+    let t = now + LAG + Math.random() * JITTER;
+    if (Math.random() < LOSS) t += 200;
+    this.at = Math.max(this.at, t);
+    setTimeout(f, this.at - now);
+  }
+}
+
 class Bot {
+  private readonly up = new Pipe();
+  private readonly down = new Pipe();
   ws: WebSocket;
   id = -1;
   room: RoomInfo | null = null;
   race: NetRace | null = null;
   rtt = 50;
   maxOwn = 0;
+  /** Corrections of the own car big enough to see (> 0.3 m). */
+  jumps = 0;
   sumOwn = 0;
   n = 0;
   leads: number[] = [];
+  late = 0;
   private surf = makeSurfaceMix();
   private last = performance.now();
   readonly name: string;
@@ -46,16 +73,19 @@ class Bot {
         const b = Buffer.alloc(9);
         b[0] = MsgType.Ping;
         b.writeDoubleLE(performance.now(), 1);
-        this.ws.send(b);
+        this.up.deliver(() => this.ws.send(b));
       }, 1000);
     });
-    this.ws.on('message', (d: Buffer, bin) => {
+    this.ws.on('message', (d: Buffer, bin) => this.down.deliver(() => this.receive(d, bin)));
+    setInterval(() => this.frame(), 1000 / 60);
+  }
+  receive(d: Buffer, bin: boolean) {
+    {
       if (!bin) return this.onMsg(JSON.parse(String(d)) as ServerMsg);
       const u = new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
       if (u[0] === MsgType.Pong) this.rtt = this.rtt * 0.8 + (performance.now() - d.readDoubleLE(1)) * 0.2;
       else if (u[0] === MsgType.Snapshot) this.race?.snapshot(u.slice());
-    });
-    setInterval(() => this.frame(), 1000 / 60);
+    }
   }
   send(m: ClientMsg) {
     this.ws.send(JSON.stringify(m));
@@ -63,7 +93,7 @@ class Bot {
   onMsg(m: ServerMsg) {
     if (m.t === 'welcome') this.id = m.id;
     else if (m.t === 'room') this.room = m.room;
-    else if (m.t === 'race') this.race = new NetRace(m.spec, this.id, (d) => this.ws.send(d));
+    else if (m.t === 'race') this.race = new NetRace(m.spec, this.id, (d) => { const c = d.slice(); this.up.deliver(() => this.ws.send(c)); });
     else if (m.t === 'error') console.log(this.name, 'error', m.msg);
   }
   frame() {
@@ -86,10 +116,12 @@ class Bot {
         for (const i of race.localCars) {
           const m = Math.hypot(drift[i].dx, drift[i].dz);
           this.maxOwn = Math.max(this.maxOwn, m);
+          if (m > 0.3) this.jumps++;
           this.sumOwn += m;
           this.n++;
         }
         this.leads.push(race.predictor.lead);
+        if (race.predictor.lead < 0) this.late++;
       },
     });
   }
@@ -120,7 +152,7 @@ for (const b of bots) {
   console.log(
     `${b.name} rtt ${b.rtt.toFixed(1)}ms finish ${JSON.stringify(r.world.race.finishOrder)} ` +
       `lead min/avg ${Math.min(...leads)}/${(leads.reduce((a, c) => a + c, 0) / leads.length).toFixed(1)} ` +
-      `own corr avg ${(b.sumOwn / Math.max(1, b.n)).toFixed(4)} max ${b.maxOwn.toFixed(3)} m`,
+      `own corr avg ${(b.sumOwn / Math.max(1, b.n)).toFixed(4)} max ${b.maxOwn.toFixed(3)} m, visible jumps ${b.jumps} (late inputs ${b.late})`,
   );
 }
 process.exit(0);
