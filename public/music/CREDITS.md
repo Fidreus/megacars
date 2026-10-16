@@ -20,4 +20,18 @@ checked on each module's page when downloaded (October 2026).
 | dreams_2.xm | *** Dreams 2 *** | Andreas Viklund (TSEC) | CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) | https://modarchive.org/index.php?request=view_by_moduleid&query=40515 |
 | dreams_3.xm | *** Dreams 3 *** | Andreas Viklund (TSEC) | CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) | https://modarchive.org/index.php?request=view_by_moduleid&query=40518 |
 
+## Non-commercial (CC BY-NC-SA 4.0)
+
+Licensed for non-commercial use only (https://creativecommons.org/licenses/by-nc-sa/4.0/):
+they may stay only while Megacars is free, without ads or paid extras.
+
+| File | Title | Artist | Source |
+|---|---|---|---|
+| elysium.mod | Elysium | Jester | https://modarchive.org/index.php?request=view_by_moduleid&query=40475 |
+| stardust_memories.mod | Stardust Memories | Jester | https://modarchive.org/index.php?request=view_by_moduleid&query=59344 |
+| basic_instinct.mod | Basic Instinct | Jester | https://modarchive.org/index.php?request=view_by_moduleid&query=34603 |
+| unreal_scene.it | Unreal Scene | Saga Musix | https://modarchive.org/index.php?request=view_by_moduleid&query=68461 |
+| snowflakes.it | Snowflakes | Saga Musix | https://modarchive.org/index.php?request=view_by_moduleid&query=174568 |
+| hawkings_dream.xm | Hawking's Dream | Psirius | https://modarchive.org/index.php?request=view_by_moduleid&query=182045 |
+
 Playback: libopenmpt (BSD), see /vendor/libopenmpt/.

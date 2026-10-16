@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 
@@ -6,16 +6,17 @@ const VERSION = (JSON.parse(readFileSync(new URL('./package.json', import.meta.u
 
 const SERVER_PORT = Number(process.env.SERVER_PORT ?? 8787);
 
-/** public/<dir> files matching `re`, as site paths. */
-function publicFiles(dir: string, re: RegExp): string[] {
-  return readdirSync(new URL(`./public/${dir}/`, import.meta.url))
-    .filter((f) => re.test(f))
+/** public/<dir> files matching `re` (and at most `maxBytes`), as site paths. */
+function publicFiles(dir: string, re: RegExp, maxBytes = Infinity): string[] {
+  const base = new URL(`./public/${dir}/`, import.meta.url);
+  return readdirSync(base)
+    .filter((f) => re.test(f) && statSync(new URL(f, base)).size <= maxBytes)
     .map((f) => `/${dir}/${f}`);
 }
 
 /**
  * Writes precache.json: everything the game needs to run offline (the page,
- * the build, workers, the music player and the bundled songs). The service
+ * the build, workers, the music player and the smaller songs). The service
  * worker downloads it all when it installs.
  */
 function precacheList(): Plugin {
@@ -29,7 +30,8 @@ function precacheList(): Plugin {
         ...publicFiles('icons', /\.png$/),
         ...publicFiles('audio', /\.js$/),
         ...publicFiles('vendor/libopenmpt', /\.(js|wasm)$/),
-        ...publicFiles('music', /\.(mod|xm|s3m|it)$/i),
+        // Big songs (several MB) download when they first play instead.
+        ...publicFiles('music', /\.(mod|xm|s3m|it)$/i, 1_500_000),
       );
       this.emitFile({ type: 'asset', fileName: 'precache.json', source: JSON.stringify(files) });
     },

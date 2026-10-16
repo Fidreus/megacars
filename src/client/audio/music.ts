@@ -20,7 +20,10 @@ export interface Song {
   gain?: number;
 }
 
-/** Bundled songs (public/music), all checked on The Mod Archive. */
+/**
+ * Bundled songs (public/music), all checked on The Mod Archive. The CC BY-NC-SA
+ * ones may only stay while the game is free (no ads, no paid extras).
+ */
 export const SONGS: Record<string, Song> = {
   title: { file: 'digital_rendezvous.xm', title: 'DIGITAL RENDEZVOUS', artist: 'DROZERIX', licence: 'PUBLIC DOMAIN' },
   menu: { file: 'ambient_starfield.xm', title: 'AMBIENT STARFIELD', artist: 'DROZERIX', licence: 'PUBLIC DOMAIN' },
@@ -35,6 +38,12 @@ export const SONGS: Record<string, Song> = {
   imagine: { file: 'imagine.xm', title: 'IMAGINE', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0', gain: 2.5 },
   dreams: { file: 'dreams.xm', title: 'DREAMS', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0', gain: 2.5 },
   dreams2: { file: 'dreams_2.xm', title: 'DREAMS 2', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0', gain: 1.7 },
+  elysium: { file: 'elysium.mod', title: 'ELYSIUM', artist: 'JESTER', licence: 'CC BY-NC-SA 4.0', gain: 1.8 },
+  stardust: { file: 'stardust_memories.mod', title: 'STARDUST MEMORIES', artist: 'JESTER', licence: 'CC BY-NC-SA 4.0', gain: 1.3 },
+  instinct: { file: 'basic_instinct.mod', title: 'BASIC INSTINCT', artist: 'JESTER', licence: 'CC BY-NC-SA 4.0', gain: 1.5 },
+  unreal: { file: 'unreal_scene.it', title: 'UNREAL SCENE', artist: 'SAGA MUSIX', licence: 'CC BY-NC-SA 4.0', gain: 3 },
+  snowflakes: { file: 'snowflakes.it', title: 'SNOWFLAKES', artist: 'SAGA MUSIX', licence: 'CC BY-NC-SA 4.0', gain: 3 },
+  hawking: { file: 'hawkings_dream.xm', title: "HAWKING'S DREAM", artist: 'PSIRIUS', licence: 'CC BY-NC-SA 4.0', gain: 2.2 },
   dreams3: { file: 'dreams_3.xm', title: 'DREAMS 3', artist: 'ANDREAS VIKLUND (TSEC)', licence: 'CC BY 4.0', gain: 2.5 },
 };
 
@@ -42,7 +51,9 @@ export const SONGS: Record<string, Song> = {
 const TRACK_SONG: Record<string, string> = { twinbridges: 'bitloader', brewerybash: 'numen' };
 
 /** Songs used for races in shuffle mode. */
-const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine', 'dreams', 'dreams2', 'dreams3'];
+const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine', 'dreams', 'dreams2', 'dreams3',
+  'elysium', 'stardust', 'instinct', 'unreal', 'snowflakes', 'hawking',
+];
 
 export const MUSIC_MODES = ['TRACKS', 'SHUFFLE', 'OFF'] as const;
 export type MusicMode = 0 | 1 | 2;
