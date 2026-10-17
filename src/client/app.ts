@@ -69,6 +69,8 @@ import { buy, CAR_MODELS } from '../shared/game/shop.ts';
 import { DIVISIONS, endSeason, loadCareer, newCareer, saveCareer, type Career } from './game/career.ts';
 import { drawSeasonEnd } from './ui/screens/season.ts';
 import type { RaceSpec } from '../shared/net/protocol.ts';
+import { CATCH_UP, farBehind, leaderDistance } from '../shared/sim/catchUp.ts';
+import { setBoostPadsLit } from './render/boostMesh.ts';
 
 const SHADOW_HALF = 62;
 /** Graphics levels: high, medium, low. Shadow map size 0 = no shadows. */
@@ -229,6 +231,23 @@ export class App {
   private firstRace = true;
   /** The "go to the pits" tip was shown this race. */
   private pitHinted = false;
+  /** The catch-up pad tip was shown this race. */
+  private boostHinted = false;
+
+  /** Light the catch-up pads while one of the people here may use them (and say so once a race). */
+  private updateBoostPads(): void {
+    const w = this.world;
+    let lit = false;
+    if (this.mode === 'race' && w.race.phase === RacePhase.Racing && w.cars.length > 1) {
+      const leader = leaderDistance(w.cars);
+      lit = this.session.playerCars.some((i) => farBehind(this.session.track, w.cars[i], leader));
+    }
+    setBoostPadsLit(lit, this.time);
+    if (lit && !this.boostHinted) {
+      this.boostHinted = true;
+      this.flashMessage('FAR BEHIND - DRIVE OVER THE GLOWING ARROWS FOR A BOOST!', 3);
+    }
+  }
 
   constructor(canvas: HTMLCanvasElement, params: Params) {
     this.params = params;
@@ -721,6 +740,8 @@ export class App {
   private startOnlineRace(s: OnlineSession): void {
     this.mode = 'race';
     this.paused = false;
+    this.pitHinted = false;
+    this.boostHinted = false;
     this.lastLights = 0;
     this.setSession(s);
   }
@@ -941,6 +962,7 @@ export class App {
     this.mode = 'race';
     this.paused = false;
     this.pitHinted = false;
+    this.boostHinted = false;
     this.lastLights = 0;
     this.cupRace = !!spec;
     this.qualityWatch.grace = 4;
@@ -1623,7 +1645,9 @@ export class App {
         playExplosion(this.audio, vol, pan, 1.6);
         playDebris(this.audio, vol, pan);
       } else if (kind === Ev.Turbo && mine) {
-        playTurbo(this.audio, 1, WEAPON.turboTicks * DT);
+        // value 1: a catch-up pad rather than a turbo from the stock.
+        playTurbo(this.audio, 1, (value === 1 ? CATCH_UP.ticks : WEAPON.turboTicks) * DT);
+        if (value === 1) this.flashMessage('CATCH-UP BOOST!', 1);
       }
     }
     if (this.mode !== 'race') return;
@@ -1645,6 +1669,7 @@ export class App {
       const t = this.camTargets[0];
       if (Math.random() < dt * 5) this.view.effects.firework(t.x + (Math.random() - 0.5) * 70, t.z - 8 - Math.random() * 25);
     }
+    this.updateBoostPads();
     const views = this.renderer.viewCount;
     for (let v = 0; v < views; v++) this.updateCamera(v, dt);
     const cam0 = this.renderer.viewports[0].cam;

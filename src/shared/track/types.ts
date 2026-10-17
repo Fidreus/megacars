@@ -169,6 +169,8 @@ export interface Track {
   line: RacingLine;
   /** Pit lane beside the start straight (null when there's no room). */
   pit: Pit | null;
+  /** Catch-up boost pads (start of each along s; see sim/catchUp.ts). */
+  boosts: number[];
   bounds: { minX: number; minZ: number; maxX: number; maxZ: number };
   /** Problems found while building (empty when the track is valid). */
   errors: string[];

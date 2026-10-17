@@ -8,6 +8,7 @@ import { SegmentGrid } from '../math/spatialHash.ts';
 import { computeRacingLine } from '../ai/racingLine.ts';
 import { inPatchShape, patchReach, patchShape } from './patchShape.ts';
 import { buildPit, laneOffset, PIT, pitLocal, pitWallOffset, sampleU, type Pit } from './pit.ts';
+import { placeBoostPads } from '../sim/catchUp.ts';
 import type { Bridge, GridSlot, SurfaceGrid, Track, TrackDef, Walls } from './types.ts';
 
 /** Target spacing between centreline samples, metres. */
@@ -124,6 +125,7 @@ export function buildTrack(def: TrackDef): Track {
     deck: new Uint8Array(n),
     line: null as unknown as Track['line'],
     pit: null,
+    boosts: [],
     bounds: { minX, minZ, maxX, maxZ },
     errors,
   };
@@ -164,6 +166,7 @@ export function buildTrack(def: TrackDef): Track {
     if (s1 - r.length < 0) errors.push(`ramp at (${r.x}, ${r.z}) crosses the start line`);
     track.ramps.push({ s0: s1 - r.length, s1, height: r.height });
   }
+  track.boosts = placeBoostPads(track);
   track.line = computeRacingLine(track);
   return track;
 }

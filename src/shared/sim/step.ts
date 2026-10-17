@@ -17,6 +17,7 @@ import { resetProgress, updateProgress } from './race.ts';
 import { RacePhase, respawnCar, standings, type World } from './world.ts';
 import { fellOff, groundUnder, makeGround, safeRespawnS, stepRamps } from './ramps.ts';
 import { inPitArea, inPitBox, pitRepair } from '../track/pit.ts';
+import { leaderDistance, stepBoostPads } from './catchUp.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
@@ -63,6 +64,8 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
   }
 
   const armed = race.weapons === 1 && race.phase === RacePhase.Racing && w.tick >= race.startTick + WEAPON.startGrace;
+  // Catch-up pads work for cars far behind whoever leads at the start of this tick.
+  const leader = cars.length > 1 && race.phase === RacePhase.Racing ? leaderDistance(cars) : -Infinity;
   for (let i = 0; i < cars.length; i++) {
     const car = cars[i];
     const t = tunings[i] ?? tunings[0];
@@ -118,6 +121,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
       const along = car.vx * track.tx[i] + car.vz * track.tz[i];
       stepBoostAndAir(car, t, DT, w.events, race.weapons === 1, ground.gap ? -1e9 : ground.h, along * ground.slope);
       stepRamps(car, track, ground);
+      if (leader > -Infinity) stepBoostPads(track, car, leader, w.events);
     }
     car.prevButtons = inp.buttons;
 

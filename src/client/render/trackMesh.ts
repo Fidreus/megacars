@@ -9,6 +9,7 @@ import type { Track } from '../../shared/track/types.ts';
 import { buildRamps } from './rampMesh.ts';
 import { buildBridges } from './bridgeMesh.ts';
 import { buildPitView } from './pitMesh.ts';
+import { buildBoostPads } from './boostMesh.ts';
 import { themeOf } from './theme.ts';
 import { toon } from './materials.ts';
 
@@ -64,6 +65,7 @@ export function buildTrackView(track: Track): THREE.Group {
   if (bridges) group.add(bridges);
   const pit = buildPitView(track, SURFACE_COLORS[Surface.Asphalt]);
   if (pit) group.add(pit);
+  group.add(buildBoostPads(track));
   return group;
 }
 
