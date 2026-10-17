@@ -3,7 +3,7 @@
 // the shared pit layout (pit.ts), so it lines up with the physics.
 
 import * as THREE from 'three';
-import { laneOffset, PIT, type Pit } from '../../shared/track/pit.ts';
+import { laneOffset, PIT, pitLines, type Pit } from '../../shared/track/pit.ts';
 import type { Track } from '../../shared/track/types.ts';
 import { toon } from './materials.ts';
 
@@ -77,13 +77,16 @@ export function buildPitView(track: Track, asphaltColor: string): THREE.Group | 
   const yellow = new THREE.Color('#f2c230');
   strip(ground, p, p.a, p.b, lane(-H), lane(H), 0.006, asphalt);
   strip(ground, p, p.a + 4, p.b - 4, lane(H - 0.55), lane(H - 0.3), 0.012, white);
-  // The pit box: yellow edge toward the island and a bay for each car.
+  // The pit box: yellow edge toward the island and lines across the lane.
+  // Repairs run from the first line to the last, so those two span the
+  // whole lane (and are wider); the ones between mark the bays.
   strip(ground, p, p.box0, p.box1, flat(p.barrier + PIT.island + 0.3), flat(p.barrier + PIT.island + 0.55), 0.012, yellow);
-  for (let u = p.box0 + 4; u + 5 <= p.box1 - 2; u += 9) {
-    for (const [u0, u1] of [[u, u + 0.25], [u + 5, u + 5.25]]) {
-      strip(ground, p, u0, u1, flat(p.pitOff - 2.2), flat(p.pitOff + H - 0.6), 0.012, yellow);
-    }
-  }
+  const lines = pitLines(p);
+  lines.forEach((u, k) => {
+    const end = k === 0 || k === lines.length - 1;
+    const w = end ? 0.5 : 0.25;
+    strip(ground, p, u - w / 2, u + w / 2, flat(end ? p.pitOff - H + 0.3 : p.pitOff - 2.2), flat(p.pitOff + H - 0.6), 0.012, end ? white : yellow);
+  });
   g.add(ground.mesh('pitLane', false));
 
   // --- The island: a concrete block with a striped top, like the barriers.
@@ -123,8 +126,10 @@ export function buildPitView(track: Track, asphaltColor: string): THREE.Group | 
   // A red band along the roof edge and a door for each bay, facing the lane.
   const front = g0 - 0.02;
   garage.add(at(p, p.box0, front, gh - 0.4), at(p, p.box1, front, gh - 0.4), at(p, p.box1, front, gh), at(p, p.box0, front, gh), stripe);
-  for (let u = p.box0 + 4; u + 5 <= p.box1 - 2; u += 9) {
-    garage.add(at(p, u + 0.4, front, 0), at(p, u + 4.6, front, 0), at(p, u + 4.6, front, gh * 0.72), at(p, u + 0.4, front, gh * 0.72), doorC);
+  for (let k = 0; k + 1 < lines.length; k++) {
+    const u0 = lines[k] + 0.8;
+    const u1 = lines[k + 1] - 0.8;
+    garage.add(at(p, u0, front, 0), at(p, u1, front, 0), at(p, u1, front, gh * 0.72), at(p, u0, front, gh * 0.72), doorC);
   }
   g.add(garage.mesh('pitGarage', true));
 

@@ -22,7 +22,7 @@ describe('pit lane', () => {
     }
   });
 
-  it('repairs a parked car every full second', () => {
+  it('repairs a parked car as time goes by', () => {
     const track = getTrack(GREEN_VALLEY);
     const p = track.pit!;
     const w = createWorld(track, 1, 1, { laps: 3, countdownTicks: 0 });
@@ -38,10 +38,10 @@ describe('pit lane', () => {
     for (let k = 0; k < 60 * 8; k++) {
       stepWorld(w, track, [inp], [DEFAULT_TUNING]);
       for (let e = 0; e < w.events.count; e++) if (w.events.list[e].kind === Ev.Repair) repairs++;
-      if (k === 59) expect(car.damage).toBeCloseTo(0.55 - PIT.repair, 6);
+      if (k === 59) expect(car.damage).toBeCloseTo(0.55 - PIT.repairPerSecond, 3);
     }
     expect(car.damage).toBe(0);
-    expect(repairs).toBe(Math.ceil(0.55 / PIT.repair));
+    expect(repairs).toBeGreaterThan(5);
     expect(car.respawns).toBe(0);
     expect(inPitBox(p, car.x, car.z)).toBe(true);
   });
@@ -92,5 +92,33 @@ describe('pit lane', () => {
     expect(w.shots.some((s) => s.kind !== 0)).toBe(false);
     expect(w.cars[1].damage).toBe(0);
   });
-});
 
+  it('driving through at full speed still mends 45%, and slower mends more', () => {
+    const track = getTrack(GREEN_VALLEY);
+    const p = track.pit!;
+    const through = (speed: number) => {
+      const w = createWorld(track, 1, 1, { laps: 3, countdownTicks: 0 });
+      stepWorld(w, track, [], [DEFAULT_TUNING]);
+      const car = w.cars[0];
+      const lat = p.pitOff * p.side;
+      const u = p.zone0 - 15;
+      Object.assign(car, {
+        x: p.ox + p.tx * u + p.nx * lat, z: p.oz + p.tz * u + p.nz * lat, heading: Math.atan2(p.tx, -p.tz),
+        vx: p.tx * speed, vz: p.tz * speed, damage: 0.95,
+      });
+      resetProgress(car, track);
+      // Hold the speed: gas to keep going, nothing else.
+      const inp = { ...neutralInput(), throttle: speed > 20 ? 1 : 0.4 };
+      for (let k = 0; k < 60 * 20; k++) {
+        stepWorld(w, track, [inp], [DEFAULT_TUNING]);
+        const along = (car.x - p.ox) * p.tx + (car.z - p.oz) * p.tz;
+        if (along > p.zone1 + 2) break;
+      }
+      return 0.95 - car.damage;
+    };
+    const fast = through(40);
+    const slow = through(8);
+    expect(fast).toBeGreaterThanOrEqual(PIT.throughRepair);
+    expect(slow).toBeGreaterThan(fast + 0.2);
+  });
+});

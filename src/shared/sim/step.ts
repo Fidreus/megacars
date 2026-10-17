@@ -16,7 +16,7 @@ import { Btn, NEUTRAL_INPUT, neutralInput, type CarInput } from './input.ts';
 import { resetProgress, updateProgress } from './race.ts';
 import { RacePhase, respawnCar, standings, type World } from './world.ts';
 import { fellOff, groundUnder, makeGround, safeRespawnS, stepRamps } from './ramps.ts';
-import { inPitArea, inPitBox, PIT } from '../track/pit.ts';
+import { inPitArea, inPitBox, pitRepair } from '../track/pit.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
@@ -126,13 +126,17 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     const trying = (car.aiDriven || inp.throttle > 0.3 || inp.brake > 0.3) && !car.airborne;
     // Drifting mends the car a little.
     if (car.sliding && !car.airborne && speed > 8 && car.damage > 0) car.damage = Math.max(0, car.damage - WEAPON.driftRepair * DT);
-    // Pit box: every full second there repairs the car (standing still is allowed).
-    const inPit = !car.airborne && car.y < 1 && inPitBox(track.pit, car.x, car.z);
-    if (inPit) {
+    // Pit box, between the first and last line: driving through mends a fixed
+    // share, and time spent there mends more (standing still is allowed).
+    const pit = track.pit;
+    const inPit = !car.airborne && car.y < 1 && inPitBox(pit, car.x, car.z);
+    if (inPit && pit) {
       car.pitTicks++;
-      if (car.pitTicks % 60 === 0 && car.damage > 0) {
-        car.damage = Math.max(0, +(car.damage - PIT.repair).toFixed(4));
-        pushEvent(w.events, Ev.Repair, car.id, -1, car.damage, car.x, car.z);
+      if (car.damage > 0) {
+        const along = Math.max(0, car.vx * pit.tx + car.vz * pit.tz) * DT;
+        car.damage = Math.max(0, car.damage - pitRepair(pit, along, DT));
+        // Feedback (wrench sound, damage left) a few times a second, and when done.
+        if (car.pitTicks % 30 === 0 || car.damage === 0) pushEvent(w.events, Ev.Repair, car.id, -1, car.damage, car.x, car.z);
       }
     } else {
       car.pitTicks = 0;

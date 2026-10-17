@@ -1,7 +1,8 @@
 // Pit lane: a short detour beside the start straight. It leaves the road
 // before the start line, runs behind a concrete island and rejoins after it.
-// Every full second in the pit box (the part behind the island) repairs the
-// car a little, so a battered car can choose between time and damage.
+// Between the first and the last line painted across the lane the car is
+// repaired: driving the whole way through mends a fixed share, and every
+// second spent there mends more, so slowing down (or stopping) pays off.
 //
 // The start straight is straight, so the lane is described in the straight's
 // own coordinates: u along it from the start line (negative before it) and
@@ -15,8 +16,12 @@ export const PIT = {
   laneHalf: 4,
   /** Width of the concrete island between the road and the lane (more than a car is wide). */
   island: 3,
-  /** Damage repaired per full second in the pit box. */
-  repair: 0.2,
+  /** Damage mended by driving from the first line to the last, however fast. */
+  throughRepair: 0.45,
+  /** Damage mended per second between the lines on top of that. */
+  repairPerSecond: 0.12,
+  /** Rough spacing of the lines painted across the lane. */
+  bayEvery: 6,
   /** Room behind the outer wall for the garages. */
   garage: 10,
   /** Longest lane (each way from the start line) and the shortest that is worth it. */
@@ -46,6 +51,20 @@ export interface Pit {
   /** The pit box (along): where the island is. */
   box0: number;
   box1: number;
+  /** The repair zone (along): the first and the last line across the lane. */
+  zone0: number;
+  zone1: number;
+}
+
+/** Where the lines across the lane are painted (along); the first and last bound the repair zone. */
+export function pitLines(p: Pit): number[] {
+  const n = Math.max(2, Math.round((p.zone1 - p.zone0) / PIT.bayEvery));
+  return Array.from({ length: n + 1 }, (_, k) => p.zone0 + ((p.zone1 - p.zone0) * k) / n);
+}
+
+/** Damage mended in one tick between the lines: `along` metres driven forward, `dt` seconds spent. */
+export function pitRepair(p: Pit, along: number, dt: number): number {
+  return (PIT.throughRepair * along) / (p.zone1 - p.zone0) + PIT.repairPerSecond * dt;
 }
 
 /** Lane centre (lat) at `u`. */
@@ -70,11 +89,11 @@ export function pitLocal(p: Pit, x: number, z: number, out: { u: number; lat: nu
 
 const local = { u: 0, lat: 0 };
 
-/** In the pit box, where the car gets repaired. */
+/** Between the first and last line across the lane, behind the island: where the car gets repaired. */
 export function inPitBox(p: Pit | null, x: number, z: number): boolean {
   if (!p) return false;
   pitLocal(p, x, z, local);
-  return local.u >= p.box0 && local.u <= p.box1 && local.lat >= p.barrier + PIT.island && local.lat <= p.pitOff + PIT.laneHalf + 0.4;
+  return local.u >= p.zone0 && local.u <= p.zone1 && local.lat >= p.barrier + PIT.island && local.lat <= p.pitOff + PIT.laneHalf + 0.4;
 }
 
 /** On the pit lane (anywhere from leaving the road to rejoining it). */
@@ -148,5 +167,7 @@ export function buildPit(track: Track): Pit | null {
     pitOff,
     box0: a + ramp + 4,
     box1: b - ramp - 4,
+    zone0: a + ramp + 7,
+    zone1: b - ramp - 7,
   };
 }
