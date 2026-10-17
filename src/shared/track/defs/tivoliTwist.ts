@@ -10,7 +10,9 @@ export const TIVOLI_TWIST: TrackDef = {
   id: 'tivoli',
   name: 'Tivoli Twist',
   theme: 'tivoli',
-  width: 17,
+  width: 19,
+  // Wider still through the bends: 24 m at the apex.
+  cornerWiden: 2.5,
   runoff: 4,
   startAt: 0.45,
   laps: 3,

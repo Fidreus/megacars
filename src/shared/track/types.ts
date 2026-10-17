@@ -77,6 +77,8 @@ export interface TrackDef {
   theme: string;
   /** Road width in metres. */
   width: number;
+  /** Extra half-width in the corners (metres each side), eased in and out along the road. */
+  cornerWiden?: number;
   /** Grass/gravel strip between road edge and barrier, metres. */
   runoff: number;
   runoffSurface?: SurfaceId;

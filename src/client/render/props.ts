@@ -109,6 +109,8 @@ export function buildProps(track: Track): Props {
   const rnd = makeRng((track.def.seed ?? 1) * 4241);
   const wallOff = track.def.width / 2 + track.def.runoff;
   const runs = straights(track, 40);
+  // Roads can be wider in the corners: the barrier's distance at sample i.
+  const wallAt = (i: number) => track.hw[i] + track.def.runoff;
 
   // --- Grandstand on the far side of the straight through the start line.
   const main = runs.find((r) => r.i0 > r.i1 || r.i0 === 0) ?? runs.reduce((a, b) => (b.length > a.length ? b : a), runs[0]);
@@ -138,7 +140,8 @@ export function buildProps(track: Track): Props {
       for (let a = 22; a < r.length - 18; a += 44) {
         const f = frame(track, r.i0, a, sgn * (wallOff + 2.2));
         // Not under or beside a bridge, and never on another stretch of road.
-        if (track.deck[(r.i0 + Math.round(a)) % track.n] !== 0 || distanceToCentreline(track, f.x, f.z) < wallOff + 1.5) continue;
+        const bi = (r.i0 + Math.round(a)) % track.n;
+        if (track.deck[bi] !== 0 || distanceToCentreline(track, f.x, f.z) < wallAt(bi) + 1.5) continue;
         const g = new THREE.Group();
         const board = new THREE.Mesh(boardGeo, boardMats[sponsor++ % boardMats.length]);
         board.position.set(0, 1.0, 0.5);
@@ -169,7 +172,7 @@ export function buildProps(track: Track): Props {
     if (Math.abs(k) < 1 / 60 || track.s[i] - lastPlaced < 1.2) continue;
     lastPlaced = track.s[i];
     const outSide = k > 0 ? -1 : 1;
-    const off = outSide * (wallOff + 1.35);
+    const off = outSide * (wallAt(i) + 1.35);
     const x = track.px[i] + track.nx[i] * off;
     const z = track.pz[i] + track.nz[i] * off;
     for (let h = 0; h < 3; h++) {
@@ -201,10 +204,10 @@ export function buildProps(track: Track): Props {
   for (let s = 20; s < track.length - 10; s += 58) {
     const i = Math.floor((s / track.length) * track.n);
     const sgn = facesCamera(track.nx[i], track.nz[i]) ? -1 : 1; // lamps on the far side
-    const off = sgn * (wallOff + 1.2);
+    const off = sgn * (wallAt(i) + 1.2);
     const x = track.px[i] + track.nx[i] * off;
     const z = track.pz[i] + track.nz[i] * off;
-    if (track.deck[i] !== 0 || distanceToCentreline(track, x, z) < wallOff + 0.8) continue;
+    if (track.deck[i] !== 0 || distanceToCentreline(track, x, z) < wallAt(i) + 0.8) continue;
     const lamp = new THREE.Group();
     for (const [geo, mat] of [[poleGeo, poleMat], [armGeo, poleMat], [headGeo, bulbs]] as const) {
       const m = new THREE.Mesh(geo, mat);

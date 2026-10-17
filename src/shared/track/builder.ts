@@ -97,6 +97,18 @@ export function buildTrack(def: TrackDef): Track {
   const curv = new Float64Array(ks);
   const s = new Float64Array(ss);
   const hw = new Float64Array(n).fill(def.width / 2);
+  const widen = def.cornerWiden ?? 0;
+  if (widen > 0) {
+    // Wider in the corners: a moving average of "in a corner" over about
+    // 24 m, so the road widens gently into each bend and narrows after it.
+    const half = Math.round(12 / SAMPLE_DS);
+    const inCorner = ks.map((k) => (k !== 0 ? 1 : 0));
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      for (let d = -half; d <= half; d++) sum += inCorner[(i + d + n) % n];
+      hw[i] += (widen * sum) / (2 * half + 1);
+    }
+  }
   for (let i = 0; i < n; i++) {
     tx[i] = Math.sin(hs[i]);
     tz[i] = -Math.cos(hs[i]);
@@ -105,7 +117,7 @@ export function buildTrack(def: TrackDef): Track {
   }
 
   let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
-  const reach = def.width / 2 + def.runoff;
+  const reach = def.width / 2 + (def.cornerWiden ?? 0) + def.runoff;
   for (let i = 0; i < n; i++) {
     minX = Math.min(minX, px[i] - reach);
     maxX = Math.max(maxX, px[i] + reach);
@@ -185,7 +197,7 @@ function buildPrims(def: TrackDef, errors: string[]): Prim[] {
   const hout: number[] = [];
   const turn: number[] = [];
   const tl: number[] = [];
-  const minR = def.width / 2 + def.runoff + 0.5;
+  const minR = def.width / 2 + (def.cornerWiden ?? 0) + def.runoff + 0.5;
   for (let i = 0; i < n; i++) {
     const prev = P[(i - 1 + n) % n];
     const cur = P[i];
@@ -510,7 +522,7 @@ function buildSurfaceGrid(track: Track): SurfaceGrid {
   const dist = new Float32Array(cols * rows).fill(1e9);
   const nearest = new Int32Array(cols * rows).fill(-1);
   const data = new Uint8Array(cols * rows).fill(Surface.Grass);
-  const reach = def.width / 2 + def.runoff + 2;
+  const reach = def.width / 2 + (def.cornerWiden ?? 0) + def.runoff + 2;
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
     const ax = px[i], az = pz[i], bx = px[j], bz = pz[j];
