@@ -90,6 +90,8 @@ export interface TrackDef {
   /** Scenery the theme puts at fixed spots (only looks, no effect on driving). */
   landmarks?: readonly { kind: string; x: number; z: number }[];
   laps?: number;
+  /** Short tracks: laps raced per lap chosen in the menus (default 1). */
+  lapScale?: number;
   seed?: number;
 }
 

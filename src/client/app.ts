@@ -6,7 +6,7 @@ import { DT } from '../shared/config/constants.ts';
 import { SURFACES, Surface } from '../shared/config/surfaces.ts';
 import { cloneTuning, DEFAULT_TUNING, type CarTuning } from '../shared/config/tuning.ts';
 import { boardKey, LEAGUE_NAMES, LEAGUES, leagueOf, leagueTuning } from '../shared/game/leagues.ts';
-import { TRACKS, TRACK_LIST } from '../shared/track/defs/index.ts';
+import { TRACKS, TRACK_LIST, raceLaps } from '../shared/track/defs/index.ts';
 import type { Track } from '../shared/track/types.ts';
 import { Ev } from '../shared/sim/events.ts';
 import { copyInput, NEUTRAL_INPUT, type CarInput } from '../shared/sim/input.ts';
@@ -101,6 +101,12 @@ const FOLLOW_ZOOM = 1.35;
 const FOLLOW_TILT = 50;
 /** Camera height option: low, normal, high. */
 const CAM_HEIGHTS = [0.8, 1, 1.25];
+/** "LAPS: 3", or on a short track "LAPS: 3 X3 = 9" (the laps actually raced). */
+function lapsLabel(track: string, laps: number): string {
+  const raced = raceLaps(track, laps);
+  return raced === laps ? `LAPS: ${laps}` : `LAPS: ${laps} X${raced / laps} = ${raced}`;
+}
+
 const CAM_HEIGHT_NAMES = ['LOW', 'NORMAL', 'HIGH'];
 
 /** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
@@ -509,7 +515,7 @@ export class App {
           this.toTitle();
         },
       },
-      { label: () => `LAPS: ${s.laps}`, change: (d: number) => { s.laps = 1 + cycle(s.laps - 1, 9, d); changed(); } },
+      { label: () => lapsLabel(s.track, s.laps), change: (d: number) => { s.laps = 1 + cycle(s.laps - 1, 9, d); changed(); } },
       {
         label: () => `OPPONENTS: ${s.opponents}`,
         change: (d: number) => { s.opponents = cycle(s.opponents, 9 - s.players, d); changed(); },
@@ -601,7 +607,7 @@ export class App {
           o().configure({ track: TRACK_LIST[cycle(i, TRACK_LIST.length, d)].id });
         },
       },
-      { label: () => `LAPS: ${cfg()?.laps ?? 3}`, disabled: notHost, change: (d: number) => o().configure({ laps: 1 + cycle((cfg()?.laps ?? 3) - 1, 9, d) }) },
+      { label: () => lapsLabel(cfg()?.track ?? '', cfg()?.laps ?? 3), disabled: notHost, change: (d: number) => o().configure({ laps: 1 + cycle((cfg()?.laps ?? 3) - 1, 9, d) }) },
       { label: () => `COMPUTER CARS: ${cfg()?.ai ?? 0}`, disabled: notHost, change: (d: number) => o().configure({ ai: cycle(cfg()?.ai ?? 0, 8, d) }) },
       {
         label: () => `DIFFICULTY: ${DIFFICULTIES[cfg()?.difficulty ?? 1]}`,

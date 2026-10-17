@@ -110,6 +110,31 @@ export const THEMES: Record<string, Theme> = {
   },
 };
 
+export const TIVOLI_THEME: Theme = {
+  ground: '#58a040',
+  trees: 'cone',
+  treeColors: ['#3c7d34', '#4a8a3a', '#5a9a3c', '#2f6b2e'],
+  treeDensity: 0.45,
+  bushColors: ['#3c7d34', '#4a8a3a', '#5a9a3c'],
+  rockColors: ['#8c8a84', '#a3a097'],
+  rockCount: 30,
+  houseWalls: [],
+  houseRoofs: [],
+  pond: 'none',
+  shore: '#c8b07a',
+  houses: false,
+  patchColors: { 2: '#e8d048' },
+  sponsors: [
+    ['CANDY KING', '#f28aa0', '#ffffff'],
+    ['POP CORNER', '#f2c230', '#e8322a'],
+    ['LOOP-DE-LOOP', '#2f6fe0', '#ffd84a'],
+    ['FUN FAIR', '#e8322a', '#ffffff'],
+    ['LUCKY WHEEL', '#9a45d8', '#ffd84a'],
+    ['SODA SPLASH', '#28c4d0', '#ffffff'],
+  ],
+};
+THEMES.tivoli = TIVOLI_THEME;
+
 export function themeOf(id: string): Theme {
   return THEMES[id] ?? COUNTRYSIDE;
 }

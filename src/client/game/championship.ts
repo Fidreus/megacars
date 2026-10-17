@@ -10,7 +10,7 @@ import {
 import { makeRng } from '../../shared/math/rng.ts';
 import type { Entrant, RaceSpec } from '../../shared/net/protocol.ts';
 import { COUNTDOWN_TICKS, type World } from '../../shared/sim/world.ts';
-import { TRACK_LIST } from '../../shared/track/defs/index.ts';
+import { TRACK_LIST, raceLaps } from '../../shared/track/defs/index.ts';
 import type { StandingsRow } from '../ui/screens/shop.ts';
 import type { RaceSettings } from './settings.ts';
 
@@ -106,7 +106,7 @@ export function nextRaceSpec(c: Championship): RaceSpec {
   return {
     id: c.race + 1,
     track: c.tracks[c.race],
-    laps: c.laps,
+    laps: raceLaps(c.tracks[c.race], c.laps),
     seed: c.seed + c.race,
     countdownTicks: COUNTDOWN_TICKS,
     weapons: c.weapons,

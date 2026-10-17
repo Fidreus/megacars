@@ -126,7 +126,7 @@ export function specProblem(spec: RaceSpec): string | null {
   const people = spec.entrants.filter((e) => e.playerId >= 0);
   if (people.length !== 1 || people[0].playerId !== 0) return 'one player only';
   if (spec.entrants.some((e) => e.loadout)) return 'stock cars only';
-  if (!Number.isInteger(spec.laps) || spec.laps < 0 || spec.laps > 9) return 'bad laps';
+  if (!Number.isInteger(spec.laps) || spec.laps < 0 || spec.laps > 30) return 'bad laps';
   if (!Number.isInteger(spec.seed) || !Number.isInteger(spec.countdownTicks) || spec.countdownTicks < 0 || spec.countdownTicks > 600) return 'bad race';
   if (spec.entrants.some((e) => typeof e.skill !== 'number' || !(e.skill >= 0 && e.skill <= 1.5))) return 'bad field';
   if (spec.league !== undefined && spec.league !== 'standard' && spec.league !== 'super') return 'bad league';

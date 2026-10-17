@@ -18,7 +18,7 @@ import {
 import { copyInput, neutralInput, type CarInput } from '../shared/sim/input.ts';
 import { stepWorld } from '../shared/sim/step.ts';
 import { COUNTDOWN_TICKS, RacePhase, type World } from '../shared/sim/world.ts';
-import { DEFAULT_TRACK, TRACKS } from '../shared/track/defs/index.ts';
+import { DEFAULT_TRACK, TRACKS, raceLaps } from '../shared/track/defs/index.ts';
 import type { Track } from '../shared/track/types.ts';
 
 /** What a room needs from a connection. */
@@ -341,7 +341,7 @@ export class Room {
     const spec: RaceSpec = {
       id: raceIds++,
       track: this.config.track,
-      laps: this.config.laps,
+      laps: raceLaps(this.config.track, this.config.laps),
       seed: seed & 0x7fffffff,
       countdownTicks: COUNTDOWN_TICKS,
       weapons: this.config.weapons,

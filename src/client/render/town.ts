@@ -16,6 +16,7 @@ import {
   adobe, apartment, carPark, chalet, decal, farm, field, garden, gasStation, house, shade, shopFront, warehouse, windowBox, type Kit,
 } from './buildings.ts';
 import { barrelStack, beerTent, beerTruck, brewhouse, giantMug, hopGarden, maltSilos, pub } from './brewery.ts';
+import { balloons, bigTop, carousel, dropTower, FAIR, ferrisWheel, rollerCoaster, stall } from './tivoli.ts';
 
 export interface Town {
   group: THREE.Group;
@@ -311,6 +312,25 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
       const p = pick(16, 2, 40, 200);
       if (p) add(field(kit, 28 + rnd() * 10, 20 + rnd() * 8, rnd() < 0.6 ? ['#c8a850', '#d8bc68'] : ['#7a8a3a', '#9aa848']), p[0], p[1], 16, false);
     }
+  } else if (theme === 'tivoli') {
+    // The big rides inside the circuit, where every lap passes them; stalls,
+    // balloons, a coaster and a drop tower around the outside.
+    const at = (make: () => THREE.Object3D, x: number, z: number, r: number, h: number) => {
+      if (far(x, z) > clear + r && free(x, z, r) && !hidesRoad(x, z, r, h)) add(make(), x, z, r, false);
+    };
+    for (const lm of track.def.landmarks ?? []) {
+      const make = lm.kind === 'ferriswheel' ? () => ferrisWheel(kit) : lm.kind === 'carousel' ? () => carousel(kit) : () => bigTop(kit);
+      const [r, h] = lm.kind === 'ferriswheel' ? [11, 34] : lm.kind === 'carousel' ? [8, 10] : [12, 12];
+      at(make, lm.x, lm.z, r, h);
+    }
+    place(2, 16, 10, 6, 70, () => rollerCoaster(kit, 30));
+    place(1, 5, 32, 8, 90, () => dropTower(kit));
+    place(2, 12, 12, 8, 120, () => bigTop(kit));
+    place(2, 8, 10, 6, 90, () => carousel(kit));
+    place(2, 6, 10, 4, 60, () => carousel(kit));
+    place(30, 4, 4, 1, 60, () => stall(kit, choose(FAIR)));
+    place(16, 2, 6, 1, 50, () => balloons(kit));
+    place(2, 11, 2, 4, 70, () => carPark(kit, 20, 14));
   } else if (theme === 'nuclear') {
     place(4, 9, 38, 6, 80, officeTower);
     place(5, 15, 12, 4, 110, () => warehouse(kit, choose(['#c8ccd0', '#d8d4c8', '#9fa6a8', '#5ac8c8'])));
@@ -325,16 +345,19 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
       ? ['#c8322a', '#e8b030', '#2f6fe0', '#2f8a4a', '#e86a2a', '#f0f0e8']
       : theme === 'brewery'
         ? ['#a8462e', '#f0e6d2', '#e8a020', '#2f6fe0', '#2f8a4a', '#f8f0d8']
+        : theme === 'tivoli'
+        ? FAIR
         : theme === 'nuclear'
         ? ['#c8ccd0', '#f2c230', '#5ac8c8', '#e8e8e0', '#9fa6a8']
         : pastels;
   const street = (h: number, color: string): THREE.Object3D => {
+    if (theme === 'tivoli') return h < 8 ? stall(kit, color) : balloons(kit);
     if (theme === 'winter' && h < 14) return chalet(kit, color);
     if (theme === 'brewery' && h < 14) return pub(kit, color);
     if (h < 10) return shopFront(kit, 9 + rnd() * 4, 8, theme === 'desert' ? color : shade(color, 1), choose(signs));
     return block(h, [color]);
   };
-  const heights = theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : theme === 'brewery' ? [16, 9.6, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
+  const heights = theme === 'tivoli' ? [6.4, 4] : theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : theme === 'brewery' ? [16, 9.6, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
   for (let i = 0; i < track.n; i += 30) {
     for (const side of [-1, 1]) {
       if (rnd() > 0.7) continue;

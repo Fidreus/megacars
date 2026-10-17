@@ -14,6 +14,7 @@ import { stepWorld } from '../../shared/sim/step.ts';
 import { COUNTDOWN_TICKS, type World } from '../../shared/sim/world.ts';
 import type { GameSession } from './session.ts';
 import type { RaceSettings } from './settings.ts';
+import { raceLaps } from '../../shared/track/defs/index.ts';
 
 export class RaceSession implements GameSession {
   readonly settings: RaceSettings;
@@ -80,7 +81,7 @@ function specFromSettings(settings: RaceSettings, seed: number): RaceSpec {
   return {
     id: 0,
     track: settings.track,
-    laps: settings.practice ? 0 : settings.laps,
+    laps: settings.practice ? 0 : raceLaps(settings.track, settings.laps),
     seed,
     countdownTicks: settings.practice ? 0 : COUNTDOWN_TICKS,
     weapons: settings.weapons,
