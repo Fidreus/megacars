@@ -28,8 +28,9 @@ describe('leagues', () => {
     expect(meg.brakeDecel).toBeGreaterThan(sup.brakeDecel);
     expect(meg.aGrip).toBeGreaterThan(sup.aGrip);
     expect(leagueOf('mega')).toBe('mega');
-    // A small step, not a leap: well under the tunnelling speed cap.
-    expect(meg.vTop).toBeLessThan(sup.vTop * 1.15);
+    // A step, not a leap: above Supercars but well short of half again as fast.
+    expect(meg.vTop).toBeGreaterThan(sup.vTop * 1.2);
+    expect(meg.vTop).toBeLessThan(sup.vTop * 1.3);
   });
 
   it('a race spec carries its league to every car', () => {

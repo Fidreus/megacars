@@ -28,19 +28,19 @@ const SUPER: Partial<Record<keyof CarTuning, number>> = {
   reverseAccel: 1.25,
 };
 
-/** Megacars: Supercars, plus a little more of everything. */
+/** Megacars: Supercars, plus a little more of everything — 15% up again on every step. */
 const MEGA_ON_SUPER: Partial<Record<keyof CarTuning, number>> = {
-  accel0: 1.1,
-  vTop: 1.08,
-  brakeDecel: 1.08,
-  aGrip: 1.07,
-  aSlide: 1.07,
-  aSteerSlide: 1.07,
-  omegaPeak: 1.08,
-  kYawGrip: 1.08,
-  kYawSlide: 1.08,
-  driftMinSpeed: 1.05,
-  reverseAccel: 1.08,
+  accel0: 1.265,
+  vTop: 1.242,
+  brakeDecel: 1.242,
+  aGrip: 1.2305,
+  aSlide: 1.2305,
+  aSteerSlide: 1.2305,
+  omegaPeak: 1.242,
+  kYawGrip: 1.242,
+  kYawSlide: 1.242,
+  driftMinSpeed: 1.2075,
+  reverseAccel: 1.242,
 };
 
 export function leagueOf(v: unknown): League {
