@@ -3,8 +3,8 @@
 
 export interface Theme {
   ground: string;
-  /** cone: conifers + round trees; cactus: saguaros; snowpine: snow-capped firs. */
-  trees: 'cone' | 'cactus' | 'snowpine';
+  /** cone: conifers + round trees; cactus: saguaros; snowpine: snow-capped firs; leafy: round street trees only. */
+  trees: 'cone' | 'cactus' | 'snowpine' | 'leafy';
   treeColors: string[];
   /** Tree density relative to the countryside. */
   treeDensity: number;
@@ -158,6 +158,33 @@ THEMES.cigar = {
     ['ROBUSTO', '#c8322a', '#ffffff'],
     ['CORONA', '#2f5a3a', '#f2e6b0'],
     ['MADURO RACING', '#5a3420', '#f2c230'],
+  ],
+};
+
+/** Midtown: asphalt and concrete, a few street trees, towers all around. */
+THEMES.city = {
+  ground: '#5a5e64',
+  trees: 'leafy',
+  treeColors: ['#3c7d34', '#4a8a3a', '#2f6b2e', '#5a9a3c'],
+  treeDensity: 0.12,
+  bushColors: ['#3f6b3a', '#4a7a42', '#35603a'],
+  rockColors: ['#8a8d90'],
+  rockCount: 0,
+  houseWalls: [],
+  houseRoofs: [],
+  pond: 'none',
+  shore: '#9a978f',
+  // Concrete sidewalks between the asphalt and the barriers.
+  runoff: '#9a978f',
+  houses: false,
+  patchColors: { 2: '#24384a' },
+  sponsors: [
+    ['BIG APPLE', '#c8261f', '#ffd84a'],
+    ['MEGA COLA', '#1d3c8f', '#ffffff'],
+    ['MIDTOWN 24H', '#111111', '#f2c230'],
+    ['BROADWAY', '#f4f0e6', '#c8261f'],
+    ['PIXEL PIZZA', '#2f8a4a', '#ffffff'],
+    ['SUBWAY RACING', '#1d3c8f', '#ffffff'],
   ],
 };
 

@@ -84,6 +84,7 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
   const greens = theme.treeColors;
   const capped = theme.trees === 'snowpine';
   const trunkless = theme.trees === 'cactus';
+  const leafy = theme.trees === 'leafy';
   for (let i = 0; i < treeCount; i++) {
     const p = pick(clear, 1e9);
     if (!p) continue;
@@ -100,12 +101,12 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
       crowns.setColorAt(nc++, color);
       rounds.setMatrixAt(nr, dummy.matrix);
       rounds.setColorAt(nr++, color.set('#f2f6fa'));
-    } else if (rnd() < 0.7) {
-      crowns.setMatrixAt(nc, dummy.matrix);
-      crowns.setColorAt(nc++, color);
-    } else {
+    } else if (leafy || rnd() >= 0.7) {
       rounds.setMatrixAt(nr, dummy.matrix);
       rounds.setColorAt(nr++, color.multiplyScalar(1.1));
+    } else {
+      crowns.setMatrixAt(nc, dummy.matrix);
+      crowns.setColorAt(nc++, color);
     }
     if (!trunkless) trunks.setMatrixAt(nt++, dummy.matrix);
   }

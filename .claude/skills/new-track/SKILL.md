@@ -17,7 +17,7 @@ identiskt på server och klient, så **en bana är en del av simuleringen**.
    tills den bygger utan fel, har depå och AI:n klarar den (se "Kontrollera").
 3. Registrera den i `TRACK_LIST` i `src/shared/track/defs/index.ts`.
 4. Ge den ett tema: ett befintligt (`countryside`, `desert`, `winter`, `nuclear`,
-   `brewery`, `tivoli`) eller ett nytt (se "Utseende").
+   `brewery`, `tivoli`, `cigar`, `city`) eller ett nytt (se "Utseende").
 5. Höj `SIM_VERSION` i `src/shared/config/constants.ts` med ett.
 6. `npm run typecheck`, `npx vitest run`, `npm run sim -- --seeds 4 --track <id> --weapons`,
    `npm run build`, och titta på den i webbläsaren.
@@ -151,6 +151,7 @@ export const MY_TRACK: TrackDef = {
   `brewery.ts` och `tivoli.ts`. Landmärken som finns idag:
   - `brewery`: `brewhouse`, `mug` och `tent`.
   - `tivoli`: `ferriswheel`, `carousel` och `bigtop`.
+  - `city`: `tower`, `liberty`, `board` och `subway`.
 - **Landmärken tappas tyst** om de inte får plats. Två saker räcker:
   - de står för nära vägen eller ett annat objekt,
   - de skymmer vägen. Ett objekt med höjden h skymmer cirka 0,65·h m mark

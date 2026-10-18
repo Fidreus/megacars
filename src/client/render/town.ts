@@ -17,6 +17,7 @@ import {
 } from './buildings.ts';
 import { barrelStack, beerTent, beerTruck, brewhouse, giantMug, hopGarden, maltSilos, pub } from './brewery.ts';
 import { cigarBoxes, cigarFactory, dryingBarn, giantCigar, humidor } from './cigar.ts';
+import { brickColor, CITY, cityBillboard, cityPark, hotDogCart, libertyStatue, skyscraper, subwayEntrance, taxi, tenement, waterTower as cityWaterTower } from './city.ts';
 import { balloons, bigTop, carousel, dropTower, FAIR, ferrisWheel, rollerCoaster, stall } from './tivoli.ts';
 
 export interface Town {
@@ -352,6 +353,57 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
       const p = pick(16, 2, 30, 200);
       if (p) add(field(kit, 28 + rnd() * 10, 20 + rnd() * 8, rnd() < 0.6 ? ['#5a7a2a', '#7a9a38'] : ['#6a8a30', '#8aa83e']), p[0], p[1], 16, false);
     }
+  } else if (theme === 'city') {
+    // Landmarks inside the block, where every lap passes them: the art-deco
+    // tower, Liberty, a billboard at the hairpin and a subway entrance. Then
+    // skyscrapers, walk-ups, rooftop tanks and street life all around.
+    const at = (make: () => THREE.Object3D, x: number, z: number, r: number, h: number) => {
+      if (far(x, z) > clear + r && free(x, z, r) && !hidesRoad(x, z, r, h)) add(make(), x, z, r, false);
+    };
+    for (const lm of track.def.landmarks ?? []) {
+      const make = lm.kind === 'tower' ? () => skyscraper(kit, 74) : lm.kind === 'liberty' ? () => libertyStatue(kit) : lm.kind === 'board' ? () => cityBillboard(kit) : () => subwayEntrance(kit);
+      const [r, h] = lm.kind === 'tower' ? [18, 74] : lm.kind === 'liberty' ? [12, 40] : lm.kind === 'board' ? [10, 16] : [9, 5];
+      at(make, lm.x, lm.z, r, h);
+    }
+    // A planted square in the middle of the block.
+    if (far(70, 125) > clear + 18 && free(70, 125, 18) && !hidesRoad(70, 125, 18, 0)) add(cityPark(kit), 70, 125, 18, false);
+    // A dense wall of towers on the far (north) side of the road, where they
+    // cannot hide it from the camera. Seen ahead over the barriers each lap.
+    for (let i = 0; i < track.n; i += 20) {
+      const side = track.nz[i] > 0 ? -1 : 1;
+      const gap = 9 + rnd() * 18;
+      const off = side * (track.hw[i] + track.def.runoff + gap);
+      const x = track.px[i] + track.nx[i] * off;
+      const z = track.pz[i] + track.nz[i] * off;
+      const h = 34 + rnd() * 46;
+      const r = 15;
+      if (far(x, z) < clear + r || !free(x, z, r) || hidesRoad(x, z, r, h)) continue;
+      add(skyscraper(kit, h), x, z, r, false);
+    }
+    // The skyline behind the start straight, seen over the pit buildings.
+    for (let x = track.bounds.minX - 40; x < track.bounds.maxX + 40; x += 24 + rnd() * 8) {
+      const h = 44 + rnd() * 50;
+      const r = 16;
+      const z = track.bounds.minZ - 50 - rnd() * 45;
+      if (far(x, z) < clear + r || !free(x, z, r) || hidesRoad(x, z, r, h)) continue;
+      add(skyscraper(kit, h), x, z, r, false);
+    }
+    // Towers and walk-ups filling the blocks.
+    for (let k = 0; k < 36; k++) {
+      const h = 28 + rnd() * 52;
+      const p = pick(15, h, Math.max(4, h * 0.65 - 14), 90);
+      if (p) add(skyscraper(kit, h), p[0], p[1], 15);
+    }
+    for (let k = 0; k < 30; k++) {
+      const p = pick(11, 20, 2, 80);
+      if (p) add(tenement(kit, brickColor(rnd)), p[0], p[1], 11);
+    }
+    place(10, 4, 12, 2, 60, () => cityWaterTower(kit));
+    place(10, 3, 3, 1, 30, () => taxi(kit));
+    place(7, 3, 5, 1, 40, () => hotDogCart(kit));
+    place(3, 9, 5, 2, 60, () => subwayEntrance(kit));
+    place(4, 12, 18, 5, 80, () => cityBillboard(kit));
+    place(3, 11, 2, 4, 70, () => carPark(kit, 20, 14));
   } else if (theme === 'nuclear') {
     place(4, 9, 38, 6, 80, officeTower);
     place(5, 15, 12, 4, 110, () => warehouse(kit, choose(['#c8ccd0', '#d8d4c8', '#9fa6a8', '#5ac8c8'])));
@@ -370,21 +422,29 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
         ? FAIR
         : theme === 'cigar'
         ? ['#6a3a22', '#5a5f66', '#8a4a2a']
+        : theme === 'city'
+        ? CITY
         : theme === 'nuclear'
         ? ['#c8ccd0', '#f2c230', '#5ac8c8', '#e8e8e0', '#9fa6a8']
         : pastels;
   const street = (h: number, color: string): THREE.Object3D => {
     if (theme === 'tivoli') return h < 8 ? stall(kit, color) : balloons(kit);
     if (theme === 'cigar') return h < 5 ? cigarBoxes(kit) : dryingBarn(kit, color);
+    if (theme === 'city') {
+      if (h < 9) return shopFront(kit, 9 + rnd() * 4, 8, color, choose(signs));
+      return h < 22 ? tenement(kit, color) : skyscraper(kit, h);
+    }
     if (theme === 'winter' && h < 14) return chalet(kit, color);
     if (theme === 'brewery' && h < 14) return pub(kit, color);
     if (h < 10) return shopFront(kit, 9 + rnd() * 4, 8, theme === 'desert' ? color : shade(color, 1), choose(signs));
     return block(h, [color]);
   };
-  const heights = theme === 'tivoli' || theme === 'cigar' ? [6.4, 4] : theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : theme === 'brewery' ? [16, 9.6, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
-  for (let i = 0; i < track.n; i += 30) {
+  const heights = theme === 'tivoli' || theme === 'cigar' ? [6.4, 4] : theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : theme === 'brewery' ? [16, 9.6, 6.4] : theme === 'city' ? [57.6, 44.8, 32, 22.4, 16, 12.8, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
+  const frontStep = theme === 'city' ? 16 : 30;
+  const frontSkip = theme === 'city' ? 0.85 : 0.7;
+  for (let i = 0; i < track.n; i += frontStep) {
     for (const side of [-1, 1]) {
-      if (rnd() > 0.7) continue;
+      if (rnd() > frontSkip) continue;
       const r = 6.5;
       const gap = 2 + rnd() * 7;
       const off = (track.hw[i] + track.def.runoff + 1 + gap + r) * side;

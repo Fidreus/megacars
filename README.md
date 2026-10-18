@@ -34,7 +34,7 @@ ingen drift. I sladden orkar däcken mycket mer sidokraft, så rätt timing tar
 dig genom skarpa kurvor mycket fortare. Gas ökar sladdvinkeln, släpp gasen
 eller motstyr för att räta upp. Is, olja och snö sladdar av sig själva.
 
-Sju banor: **Green Valley** (bred landsbygdsbana), **Dust Bowl** (öken,
+Nio banor: **Green Valley** (bred landsbygdsbana), **Dust Bowl** (öken,
 smal och teknisk, grus, oljefläckar och ett hopp över en torr flodfåra),
 **Frost Ring** (vinter, snabba svep med is och packad snö), **Meltdown
 Ridge** (genom ett kärnkraftverk: kyltorn, reaktorhallar, en kylvattenläcka
@@ -43,7 +43,10 @@ och ett hopp över kylvattenkanalen – kommer du för kort får du vada ur),
 en viadukt), **Brewery Bash** (bryggeri, öl på vägen), **Tivoli Twist**
 (kompakt tivolibana med vänster-höger-svängar, körs med tre gånger så många
 varv) och **Cigar Circuit** (kompakt bana i tobakslandet med tre hårnålar på
-rad, rena 180°-svängar för långa drifter, och aska på vägen).
+rad, rena 180°-svängar för långa drifter, och aska på vägen) samt
+**Manhattan Sprint** (kompakt New York-bana genom ett höghuskvarter med två
+långa svepande högersvängar, en trång sidogata, våt asfalt och Liberty,
+subway och taxibilar i kulissen – körs med tre gånger så många varv).
 
 Ny bana? Se `.claude/skills/new-track/SKILL.md` och `npm run track`.
 
