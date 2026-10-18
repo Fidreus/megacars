@@ -16,6 +16,6 @@ export interface GameSession {
   readonly colors: readonly string[];
   /** Car model per car (index into CAR_MODELS), or -1 for "any look". */
   readonly models: readonly number[];
-  /** Car class: Supercars get their own look. */
+  /** Car class: Supercars and Megacars get their own looks. */
   readonly league?: League;
 }

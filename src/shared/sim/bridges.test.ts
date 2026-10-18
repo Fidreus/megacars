@@ -81,7 +81,7 @@ describe('bridges', () => {
   it('a car at 99% damage still clears every broken bridge from where a fall puts it back', () => {
     for (const def of [TWIN_BRIDGES, BREWERY_BASH]) {
       const t = getTrack(def);
-      for (const league of ['standard', 'super'] as const) {
+      for (const league of ['standard', 'super', 'mega'] as const) {
         const tuning = leagueTuning(DEFAULT_TUNING, league);
         for (const b of t.bridges.filter((x) => x.gap)) {
           const w = createWorld(t, 1, 1, { laps: 9, countdownTicks: 0 });

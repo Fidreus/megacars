@@ -643,7 +643,7 @@ export class App {
       {
         label: () => `LEAGUE: ${LEAGUE_NAMES[leagueOf(cfg()?.league)]}`,
         disabled: notHost,
-        change: () => o().configure({ league: leagueOf(cfg()?.league) === 'super' ? 'standard' : 'super' }),
+        change: () => o().configure({ league: LEAGUES[(LEAGUES.indexOf(leagueOf(cfg()?.league)) + 1) % LEAGUES.length] }),
       },
       {
         label: () => (cfg()?.upgrades === false ? 'SHOP: CLOSED' : `SHOP  $${o().profile?.money ?? '...'}`),
@@ -970,7 +970,8 @@ export class App {
     const practice = !!settings.practice && !spec;
     if (!practice) this.tuningPanel?.hide();
     else if (isTuned(this.tuning)) this.flashMessage('TUNED HANDLING (PAUSE > TUNE HANDLING)', 3);
-    if (leagueOf(spec?.league ?? settings.league) === 'super') this.flashMessage('SUPERCARS!', 2.5);
+    const league = leagueOf(spec?.league ?? settings.league);
+    if (league !== 'standard') this.flashMessage(`${LEAGUE_NAMES[league]}!`, 2.5);
     this.setSession(new RaceSession({ ...settings }, practice ? this.tuning : cloneTuning(DEFAULT_TUNING), spec?.seed, spec));
     // Quick races and practice with one person and a stock car can set verified records.
     const rs = this.session as RaceSession;

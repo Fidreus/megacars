@@ -30,7 +30,7 @@ export interface RaceSettings {
   touchAutoGas?: boolean;
   /** Camera: north-up, or turning with the car (nose up the screen). */
   camera: 'classic' | 'follow';
-  /** Car class: standard or Supercars. */
+  /** Car class: Standard, Supercars or Megacars. */
   league: League;
   /** Camera height (how much of the track it shows): 0 low, 1 normal, 2 high. */
   camHeight: number;

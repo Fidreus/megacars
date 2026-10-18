@@ -22,7 +22,10 @@ Titelmenyn styrs med piltangenter/WASD + Enter, handkontroll eller mus:
 starta lopp, 1–2 spelare (delad skärm), bana, antal varv, motståndare,
 svårighetsgrad, tid på dygnet, eller fri träning. Loppet startar med fem
 röda startljus – när de släcks är det fullt ös. Efter målgång visas
-resultatlistan.
+resultatlistan. Under **LEAGUE** väljer du bilklass: **STANDARD** (spelet som
+det är tunat), **SUPERCARS** (mycket snabbare, greppar och bromsar hårdare)
+eller **MEGACARS** (ännu lite snabbare igen, med egen vildare look). Varje
+klass har egna rekordtavlor per bana.
 
 På asfalt greppar bilen tills gränsen och understyr sedan – den sladdar inte
 av sig själv. Driften startar du enklast med **driftknappen** (Z, eller LB på

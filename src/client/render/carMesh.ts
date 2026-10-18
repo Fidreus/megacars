@@ -5,6 +5,7 @@
 // cone of light onto the road.
 
 import * as THREE from 'three';
+import type { League } from '../../shared/game/leagues.ts';
 import { toon } from './materials.ts';
 import { mergeByMaterial } from './batch.ts';
 import { drawText } from '../ui/font.ts';
@@ -227,8 +228,8 @@ export class CarView {
   private wrecked = false;
   private readonly paints: { mat: THREE.MeshPhongMaterial; color: THREE.Color }[] = [];
 
-  /** `supercar`: the Supercars league kit (widebody, big wing, neon underglow). */
-  constructor(color: string, number: number, style = number % STYLES.length, supercar = false) {
+  /** `league`: Supercars and Megacars each get their own racier kit. */
+  constructor(color: string, number: number, style = number % STYLES.length, league: League = 'standard') {
     const st = STYLES[style];
     const paint = new THREE.MeshPhongMaterial({ color, specular: '#5a5a5a', shininess: 45 });
     const stripeHex = stripeColor(color);
@@ -278,8 +279,10 @@ export class CarView {
     ];
     add(merge(stripes), stripe);
 
-    // Wing or ducktail spoiler (Supercars get their own, below).
-    if (supercar) {
+    // Wing or ducktail spoiler (Supercars and Megacars get their own, below).
+    if (league === 'mega') {
+      this.megaKit(add, paint, stripe, front, rear, st.roofY, st.roofZ);
+    } else if (league === 'super') {
       this.supercarKit(add, paint, stripe, front, rear);
     } else if (st.wing === 'duck') {
       add(new THREE.BoxGeometry(BODY_W - 0.1, 0.12, 0.3).translate(0, st.top[st.top.length - 2][1] + 0.08, rear - 0.25), stripe);
@@ -415,6 +418,43 @@ export class CarView {
     glow.position.y = 0.06;
     glow.renderOrder = 2;
     this.root.add(glow);
+  }
+
+  /**
+   * Megacars: the Supercars kit and then some. A third wing element on
+   * endplates, a shark fin and velocity stacks down the deck, quad pipes and
+   * a bigger diffuser, so a Megacar is never mistaken for a Supercar.
+   */
+  private megaKit(
+    add: (geo: THREE.BufferGeometry, mat: THREE.Material, parent?: THREE.Object3D) => THREE.Mesh,
+    paint: THREE.Material, stripe: THREE.Material, front: number, rear: number, roofY: number, roofZ: number,
+  ): void {
+    this.supercarKit(add, paint, stripe, front, rear);
+    const h = 1.38;
+    const z = rear - 0.3;
+    // A third wing element, capped by vertical endplates.
+    add(merge([
+      new THREE.BoxGeometry(2.5, 0.06, 0.5).translate(0, h + 0.34, z + 0.04),
+      new THREE.BoxGeometry(0.05, 0.36, 0.5).translate(-1.24, h + 0.2, z + 0.04),
+      new THREE.BoxGeometry(0.05, 0.36, 0.5).translate(1.24, h + 0.2, z + 0.04),
+    ]), stripe);
+    // A shark fin down the spine, behind the roof number.
+    add(new THREE.BoxGeometry(0.06, 0.36, 1.0).translate(0, roofY - 0.14, roofZ + 0.95), stripe);
+    // Chrome velocity stacks either side of the fin.
+    const stacks: THREE.BufferGeometry[] = [];
+    for (const x of [-0.42, 0.42]) {
+      const y = roofY + 0.02;
+      const sz = roofZ + 0.72;
+      stacks.push(new THREE.CylinderGeometry(0.1, 0.13, 0.34, 8).translate(x, y + 0.09, sz));
+      stacks.push(new THREE.CylinderGeometry(0.15, 0.15, 0.06, 8).translate(x, y + 0.27, sz));
+    }
+    add(merge(stacks), chrome);
+    // A deeper diffuser and quad pipes.
+    add(merge([
+      new THREE.BoxGeometry(0.05, 0.3, 0.4).translate(-0.78, BOTTOM + 0.14, rear - 0.02),
+      new THREE.BoxGeometry(0.05, 0.3, 0.4).translate(0.78, BOTTOM + 0.14, rear - 0.02),
+    ]), carbon);
+    for (const x of [-0.62, 0.62]) add(exhaustGeo, pipe).position.set(x, BOTTOM + 0.14, rear + 0.05);
   }
 
   setLights(on: boolean, strength = 1): void {
