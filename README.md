@@ -34,11 +34,17 @@ ingen drift. I sladden orkar däcken mycket mer sidokraft, så rätt timing tar
 dig genom skarpa kurvor mycket fortare. Gas ökar sladdvinkeln, släpp gasen
 eller motstyr för att räta upp. Is, olja och snö sladdar av sig själva.
 
-Fyra banor: **Green Valley** (bred landsbygdsbana), **Dust Bowl** (öken,
+Sju banor: **Green Valley** (bred landsbygdsbana), **Dust Bowl** (öken,
 smal och teknisk, grus, oljefläckar och ett hopp över en torr flodfåra),
-**Frost Ring** (vinter, snabba svep med is och packad snö) och **Meltdown
+**Frost Ring** (vinter, snabba svep med is och packad snö), **Meltdown
 Ridge** (genom ett kärnkraftverk: kyltorn, reaktorhallar, en kylvattenläcka
-och ett hopp över kylvattenkanalen – kommer du för kort får du vada ur).
+och ett hopp över kylvattenkanalen – kommer du för kort får du vada ur),
+**Twin Bridges** (korsar sig själv två gånger: en trasig bro att hoppa och
+en viadukt), **Brewery Bash** (bryggeri, öl på vägen) och **Tivoli Twist**
+(kompakt tivolibana med vänster-höger-svängar, körs med tre gånger så många
+varv).
+
+Ny bana? Se `.claude/skills/new-track/SKILL.md` och `npm run track`.
 
 **Ramper och hopp:** kör upp på rampen så lyfter bilen – ju fortare desto
 längre. I luften går det inte att styra; en hård landning kostar lite fart
