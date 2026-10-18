@@ -48,7 +48,7 @@ export const SONGS: Record<string, Song> = {
 };
 
 /** Tracks without a song of their own borrow one. */
-const TRACK_SONG: Record<string, string> = { twinbridges: 'bitloader', brewerybash: 'numen', tivoli: 'simplechip' };
+const TRACK_SONG: Record<string, string> = { twinbridges: 'bitloader', brewerybash: 'numen', tivoli: 'simplechip', cigars: 'imagine' };
 
 /** Songs used for races in shuffle mode. */
 const RACE_POOL = ['greenvalley', 'dustbowl', 'frostring', 'meltdown', 'bitloader', 'simplechip', 'numen', 'imagine', 'dreams', 'dreams2', 'dreams3',

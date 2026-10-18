@@ -16,6 +16,7 @@ import {
   adobe, apartment, carPark, chalet, decal, farm, field, garden, gasStation, house, shade, shopFront, warehouse, windowBox, type Kit,
 } from './buildings.ts';
 import { barrelStack, beerTent, beerTruck, brewhouse, giantMug, hopGarden, maltSilos, pub } from './brewery.ts';
+import { cigarBoxes, cigarFactory, dryingBarn, giantCigar, humidor } from './cigar.ts';
 import { balloons, bigTop, carousel, dropTower, FAIR, ferrisWheel, rollerCoaster, stall } from './tivoli.ts';
 
 export interface Town {
@@ -331,6 +332,26 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
     place(30, 4, 4, 1, 60, () => stall(kit, choose(FAIR)));
     place(16, 2, 6, 1, 50, () => balloons(kit));
     place(2, 11, 2, 4, 70, () => carPark(kit, 20, 14));
+  } else if (theme === 'cigar') {
+    // The big three on the north side, behind the start straight where every
+    // lap passes them: the factory, the giant cigar and the humidor. Barns,
+    // stacks of cigar boxes and tobacco fields round the rest.
+    const at = (make: () => THREE.Object3D, x: number, z: number, r: number, h: number) => {
+      if (far(x, z) > clear + r && free(x, z, r) && !hidesRoad(x, z, r, h)) add(make(), x, z, r, false);
+    };
+    for (const lm of track.def.landmarks ?? []) {
+      const make = lm.kind === 'factory' ? () => cigarFactory(kit) : lm.kind === 'cigar' ? () => giantCigar(kit) : () => humidor(kit);
+      const [r, h] = lm.kind === 'factory' ? [16, 36] : lm.kind === 'cigar' ? [14, 16] : [13, 12];
+      at(make, lm.x, lm.z, r, h);
+    }
+    place(14, 6.5, 8, 3, 90, () => dryingBarn(kit, choose(['#6a3a22', '#5a5f66', '#8a4a2a'])));
+    place(14, 3.5, 4, 1, 60, () => cigarBoxes(kit));
+    place(2, 11, 2, 4, 70, () => carPark(kit, 20, 14));
+    // Tobacco fields further out.
+    for (let k = 0; k < 8; k++) {
+      const p = pick(16, 2, 30, 200);
+      if (p) add(field(kit, 28 + rnd() * 10, 20 + rnd() * 8, rnd() < 0.6 ? ['#5a7a2a', '#7a9a38'] : ['#6a8a30', '#8aa83e']), p[0], p[1], 16, false);
+    }
   } else if (theme === 'nuclear') {
     place(4, 9, 38, 6, 80, officeTower);
     place(5, 15, 12, 4, 110, () => warehouse(kit, choose(['#c8ccd0', '#d8d4c8', '#9fa6a8', '#5ac8c8'])));
@@ -347,17 +368,20 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
         ? ['#a8462e', '#f0e6d2', '#e8a020', '#2f6fe0', '#2f8a4a', '#f8f0d8']
         : theme === 'tivoli'
         ? FAIR
+        : theme === 'cigar'
+        ? ['#6a3a22', '#5a5f66', '#8a4a2a']
         : theme === 'nuclear'
         ? ['#c8ccd0', '#f2c230', '#5ac8c8', '#e8e8e0', '#9fa6a8']
         : pastels;
   const street = (h: number, color: string): THREE.Object3D => {
     if (theme === 'tivoli') return h < 8 ? stall(kit, color) : balloons(kit);
+    if (theme === 'cigar') return h < 5 ? cigarBoxes(kit) : dryingBarn(kit, color);
     if (theme === 'winter' && h < 14) return chalet(kit, color);
     if (theme === 'brewery' && h < 14) return pub(kit, color);
     if (h < 10) return shopFront(kit, 9 + rnd() * 4, 8, theme === 'desert' ? color : shade(color, 1), choose(signs));
     return block(h, [color]);
   };
-  const heights = theme === 'tivoli' ? [6.4, 4] : theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : theme === 'brewery' ? [16, 9.6, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
+  const heights = theme === 'tivoli' || theme === 'cigar' ? [6.4, 4] : theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : theme === 'brewery' ? [16, 9.6, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
   for (let i = 0; i < track.n; i += 30) {
     for (const side of [-1, 1]) {
       if (rnd() > 0.7) continue;

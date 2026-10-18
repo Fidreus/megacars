@@ -40,9 +40,10 @@ smal och teknisk, grus, oljefläckar och ett hopp över en torr flodfåra),
 Ridge** (genom ett kärnkraftverk: kyltorn, reaktorhallar, en kylvattenläcka
 och ett hopp över kylvattenkanalen – kommer du för kort får du vada ur),
 **Twin Bridges** (korsar sig själv två gånger: en trasig bro att hoppa och
-en viadukt), **Brewery Bash** (bryggeri, öl på vägen) och **Tivoli Twist**
+en viadukt), **Brewery Bash** (bryggeri, öl på vägen), **Tivoli Twist**
 (kompakt tivolibana med vänster-höger-svängar, körs med tre gånger så många
-varv).
+varv) och **Cigar Circuit** (kompakt bana i tobakslandet med tre hårnålar på
+rad, rena 180°-svängar för långa drifter, och aska på vägen).
 
 Ny bana? Se `.claude/skills/new-track/SKILL.md` och `npm run track`.
 

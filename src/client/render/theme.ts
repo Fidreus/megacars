@@ -135,6 +135,32 @@ export const TIVOLI_THEME: Theme = {
 };
 THEMES.tivoli = TIVOLI_THEME;
 
+/** Tobacco country: leaf-green ground, brown barns, ash grey where the gravel is. */
+THEMES.cigar = {
+  ground: '#6e8f3a',
+  trees: 'cone',
+  treeColors: ['#4a6a2a', '#5a7a30', '#3c5a28', '#66803a'],
+  treeDensity: 0.35,
+  bushColors: ['#5a7a30', '#6a8a38', '#4a6a2a'],
+  rockColors: ['#9a8a78', '#b0a08a'],
+  rockCount: 40,
+  houseWalls: [],
+  houseRoofs: [],
+  pond: 'none',
+  shore: '#b49266',
+  houses: false,
+  // Ash instead of gravel, tar instead of oil.
+  patchColors: { 3: '#8d8a86', 7: '#3a2616' },
+  sponsors: [
+    ['HAVANA GOLD', '#141010', '#f2c230'],
+    ['EL MEGA', '#8a1e1e', '#f2e6b0'],
+    ['DON CARLOS', '#2a1a10', '#e8c060'],
+    ['ROBUSTO', '#c8322a', '#ffffff'],
+    ['CORONA', '#2f5a3a', '#f2e6b0'],
+    ['MADURO RACING', '#5a3420', '#f2c230'],
+  ],
+};
+
 export function themeOf(id: string): Theme {
   return THEMES[id] ?? COUNTRYSIDE;
 }
