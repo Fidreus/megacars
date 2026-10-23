@@ -253,7 +253,7 @@ Inga cookies, ingen lagring i webbläsaren.
 
 Det loggas, en JSON-rad per händelse i `DATA_DIR/analytics/ÅÅÅÅ-MM-DD.jsonl`:
 
-- `visit`: sidan laddades (hash, land, mobil eller dator). Botar räknas inte.
+- `open`: sidan öppnades (hash, land, mobil eller dator). Skickas av sidan själv, för servern ser inte sidladdningar när appen körs från cachen. Botar räknas inte.
 - `race`: ett lopp startades på enheten (bana, läge, varv, motståndare,
   spelare). Det gäller träning, snabbt lopp, mästerskap och karriär.
 - `session`: hur länge sidan varit framme, och hur många lopp. Webbläsaren

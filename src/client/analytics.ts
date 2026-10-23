@@ -43,6 +43,7 @@ function visibleSeconds(): number {
 }
 
 if (enabled) {
+  send({ t: 'open' });
   // Hiding is the last moment a phone gives us; each report replaces the one before it.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {

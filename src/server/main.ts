@@ -127,10 +127,6 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     path = 'index.html';
     file = join(DIST, path);
   }
-  if ((url.pathname === '/' || url.pathname === '/index.html') && analytics.isPageView(req)) {
-    const who = analytics.who(req);
-    if (who) analytics.log(who, { t: 'visit', d: /Mobi|Android|iPhone|iPad/.test(String(req.headers['user-agent'] ?? '')) ? 'm' : 'd' });
-  }
   const ext = extname(file);
   const st = statSync(file);
   const tag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
@@ -242,7 +238,7 @@ function handleEvent(req: IncomingMessage, res: ServerResponse): void {
     res.writeHead(204);
     res.end();
   };
-  const who = analytics.who(req);
+  const who = analytics.isBot(req) ? null : analytics.who(req);
   if (!who) {
     done();
     return;
@@ -266,7 +262,7 @@ function handleEvent(req: IncomingMessage, res: ServerResponse): void {
   req.on('end', () => {
     try {
       const event = parseBeacon(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      if (event) analytics.log(who, event);
+      if (event) analytics.log(who, event.t === 'open' ? { ...event, d: analytics.deviceOf(req) } : event);
     } catch {
       // Not ours: drop it.
     }

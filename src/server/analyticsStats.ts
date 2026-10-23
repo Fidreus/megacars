@@ -68,13 +68,23 @@ export function readLog(dir: string, days: number, now = Date.now()): Line[] {
 
 export function summarize(lines: Line[], days: number, now = Date.now()): Summary {
   const dayOf = (l: Line) => new Date(l.ts).toISOString().slice(0, 10);
-  const visits = lines.filter((l) => l.t === 'visit');
+  // A page load: 'open' from the page ('visit' is how older builds counted it on the server).
+  const visits = lines.filter((l) => l.t === 'open' || l.t === 'visit');
+  // Anyone who did anything counts, whatever else we saw of them.
   const people = new Map<string, Line>();
-  for (const l of visits) if (l.h) people.set(`${dayOf(l)}|${l.h}`, l);
+  const mobile = new Set<string>();
+  const desktop = new Set<string>();
+  for (const l of lines) {
+    if (!l.h) continue;
+    const key = `${dayOf(l)}|${l.h}`;
+    if (!people.has(key)) people.set(key, l);
+    if (l.d === 'm') mobile.add(key);
+    else if (l.d === 'd') desktop.add(key);
+  }
   const perDay = new Map<string, { visits: number; people: Set<string> }>();
-  for (const l of visits) {
+  for (const l of lines) {
     const d = perDay.get(dayOf(l)) ?? { visits: 0, people: new Set() };
-    d.visits++;
+    if (l.t === 'open' || l.t === 'visit') d.visits++;
     if (l.h) d.people.add(l.h);
     perDay.set(dayOf(l), d);
   }
@@ -99,7 +109,6 @@ export function summarize(lines: Line[], days: number, now = Date.now()): Summar
     r.humans += Number(l.humans) || 0;
     roomTracks.set(String(l.track), r);
   }
-  const mobile = [...people.values()].filter((l) => l.d === 'm').length;
   return {
     from: new Date(now - (days - 1) * 86_400_000).toISOString().slice(0, 10),
     to: new Date(now).toISOString().slice(0, 10),
@@ -108,7 +117,7 @@ export function summarize(lines: Line[], days: number, now = Date.now()): Summar
     visitors: people.size,
     perDay: [...perDay].sort().map(([day, d]) => ({ day, visits: d.visits, visitors: d.people.size })),
     countries: [...countries].map(([country, visitors]) => ({ country, visitors })).sort((a, b) => b.visitors - a.visitors),
-    devices: { mobile, desktop: people.size - mobile },
+    devices: { mobile: mobile.size, desktop: desktop.size },
     sessions: { count: secs.length, avgSec: avg(secs), medianSec: median(secs), over5min: secs.filter((s) => s >= 300).length },
     tracks: [...byTrack]
       .map(([track, modes]) => ({ track, starts: sum(Object.values(modes)), modes }))

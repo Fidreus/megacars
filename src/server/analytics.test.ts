@@ -54,12 +54,13 @@ describe('hashed addresses', () => {
     expect(new Analytics(tmp(), { enabled: false }).who(req({}))).toBeNull();
   });
 
-  it('only count real page views', () => {
+  it('recognise bots and phones', () => {
     const a = new Analytics(tmp(), { salt: 's' });
-    expect(a.isPageView(req({ 'user-agent': 'Mozilla/5.0 Firefox' }))).toBe(true);
-    expect(a.isPageView(req({ 'user-agent': 'Googlebot/2.1' }))).toBe(false);
-    expect(a.isPageView(req({ 'sec-fetch-dest': 'empty' }))).toBe(false);
-    expect(a.isPageView(req({}, '1.2.3.4', 'POST'))).toBe(false);
+    expect(a.isBot(req({ 'user-agent': 'Mozilla/5.0 Firefox' }))).toBe(false);
+    expect(a.isBot(req({ 'user-agent': 'Googlebot/2.1' }))).toBe(true);
+    expect(a.isBot(req({ 'user-agent': 'Mozilla/5.0 HeadlessChrome' }))).toBe(true);
+    expect(a.deviceOf(req({ 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile' }))).toBe('m');
+    expect(a.deviceOf(req({ 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64)' }))).toBe('d');
   });
 });
 
@@ -74,6 +75,7 @@ describe('reports from the page', () => {
     expect(parseBeacon({ ...ok, name: 'extra' })).toEqual(ok);
     expect(parseBeacon({ t: 'session', sid: 'abcd1234', dur: 90, races: 2 })).toEqual({ t: 'session', sid: 'abcd1234', dur: 90, races: 2 });
     expect(parseBeacon({ t: 'session', sid: 'abcd1234', dur: -1, races: 2 })).toBeNull();
+    expect(parseBeacon({ t: 'open', sid: 'abcd1234', extra: 1 })).toEqual({ t: 'open', sid: 'abcd1234' });
     expect(parseBeacon('hello')).toBeNull();
     expect(parseBeacon({ t: 'other', sid: 'abcd1234' })).toBeNull();
   });
@@ -86,8 +88,8 @@ describe('the log', () => {
     const a = new Analytics(dir, { salt: 's', now: () => now, retentionDays: 30 });
     const se = a.who(req({ 'cf-ipcountry': 'SE' }))!;
     const us = a.who(req({ 'cf-ipcountry': 'US' }, '198.51.100.2'))!;
-    a.log(se, { t: 'visit', d: 'm' });
-    a.log(se, { t: 'visit', d: 'm' });
+    a.log(se, { t: 'open', sid: 'aaaaaaaa', d: 'm' });
+    a.log(se, { t: 'open', sid: 'bbbbbbbb', d: 'm' });
     a.log(us, { t: 'visit', d: 'd' });
     a.log(se, { t: 'race', sid: 'aaaaaaaa', track: 'cigars', mode: 'quick', laps: 3, opponents: 7, players: 1 });
     a.log(se, { t: 'session', sid: 'aaaaaaaa', dur: 60, races: 1 });
@@ -112,6 +114,18 @@ describe('the log', () => {
     expect(readdirSync(join(dir, 'analytics')).sort()).toEqual(['2026-10-20.jsonl']);
     now += 40 * DAY;
     expect(await a.prune()).toBe(1);
+  });
+
+  it('counts someone who only raced (a cached page sends no page request) with their country', async () => {
+    const dir = tmp();
+    const a = new Analytics(dir, { salt: 's', now: () => T0 });
+    const se = a.who(req({ 'cf-ipcountry': 'SE' }))!;
+    a.log(se, { t: 'race', sid: 'aaaaaaaa', track: 'greenvalley', mode: 'quick', laps: 3, opponents: 7, players: 1 });
+    a.log(se, { t: 'session', sid: 'aaaaaaaa', dur: 84, races: 1 });
+    await new Promise((r) => setTimeout(r, 100));
+    const s = summarize(readLog(join(dir, 'analytics'), 7, T0), 7, T0);
+    expect(s.visitors).toBe(1);
+    expect(s.countries).toEqual([{ country: 'SE', visitors: 1 }]);
   });
 
   it('keeps its salt between runs', () => {

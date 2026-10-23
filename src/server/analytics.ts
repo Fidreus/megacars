@@ -106,10 +106,14 @@ export class Analytics {
     return { h, c };
   }
 
-  /** A browser fetching the page (not a bot, not the service worker's background fetch). */
-  isPageView(req: IncomingMessage): boolean {
-    const dest = req.headers['sec-fetch-dest'];
-    return req.method === 'GET' && (dest === undefined || dest === 'document') && !BOT.test(String(req.headers['user-agent'] ?? ''));
+  /** Crawlers and headless browsers. */
+  isBot(req: IncomingMessage): boolean {
+    return BOT.test(String(req.headers['user-agent'] ?? ''));
+  }
+
+  /** 'm' for phones and tablets, 'd' for the rest. */
+  deviceOf(req: IncomingMessage): 'm' | 'd' {
+    return /Mobi|Android|iPhone|iPad/.test(String(req.headers['user-agent'] ?? '')) ? 'm' : 'd';
   }
 
   /** Add one event line to today's file. Never throws; losing a line is fine. */
@@ -148,6 +152,8 @@ export function parseBeacon(body: unknown): Event | null {
   const b = body as Record<string, unknown>;
   const sid = typeof b.sid === 'string' && /^[0-9a-f]{8}$/.test(b.sid) ? b.sid : null;
   if (!sid) return null;
+  // The page was opened (counted here, not on the page request: the service worker serves the page from its cache).
+  if (b.t === 'open') return { t: 'open', sid };
   if (b.t === 'race') {
     const laps = int(b.laps, 1, 99);
     const opponents = int(b.opponents, 0, 8);
