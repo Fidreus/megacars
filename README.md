@@ -281,9 +281,11 @@ Inställningar (miljövariabler på servern):
 | `STATS_TOKEN` | – | Slår på `/api/stats`. |
 
 `DATA_DIR` ska peka på en persistent volym, annars försvinner loggen vid
-omstart. Vill du också ha en färdig tjänst (Plausible, Umami, GoatCounter)
-bygger du klienten med `VITE_ANALYTICS_SRC=<skriptets url>` och
-`VITE_ANALYTICS_DOMAIN=<domän>`. Då läggs deras skript in på sidan.
+omstart.
+
+Sidan har också Umami Cloud (skriptet ligger i `index.html`, med
+`data-do-not-track`). Den ger besökare, sidvisningar och land i deras
+dashboard, utan cookies. Den loggen och vår egen är separata.
 
 ## Struktur
 

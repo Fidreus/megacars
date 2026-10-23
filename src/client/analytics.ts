@@ -2,8 +2,7 @@
 // so the usage log (src/server/analytics.ts) covers single player too. No
 // cookies, no storage, nothing that follows a person: a random id for this
 // page load groups the reports. Nothing is sent with Do Not Track or Global
-// Privacy Control on. Optionally loads a privacy-friendly stats script
-// (Plausible, Umami, ...) when the build sets VITE_ANALYTICS_SRC.
+// Privacy Control on. (Umami's own script is in index.html.)
 
 const enabled =
   typeof document !== 'undefined' &&
@@ -52,12 +51,4 @@ if (enabled) {
       send({ t: 'session', dur: Math.min(86_400, visibleSeconds()), races });
     } else shownAt = performance.now();
   });
-  const src = import.meta.env.VITE_ANALYTICS_SRC as string | undefined;
-  if (src) {
-    const s = document.createElement('script');
-    s.defer = true;
-    s.src = src;
-    s.dataset.domain = (import.meta.env.VITE_ANALYTICS_DOMAIN as string | undefined) || location.hostname;
-    document.head.append(s);
-  }
 }
