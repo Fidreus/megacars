@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Analytics, networkOf, parseBeacon } from './analytics.ts';
+import { renderHtml } from './analyticsHtml.ts';
 import { readLog, summarize } from './analyticsStats.ts';
 
 const dirs: string[] = [];
@@ -59,8 +60,27 @@ describe('hashed addresses', () => {
     expect(a.isBot(req({ 'user-agent': 'Mozilla/5.0 Firefox' }))).toBe(false);
     expect(a.isBot(req({ 'user-agent': 'Googlebot/2.1' }))).toBe(true);
     expect(a.isBot(req({ 'user-agent': 'Mozilla/5.0 HeadlessChrome' }))).toBe(true);
-    expect(a.deviceOf(req({ 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile' }))).toBe('m');
-    expect(a.deviceOf(req({ 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64)' }))).toBe('d');
+  });
+
+  it('tell phones, tablets and computers, browsers and systems apart', () => {
+    const a = new Analytics(tmp(), { salt: 's' });
+    const d = (ua: string, touch = false) => a.describe(req({ 'user-agent': ua }), touch);
+    expect(d('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit Version/17 Mobile Safari/604')).toEqual({ d: 'm', b: 'Safari', os: 'iOS' });
+    expect(d('Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/120 Mobile Safari/537')).toEqual({ d: 'm', b: 'Chrome', os: 'Android' });
+    expect(d('Mozilla/5.0 (Linux; Android 13; SM-X700) Chrome/120 Safari/537')).toEqual({ d: 't', b: 'Chrome', os: 'Android' });
+    expect(d('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit Version/17 Safari/605', true)).toEqual({ d: 't', b: 'Safari', os: 'iOS' });
+    expect(d('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit Version/17 Safari/605')).toEqual({ d: 'd', b: 'Safari', os: 'macOS' });
+    expect(d('Mozilla/5.0 (Windows NT 10.0; Win64) Chrome/120 Safari/537 Edg/120')).toEqual({ d: 'd', b: 'Edge', os: 'Windows' });
+    expect(d('Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0')).toEqual({ d: 'd', b: 'Firefox', os: 'Linux' });
+  });
+
+  it('describe a page opening, minus the page width and the own site as source', () => {
+    const a = new Analytics(tmp(), { salt: 's' });
+    const r = req({ 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0', host: 'megacars.example:443' });
+    expect(a.openEvent(r, { t: 'open', sid: 'abcd1234', w: 390, touch: false, lang: 'sv', ref: 'megacars.example' })).toEqual({
+      t: 'open', sid: 'abcd1234', lang: 'sv', d: 'd', b: 'Firefox', os: 'Linux', sz: 's',
+    });
+    expect(a.openEvent(r, { t: 'open', sid: 'abcd1234', w: 1920, touch: false, ref: 'www.google.com' })).toMatchObject({ sz: 'x', ref: 'www.google.com' });
   });
 });
 
@@ -75,9 +95,20 @@ describe('reports from the page', () => {
     expect(parseBeacon({ ...ok, name: 'extra' })).toEqual(ok);
     expect(parseBeacon({ t: 'session', sid: 'abcd1234', dur: 90, races: 2 })).toEqual({ t: 'session', sid: 'abcd1234', dur: 90, races: 2 });
     expect(parseBeacon({ t: 'session', sid: 'abcd1234', dur: -1, races: 2 })).toBeNull();
-    expect(parseBeacon({ t: 'open', sid: 'abcd1234', extra: 1 })).toEqual({ t: 'open', sid: 'abcd1234' });
+    expect(parseBeacon({ t: 'open', sid: 'abcd1234', extra: 1 })).toEqual({ t: 'open', sid: 'abcd1234', touch: false });
     expect(parseBeacon('hello')).toBeNull();
     expect(parseBeacon({ t: 'other', sid: 'abcd1234' })).toBeNull();
+  });
+});
+
+describe('the page', () => {
+  it('shows an empty period and escapes what it prints', () => {
+    const s = summarize([], 7, T0);
+    expect(renderHtml(s, { keep: '' })).toContain('Ingen användning loggad');
+    const lines = [{ ts: T0, t: 'open', h: 'abc', c: 'SE', ref: '<script>x</script>' }];
+    const html = renderHtml(summarize(lines, 1, T0), { keep: '' });
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
   });
 });
 
@@ -88,8 +119,8 @@ describe('the log', () => {
     const a = new Analytics(dir, { salt: 's', now: () => now, retentionDays: 30 });
     const se = a.who(req({ 'cf-ipcountry': 'SE' }))!;
     const us = a.who(req({ 'cf-ipcountry': 'US' }, '198.51.100.2'))!;
-    a.log(se, { t: 'open', sid: 'aaaaaaaa', d: 'm' });
-    a.log(se, { t: 'open', sid: 'bbbbbbbb', d: 'm' });
+    a.log(se, { t: 'open', sid: 'aaaaaaaa', d: 'm', b: 'Safari', os: 'iOS', sz: 's', lang: 'sv', ref: 'google.com' });
+    a.log(se, { t: 'open', sid: 'bbbbbbbb', d: 'm', b: 'Safari', os: 'iOS', sz: 's', lang: 'sv' });
     a.log(us, { t: 'visit', d: 'd' });
     a.log(se, { t: 'race', sid: 'aaaaaaaa', track: 'cigars', mode: 'quick', laps: 3, opponents: 7, players: 1 });
     a.log(se, { t: 'session', sid: 'aaaaaaaa', dur: 60, races: 1 });
@@ -99,14 +130,26 @@ describe('the log', () => {
     await new Promise((r) => setTimeout(r, 100));
 
     const s = summarize(readLog(join(dir, 'analytics'), 7, now), 7, now);
-    expect(s.visits).toBe(3);
-    expect(s.visitors).toBe(2);
-    expect(s.devices).toEqual({ mobile: 1, desktop: 1 });
-    expect(s.countries.map((c) => c.country).sort()).toEqual(['SE', 'US']);
-    expect(s.sessions).toMatchObject({ count: 1, medianSec: 400, over5min: 1 });
-    expect(s.tracks).toEqual([{ track: 'cigars', starts: 1, modes: { quick: 1 } }]);
-    expect(s.online.sessions).toBe(1);
-    expect(s.online.races).toEqual([{ track: 'tivoli', races: 1, humans: 3 }]);
+    expect(s.totals).toMatchObject({ visitors: 2, opens: 3, sessions: 1, races: 1, onlineRaces: 1 });
+    expect(s.countries.map((c) => c.key).sort()).toEqual(['SE', 'US']);
+    expect(s.devices).toEqual([{ key: 'Dator', n: 1 }, { key: 'Mobil', n: 1 }]);
+    expect(s.browsers).toEqual([{ key: 'Safari', n: 1 }]);
+    expect(s.referrers).toEqual([{ key: 'google.com', n: 1 }]);
+    // 12:00 UTC on a Tuesday is 14:00 in Stockholm (summer time).
+    expect(s.hours.opens[14]).toBe(3);
+    expect(s.weekdays.opens[1]).toBe(3);
+    expect(s.perDay).toHaveLength(7);
+    expect(s.perDay.at(-1)).toMatchObject({ day: '2026-10-20', visitors: 2, opens: 3, races: 1 });
+    expect(s.sessions).toMatchObject({ count: 1, medianSec: 400, withRace: 100 });
+    expect(s.sessions.lengths.find((l) => l.key === '3–10 min')?.n).toBe(1);
+    expect(s.funnel).toEqual({ opened: 2, raced: 1 });
+    expect(s.tracks).toEqual([{ track: 'cigars', name: 'Cigar Circuit', starts: 1, modes: { quick: 1 } }]);
+    expect(s.online).toMatchObject({ connections: 1, publicShare: 100 });
+    expect(s.online.races).toEqual([{ track: 'tivoli', name: 'Tivoli Twist', races: 1, humans: 3 }]);
+    const html = renderHtml(s, { keep: 'token=abc' });
+    expect(html).toContain('Cigar Circuit');
+    expect(html).toContain('token=abc');
+    expect(html).toContain('Sverige');
     expect(readFileSync(join(dir, 'analytics', '2026-10-20.jsonl'), 'utf8')).not.toContain('203.0.113');
 
     writeFileSync(join(dir, 'analytics', '2026-01-01.jsonl'), '{}\n');
@@ -124,8 +167,8 @@ describe('the log', () => {
     a.log(se, { t: 'session', sid: 'aaaaaaaa', dur: 84, races: 1 });
     await new Promise((r) => setTimeout(r, 100));
     const s = summarize(readLog(join(dir, 'analytics'), 7, T0), 7, T0);
-    expect(s.visitors).toBe(1);
-    expect(s.countries).toEqual([{ country: 'SE', visitors: 1 }]);
+    expect(s.totals.visitors).toBe(1);
+    expect(s.countries).toEqual([{ key: 'SE', n: 1 }]);
   });
 
   it('keeps its salt between runs', () => {

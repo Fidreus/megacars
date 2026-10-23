@@ -2,7 +2,7 @@
 // so the usage log (src/server/analytics.ts) covers single player too. No
 // cookies, no storage, nothing that follows a person: a random id for this
 // page load groups the reports. Nothing is sent with Do Not Track or Global
-// Privacy Control on. (Umami's own script is in index.html.)
+// Privacy Control on.
 
 const enabled =
   typeof document !== 'undefined' &&
@@ -43,7 +43,14 @@ function visibleSeconds(): number {
 }
 
 if (enabled) {
-  send({ t: 'open' });
+  send({
+    t: 'open',
+    w: Math.min(20_000, Math.round(window.innerWidth)),
+    touch: navigator.maxTouchPoints > 0,
+    lang: navigator.language.slice(0, 2).toLowerCase(),
+    // Only the site's name (not the page or what was searched for).
+    ref: document.referrer ? new URL(document.referrer).hostname.toLowerCase() : '',
+  });
   // Hiding is the last moment a phone gives us; each report replaces the one before it.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {

@@ -9,6 +9,7 @@ import { brotliCompress, constants as zlibConstants, gzipSync } from 'node:zlib'
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TICK_RATE } from '../shared/config/constants.ts';
 import { Analytics, parseBeacon } from './analytics.ts';
+import { renderHtml } from './analyticsHtml.ts';
 import { formatSummary, readLog, summarize } from './analyticsStats.ts';
 import { Client, GameServer } from './gameServer.ts';
 import { RecordStore } from './records.ts';
@@ -262,7 +263,7 @@ function handleEvent(req: IncomingMessage, res: ServerResponse): void {
   req.on('end', () => {
     try {
       const event = parseBeacon(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      if (event) analytics.log(who, event.t === 'open' ? { ...event, d: analytics.deviceOf(req) } : event);
+      if (event) analytics.log(who, event.t === 'open' ? analytics.openEvent(req, event) : event);
     } catch {
       // Not ours: drop it.
     }
@@ -270,7 +271,10 @@ function handleEvent(req: IncomingMessage, res: ServerResponse): void {
   });
 }
 
-/** GET /api/stats?days=7[&format=text], with the token as `Authorization: Bearer ...` (or ?token=). */
+/**
+ * GET /api/stats?days=7&tz=Europe/Stockholm&format=html|text|json. A browser gets the page,
+ * anything else JSON. The token goes in `Authorization: Bearer ...` or `?token=`.
+ */
 function handleStats(req: IncomingMessage, res: ServerResponse, url: URL): void {
   if (!STATS_TOKEN) {
     res.writeHead(404);
@@ -284,9 +288,16 @@ function handleStats(req: IncomingMessage, res: ServerResponse, url: URL): void 
     return;
   }
   const days = Math.max(1, Math.min(365, Number(url.searchParams.get('days')) || 7));
-  const summary = summarize(readLog(analytics.dir, days), days);
-  if (url.searchParams.get('format') === 'text') {
-    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+  const summary = summarize(readLog(analytics.dir, days), days, Date.now(), url.searchParams.get('tz') ?? undefined);
+  const format = url.searchParams.get('format') ?? (String(req.headers.accept ?? '').includes('text/html') ? 'html' : 'json');
+  const headers = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' };
+  if (format === 'html') {
+    const keep = new URLSearchParams();
+    if (url.searchParams.has('token')) keep.set('token', url.searchParams.get('token')!);
+    res.writeHead(200, { ...headers, 'content-type': 'text/html; charset=utf-8' });
+    res.end(renderHtml(summary, { keep: keep.toString() }));
+  } else if (format === 'text') {
+    res.writeHead(200, { ...headers, 'content-type': 'text/plain; charset=utf-8' });
     res.end(formatSummary(summary));
   } else json(res, 200, summary);
 }

@@ -111,9 +111,40 @@ export class Analytics {
     return BOT.test(String(req.headers['user-agent'] ?? ''));
   }
 
-  /** 'm' for phones and tablets, 'd' for the rest. */
-  deviceOf(req: IncomingMessage): 'm' | 'd' {
-    return /Mobi|Android|iPhone|iPad/.test(String(req.headers['user-agent'] ?? '')) ? 'm' : 'd';
+  /** What kind of device, browser and system the request came from (from the user agent, which is not stored). */
+  describe(req: IncomingMessage, touch: boolean): { d: 'm' | 't' | 'd'; b: string; os: string } {
+    const ua = String(req.headers['user-agent'] ?? '');
+    // iPadOS calls itself a Mac: a touch screen gives it away.
+    const ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && touch);
+    const d = ipad || /Tablet|Android(?!.*Mobile)/.test(ua) ? 't' : /Mobi|iPhone|iPod|Android/.test(ua) ? 'm' : 'd';
+    const b = /Edg\//.test(ua) ? 'Edge'
+      : /OPR\/|Opera/.test(ua) ? 'Opera'
+      : /SamsungBrowser/.test(ua) ? 'Samsung'
+      : /Firefox|FxiOS/.test(ua) ? 'Firefox'
+      : /Chrome|CriOS/.test(ua) ? 'Chrome'
+      : /Safari/.test(ua) ? 'Safari'
+      : 'Annan';
+    const os = ipad || /iPhone|iPod/.test(ua) ? 'iOS'
+      : /Android/.test(ua) ? 'Android'
+      : /Windows/.test(ua) ? 'Windows'
+      : /CrOS/.test(ua) ? 'ChromeOS'
+      : /Macintosh|Mac OS X/.test(ua) ? 'macOS'
+      : /Linux|X11/.test(ua) ? 'Linux'
+      : 'Annat';
+    return { d, b, os };
+  }
+
+  /** The open event with what we know about the device added. */
+  openEvent(req: IncomingMessage, e: Event): Event {
+    const own = String(req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
+    const w = Number(e.w);
+    const { w: _w, touch, ref, ...rest } = e;
+    return {
+      ...rest,
+      ...this.describe(req, touch === true),
+      ...(w >= 0 ? { sz: w < 600 ? 's' : w < 1100 ? 'm' : w < 1700 ? 'l' : 'x' } : {}),
+      ...(typeof ref === 'string' && ref && ref !== own ? { ref } : {}),
+    };
   }
 
   /** Add one event line to today's file. Never throws; losing a line is fine. */
@@ -153,7 +184,12 @@ export function parseBeacon(body: unknown): Event | null {
   const sid = typeof b.sid === 'string' && /^[0-9a-f]{8}$/.test(b.sid) ? b.sid : null;
   if (!sid) return null;
   // The page was opened (counted here, not on the page request: the service worker serves the page from its cache).
-  if (b.t === 'open') return { t: 'open', sid };
+  if (b.t === 'open') {
+    const w = int(b.w, 0, 20_000);
+    const lang = typeof b.lang === 'string' && /^[a-z]{2,3}$/.test(b.lang) ? b.lang : '';
+    const ref = typeof b.ref === 'string' && /^[a-z0-9.-]{1,60}$/.test(b.ref) ? b.ref : '';
+    return { t: 'open', sid, ...(w === null ? {} : { w }), touch: b.touch === true, ...(lang ? { lang } : {}), ...(ref ? { ref } : {}) };
+  }
   if (b.t === 'race') {
     const laps = int(b.laps, 1, 99);
     const opponents = int(b.opponents, 0, 8);

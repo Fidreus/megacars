@@ -253,7 +253,9 @@ Inga cookies, ingen lagring i webbläsaren.
 
 Det loggas, en JSON-rad per händelse i `DATA_DIR/analytics/ÅÅÅÅ-MM-DD.jsonl`:
 
-- `open`: sidan öppnades (hash, land, mobil eller dator). Skickas av sidan själv, för servern ser inte sidladdningar när appen körs från cachen. Botar räknas inte.
+- `open`: sidan öppnades (hash, land, enhetstyp, webbläsare, system,
+  skärmbredd i grova steg, språk och vilken sajt man kom från, bara
+  domännamnet). Skickas av sidan själv, för servern ser inte sidladdningar när appen körs från cachen. Botar räknas inte.
 - `race`: ett lopp startades på enheten (bana, läge, varv, motståndare,
   spelare). Det gäller träning, snabbt lopp, mästerskap och karriär.
 - `session`: hur länge sidan varit framme, och hur många lopp. Webbläsaren
@@ -266,10 +268,16 @@ annars slås det upp i en inbyggd databas (`geoip-country`). This product
 includes GeoLite2 data created by MaxMind, available from
 https://www.maxmind.com.
 
-Läs sammanfattningen med `npm run stats -- --days 30` (kör den där loggen
-ligger), eller över HTTP: sätt `STATS_TOKEN` och hämta
-`/api/stats?days=30&format=text` med headern `Authorization: Bearer <token>`.
-Utan `STATS_TOKEN` finns sidan inte.
+Läs sammanfattningen på en statistiksida: sätt `STATS_TOKEN` och öppna
+`/api/stats?token=<token>` i en webbläsare. Du får besökare per dag, tid på
+dygnet och veckodag, länder, enheter (mobil, surfplatta, dator),
+webbläsare, system, skärmbredd, språk, var de kom ifrån, hur länge de
+stannar, banor och spellägen samt onlinelopp. Parametrar: `days=1..365`,
+`tz=Europe/Stockholm` (för klockslag) och `format=html|text|json`. En
+webbläsare får html, andra klienter json. Skicka helst token som
+`Authorization: Bearer <token>` när du inte använder en webbläsare, så
+hamnar den inte i adressen. Utan `STATS_TOKEN` finns sidan inte. Samma
+sammanfattning som text: `npm run stats -- --days 30` där loggen ligger.
 
 Inställningar (miljövariabler på servern):
 
@@ -282,10 +290,6 @@ Inställningar (miljövariabler på servern):
 
 `DATA_DIR` ska peka på en persistent volym, annars försvinner loggen vid
 omstart.
-
-Sidan har också Umami Cloud (skriptet ligger i `index.html`, med
-`data-do-not-track`). Den ger besökare, sidvisningar och land i deras
-dashboard, utan cookies. Den loggen och vår egen är separata.
 
 ## Struktur
 
