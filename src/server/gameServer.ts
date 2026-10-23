@@ -56,6 +56,21 @@ export class GameServer {
   /** Seed source for races, replaceable in tests. */
   seed: () => number = () => randomInt(0, 0x7fffffff);
   log: (msg: string) => void = () => {};
+  /** Usage events (a race started in a room), for the usage log. */
+  event: (e: Record<string, string | number | boolean>) => void = () => {};
+
+  private raceStarted(room: Room): void {
+    const spec = room.race?.spec;
+    if (!spec) return;
+    this.event({
+      t: 'room_race',
+      track: spec.track,
+      laps: spec.laps,
+      humans: spec.entrants.filter((e) => e.playerId >= 0).length,
+      ai: spec.entrants.filter((e) => e.playerId < 0).length,
+      public: room.config.public,
+    });
+  }
 
   open(transport: Transport): Client {
     return new Client(transport);
@@ -143,6 +158,7 @@ export class GameServer {
       }
       case 'start': {
         const err = c.room?.start(c.id, this.seed());
+        if (c.room && err === null) this.raceStarted(c.room);
         if (err === 'bad') c.error('bad', 'Waiting for everybody to be ready');
         else if (err) c.error(err, err === 'notHost' ? 'Only the host can start' : 'Race in progress');
         break;
@@ -177,7 +193,10 @@ export class GameServer {
     const now = this.now();
     for (const room of this.rooms.values()) {
       room.tick();
-      if (room.config.public && room.autoStart(now, this.seed())) this.log(`room ${room.code} auto-started`);
+      if (room.config.public && room.autoStart(now, this.seed())) {
+        this.log(`room ${room.code} auto-started`);
+        this.raceStarted(room);
+      }
     }
   }
 

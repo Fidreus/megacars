@@ -1,12 +1,15 @@
 // Game server: serves the built client from dist/ and hosts the WebSocket
 // endpoint on /ws. In development Vite serves the client and proxies /ws here.
 
+import { timingSafeEqual, createHash } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { brotliCompress, constants as zlibConstants, gzipSync } from 'node:zlib';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TICK_RATE } from '../shared/config/constants.ts';
+import { Analytics, parseBeacon } from './analytics.ts';
+import { formatSummary, readLog, summarize } from './analyticsStats.ts';
 import { Client, GameServer } from './gameServer.ts';
 import { RecordStore } from './records.ts';
 import type { RecordSubmission } from '../shared/game/records.ts';
@@ -21,6 +24,22 @@ const records = new RecordStore(DATA_DIR);
 /** Record submissions per address per minute. */
 const SUBMIT_LIMIT = 6;
 const submits = new Map<string, number[]>();
+/**
+ * Usage log: hashed address, country, page loads, time on the page, tracks
+ * raced. Off with ANALYTICS=0; not written by `npm run dev` unless ANALYTICS=1.
+ */
+const analytics = new Analytics(DATA_DIR, {
+  enabled: process.env.ANALYTICS !== '0' && (process.env.ANALYTICS === '1' || process.env.MEGACARS_DEV !== '1'),
+  salt: process.env.ANALYTICS_SALT || undefined,
+  retentionDays: Number(process.env.ANALYTICS_RETENTION_DAYS) || 90,
+});
+void analytics.prune();
+setInterval(() => void analytics.prune(), 6 * 3_600_000).unref();
+/** Reads /api/stats; without it the page is not there. */
+const STATS_TOKEN = process.env.STATS_TOKEN ?? '';
+/** Page reports per address per minute. */
+const BEACON_LIMIT = 60;
+const beacons = new Map<string, number[]>();
 /** Development helpers (screenshot upload) are only enabled by `npm run dev`. */
 const DEV = process.env.MEGACARS_DEV === '1' || (process.env.SERVER_PORT !== undefined && process.env.NODE_ENV !== 'production');
 
@@ -80,6 +99,14 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     handleRecords(req, res);
     return;
   }
+  if (url.pathname === '/api/event') {
+    handleEvent(req, res);
+    return;
+  }
+  if (url.pathname === '/api/stats') {
+    handleStats(req, res, url);
+    return;
+  }
   if (DEV && url.pathname === '/dev/snap' && req.method === 'POST') {
     saveScreenshot(req, res, url);
     return;
@@ -99,6 +126,10 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   if (!existsSync(file) || statSync(file).isDirectory()) {
     path = 'index.html';
     file = join(DIST, path);
+  }
+  if ((url.pathname === '/' || url.pathname === '/index.html') && analytics.isPageView(req)) {
+    const who = analytics.who(req);
+    if (who) analytics.log(who, { t: 'visit', d: /Mobi|Android|iPhone|iPad/.test(String(req.headers['user-agent'] ?? '')) ? 'm' : 'd' });
   }
   const ext = extname(file);
   const st = statSync(file);
@@ -201,6 +232,69 @@ function handleRecords(req: IncomingMessage, res: ServerResponse): void {
   });
 }
 
+/** POST: a small report from the page (a race started, how long it was open). Always answers 204. */
+function handleEvent(req: IncomingMessage, res: ServerResponse): void {
+  if (req.method !== 'POST') {
+    json(res, 405, { ok: false, error: 'method' });
+    return;
+  }
+  const done = () => {
+    res.writeHead(204);
+    res.end();
+  };
+  const who = analytics.who(req);
+  if (!who) {
+    done();
+    return;
+  }
+  const now = Date.now();
+  const recent = (beacons.get(who.h) ?? []).filter((t) => now - t < 60_000);
+  recent.push(now);
+  beacons.set(who.h, recent);
+  if (beacons.size > 10_000) beacons.clear();
+  if (recent.length > BEACON_LIMIT) {
+    done();
+    return;
+  }
+  const chunks: Buffer[] = [];
+  let size = 0;
+  req.on('data', (c: Buffer) => {
+    size += c.length;
+    if (size > 1024) req.destroy();
+    else chunks.push(c);
+  });
+  req.on('end', () => {
+    try {
+      const event = parseBeacon(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      if (event) analytics.log(who, event);
+    } catch {
+      // Not ours: drop it.
+    }
+    done();
+  });
+}
+
+/** GET /api/stats?days=7[&format=text], with the token as `Authorization: Bearer ...` (or ?token=). */
+function handleStats(req: IncomingMessage, res: ServerResponse, url: URL): void {
+  if (!STATS_TOKEN) {
+    res.writeHead(404);
+    res.end();
+    return;
+  }
+  const given = /^Bearer (.+)$/.exec(String(req.headers.authorization ?? ''))?.[1] ?? url.searchParams.get('token') ?? '';
+  const digest = (v: string) => createHash('sha256').update(v).digest();
+  if (!timingSafeEqual(digest(given), digest(STATS_TOKEN))) {
+    json(res, 401, { ok: false, error: 'token' });
+    return;
+  }
+  const days = Math.max(1, Math.min(365, Number(url.searchParams.get('days')) || 7));
+  const summary = summarize(readLog(analytics.dir, days), days);
+  if (url.searchParams.get('format') === 'text') {
+    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(formatSummary(summary));
+  } else json(res, 200, summary);
+}
+
 function saveScreenshot(req: IncomingMessage, res: ServerResponse, url: URL): void {
   const name = (url.searchParams.get('name') ?? 'shot').replace(/[^a-z0-9_-]/gi, '_').slice(0, 60);
   const chunks: Buffer[] = [];
@@ -233,6 +327,7 @@ server.on('upgrade', (req, socket, head) => {
 
 const game = new GameServer();
 game.log = (msg) => console.log(msg);
+game.event = (e) => analytics.log(null, e);
 
 interface Conn {
   ws: WebSocket;
@@ -242,7 +337,9 @@ interface Conn {
 }
 const conns = new Set<Conn>();
 
-wss.on('connection', (ws: WebSocket) => {
+wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+  const who = analytics.who(req);
+  const opened = Date.now();
   const client = game.open({
     sendText: (s) => ws.readyState === ws.OPEN && ws.send(s),
     sendBinary: (d) => ws.readyState === ws.OPEN && ws.send(d),
@@ -266,6 +363,7 @@ wss.on('connection', (ws: WebSocket) => {
     }
   });
   ws.on('close', () => {
+    if (who) analytics.log(who, { t: 'ws', dur: Math.round((Date.now() - opened) / 1000) });
     conns.delete(conn);
     game.closed(client);
   });

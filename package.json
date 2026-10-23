@@ -18,9 +18,11 @@
     "typecheck": "tsc -p tsconfig.shared.json && tsc -p tsconfig.client.json && tsc -p tsconfig.server.json",
     "sim": "node scripts/simRace.ts",
     "soak": "node scripts/netSoak.ts",
-    "track": "node scripts/checkTrack.ts"
+    "track": "node scripts/checkTrack.ts",
+    "stats": "node scripts/usageStats.ts"
   },
   "dependencies": {
+    "geoip-country": "^5.0.202610210158",
     "lil-gui": "^0.21.0",
     "three": "^0.186.1",
     "ws": "^8.22.0"

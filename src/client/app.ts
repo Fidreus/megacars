@@ -35,6 +35,7 @@ import { TextBridge } from './input/textBridge.ts';
 import { drawHelp } from './ui/screens/help.ts';
 import { RecordsScreen } from './ui/screens/records.ts';
 import { ReplayRecorder, specProblem } from '../shared/game/records.ts';
+import { trackRace } from './analytics.ts';
 import { loadLocalRecords, noteLap, noteRace, submitRecord } from './game/records.ts';
 import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
 import { VERSION } from './version.ts';
@@ -978,6 +979,13 @@ export class App {
     this.replay = !spec && rs.playerCars.length === 1 && specProblem(rs.spec) === null ? new ReplayRecorder() : null;
     this.recordPending = false;
     this.recordNote = '';
+    trackRace({
+      track: rs.track.def.id,
+      mode: this.cupRace ? (this.career ? 'career' : 'cup') : practice ? 'practice' : 'quick',
+      laps: Math.max(1, Math.min(99, rs.spec.laps)),
+      opponents: Math.min(8, rs.settings.opponents),
+      players: Math.max(1, Math.min(4, rs.playerCars.length)),
+    });
   }
 
   private restartRace(): void {

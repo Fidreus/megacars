@@ -243,6 +243,48 @@ Felsökning i konsolen: `__megacars.state()`, `.startRace({ players: 2 })`,
 `.debug.bench()`, `.debug.look({ mood, palette, crt })`, `.debug.snap(namn)`,
 `.online()` (anslutning, rum, förutsägelsens lead/takt).
 
+## Användningslogg
+
+Servern för en enkel logg över användningen, utan personuppgifter. Det
+sparas aldrig någon IP-adress, bara en hash av den (med hemligt salt och
+dagens datum, så samma person kan inte följas från en dag till nästa) och
+landet. Webbläsare med Do Not Track eller Global Privacy Control loggas inte.
+Inga cookies, ingen lagring i webbläsaren.
+
+Det loggas, en JSON-rad per händelse i `DATA_DIR/analytics/ÅÅÅÅ-MM-DD.jsonl`:
+
+- `visit`: sidan laddades (hash, land, mobil eller dator). Botar räknas inte.
+- `race`: ett lopp startades på enheten (bana, läge, varv, motståndare,
+  spelare). Det gäller träning, snabbt lopp, mästerskap och karriär.
+- `session`: hur länge sidan varit framme, och hur många lopp. Webbläsaren
+  skickar den när fliken göms.
+- `ws`: en onlineanslutning och hur länge den varade.
+- `room_race`: ett lopp startade i ett rum (bana, varv, personer, AI).
+
+Landet kommer från CDN-headern om det finns en (`CF-IPCountry` m.fl.),
+annars slås det upp i en inbyggd databas (`geoip-country`). This product
+includes GeoLite2 data created by MaxMind, available from
+https://www.maxmind.com.
+
+Läs sammanfattningen med `npm run stats -- --days 30` (kör den där loggen
+ligger), eller över HTTP: sätt `STATS_TOKEN` och hämta
+`/api/stats?days=30&format=text` med headern `Authorization: Bearer <token>`.
+Utan `STATS_TOKEN` finns sidan inte.
+
+Inställningar (miljövariabler på servern):
+
+| Variabel | Standard | Betydelse |
+| --- | --- | --- |
+| `ANALYTICS` | på | `0` stänger av loggen helt. `npm run dev` loggar inte om inte `ANALYTICS=1`. |
+| `ANALYTICS_RETENTION_DAYS` | 90 | Dagar som sparas. Äldre filer raderas. |
+| `ANALYTICS_SALT` | slumpas | Saltet för hashen. Annars skapas `DATA_DIR/analytics/salt`. |
+| `STATS_TOKEN` | – | Slår på `/api/stats`. |
+
+`DATA_DIR` ska peka på en persistent volym, annars försvinner loggen vid
+omstart. Vill du också ha en färdig tjänst (Plausible, Umami, GoatCounter)
+bygger du klienten med `VITE_ANALYTICS_SRC=<skriptets url>` och
+`VITE_ANALYTICS_DOMAIN=<domän>`. Då läggs deras skript in på sidan.
+
 ## Struktur
 
 - `src/shared` – simulering som körs identiskt på server och klient (fysik,
