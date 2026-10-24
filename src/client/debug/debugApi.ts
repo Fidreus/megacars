@@ -80,6 +80,18 @@ export function installDebugApi(app: App): void {
       zoom(k = 1) {
         app.debugZoom = k;
       },
+      /** Point the camera at (x, z) instead of the car; no arguments to follow the car again. */
+      aim(x?: number, z?: number) {
+        app.debugLook = x === undefined || z === undefined ? null : { x, z };
+      },
+      /** Where the track life put its placed objects (camps, paddocks, pumps...), for looking at them. */
+      lifeSpots() {
+        const out: [number, number][] = [];
+        app.scene.getObjectByName('trackLife')?.children.forEach((o) => {
+          if (o.type === 'Group' && (o.position.x !== 0 || o.position.z !== 0)) out.push([Math.round(o.position.x), Math.round(o.position.z)]);
+        });
+        return out;
+      },
       /** Visible meshes per top-level scene group (and how many cast shadows). */
       meshes() {
         const out: Record<string, { meshes: number; shadow: number; tris: number }> = {};

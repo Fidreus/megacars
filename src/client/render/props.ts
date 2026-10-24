@@ -22,6 +22,8 @@ export interface Props {
   group: THREE.Group;
   /** Objects only visible when lights are on (night, sunset). */
   nightLights: THREE.Object3D[];
+  /** The pond, if there is one (centre and radius of the water). */
+  pond: KeepOut | null;
   /** Lamp bulb material (brightened at night). */
   bulbs: THREE.MeshBasicMaterial;
   /** Light-pool material (colour scaled by the mood's lamp strength). */
@@ -233,7 +235,7 @@ export function buildProps(track: Track): Props {
     group.add(buildPond(pond.x, pond.z, pond.r, rnd, theme.pond === 'ice', theme.shore));
     keepOut.push({ x: pond.x, z: pond.z, r: pond.r + 4 });
   }
-  return { group, nightLights, bulbs, pools: poolMat, keepOut };
+  return { group, nightLights, bulbs, pools: poolMat, keepOut, pond };
 }
 
 function buildGrandstand(

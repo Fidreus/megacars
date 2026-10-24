@@ -13,7 +13,7 @@ import { makeRng } from '../../shared/math/rng.ts';
 import { toon } from './materials.ts';
 import type { KeepOut } from './props.ts';
 import {
-  adobe, apartment, carPark, chalet, decal, farm, field, garden, gasStation, house, shade, shopFront, warehouse, windowBox, type Kit,
+  adobe, apartment, box, carPark, chalet, decal, farm, field, garden, gasStation, house, parts, shade, shopFront, warehouse, windowBox, type Kit,
 } from './buildings.ts';
 import { barrelStack, beerTent, beerTruck, brewhouse, giantMug, hopGarden, maltSilos, pub } from './brewery.ts';
 import { cigarBoxes, cigarFactory, dryingBarn, giantCigar, humidor } from './cigar.ts';
@@ -436,10 +436,42 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
     }
     if (theme === 'winter' && h < 14) return chalet(kit, color);
     if (theme === 'brewery' && h < 14) return pub(kit, color);
+    if (theme === 'desert' && h < 8) return adobe(kit, color);
     if (h < 10) return shopFront(kit, 9 + rnd() * 4, 8, theme === 'desert' ? color : shade(color, 1), choose(signs));
     return block(h, [color]);
   };
-  const heights = theme === 'tivoli' || theme === 'cigar' ? [6.4, 4] : theme === 'winter' ? [22.4, 16, 12.8, 9.6, 6.4] : theme === 'brewery' ? [16, 9.6, 6.4] : theme === 'city' ? [57.6, 44.8, 32, 22.4, 16, 12.8, 6.4] : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
+  // Along the road the buildings fit the place: a village street in the
+  // country, adobe and shops in the desert, chalets in the snow; towers
+  // only in the city and round the power plant (the towns further out keep
+  // their blocks).
+  const heights = theme === 'tivoli' || theme === 'cigar' ? [6.4, 4]
+    : theme === 'winter' ? [12.8, 9.6, 6.4]
+    : theme === 'brewery' ? [16, 9.6, 6.4]
+    : theme === 'desert' ? [12.8, 9.6, 6.4]
+    : theme === 'city' ? [57.6, 44.8, 32, 22.4, 16, 12.8, 6.4]
+    : theme === 'countryside' ? [16, 12.8, 9.6, 6.4]
+    : [28.8, 22.4, 16, 12.8, 9.6, 6.4];
+  // A paved strip in front of the street buildings: benches, planters, a bin.
+  const paving = theme === 'desert' ? '#d8c4a0' : theme === 'winter' ? '#d4dce4' : theme === 'city' ? '#a8a49c' : '#bcb6aa';
+  const apron = (obj: THREE.Object3D) => {
+    const bb = new THREE.Box3().setFromObject(obj);
+    const hx = (bb.max.x - bb.min.x) / 2;
+    const hz = bb.max.z - obj.position.z;
+    if (hx < 2 || bb.max.y < 3) return;
+    const z0 = hz + 0.1;
+    obj.add(decal(kit, hx * 2 + 1.2, 3.4, paving, 0, z0 + 1.7, 0.016));
+    const green = theme === 'winter' ? '#e8eef4' : choose(['#3c7d34', '#4a8a3a', '#5a9a3c']);
+    for (const x of [-hx + 1, hx - 1]) {
+      obj.add(parts(kit, '#8a8478', [box(x - 0.5, 0, z0 + 2.4, x + 0.5, 0.6, z0 + 3.2)]));
+      obj.add(parts(kit, green, [new THREE.IcosahedronGeometry(0.55, 0).translate(x, 0.95, z0 + 2.8)]));
+    }
+    if (hx > 4) {
+      const bx = (rnd() - 0.5) * (hx - 3);
+      obj.add(parts(kit, '#8a5a3a', [box(bx - 0.9, 0.4, z0 + 2.7, bx + 0.9, 0.5, z0 + 3.1), box(bx - 0.9, 0.5, z0 + 3.05, bx + 0.9, 0.9, z0 + 3.15)]));
+      obj.add(parts(kit, '#3a3c42', [box(bx - 0.85, 0, z0 + 2.75, bx - 0.75, 0.4, z0 + 3.05), box(bx + 0.75, 0, z0 + 2.75, bx + 0.85, 0.4, z0 + 3.05)]));
+      obj.add(parts(kit, '#2f6a3a', [new THREE.CylinderGeometry(0.25, 0.22, 0.8, 8).translate(bx + 1.6, 0.4, z0 + 2.9)]));
+    }
+  };
   const frontStep = theme === 'city' ? 16 : 30;
   const frontSkip = theme === 'city' ? 0.85 : 0.7;
   for (let i = 0; i < track.n; i += frontStep) {
@@ -455,6 +487,7 @@ export function buildTown(track: Track, theme: string, existing: readonly KeepOu
       if (h === undefined) continue;
       const obj = street(h - (rnd() < 0.5 ? 3.2 : 0), choose(palette));
       add(obj, x, z, r, false);
+      if (theme !== 'tivoli' && theme !== 'cigar') apron(obj);
       // Square to the track, front (shops, balconies) toward the track or
       // away from it - whichever is more southerly, where the camera sees it.
       const along = Math.atan2(-track.tz[i], track.tx[i]);

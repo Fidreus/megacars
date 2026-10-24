@@ -145,14 +145,32 @@ export const MY_TRACK: TrackDef = {
   stenar, hus, damm och reklamskyltar (`sponsors`). Med `patchColors` kan en
   yta ritas i en annan färg, till exempel olja som öl. Ett okänt tema
   faller tillbaka på `countryside`.
-- **Liv och mark (countryside visar hur):** `flowers` ger blomsterängar i
-  marken, `mowed` ger klippta ränder i en gräsrunoff, `clouds` ger
-  drivande molnskuggor, `woods` samlar träden i skogsdungar och `blossom`
-  ger blommande träd. `countryLife` lägger till publikslänter i kurvorna,
-  funktionärer, ett tältläger, hagar med djur, höbalar, en traktor,
-  måsar och en luftballong (`countryLife.ts`). Allt som rör sig ritas
-  instansierat och animeras i shadern, eller flyttas av `animate`. Det
-  som flyttas måste hållas utanför `batchStatic`.
+- **Mark:** `flowers` ger blomsterängar, `mowed` ger klippta ränder i en
+  gräsrunoff, `clouds` ger drivande molnskuggor, `sand` ger dyner och
+  vindrippel, `snow` ger drivor och glitter, `woods` samlar träden i
+  skogsdungar och `blossom` ger blommande träd.
+- **Liv (`life`, ett recept i temat, se `trackLife.ts`):**
+  - `banks`: publikslänter i kurvorna, med funktionärer.
+  - `camps`: tält- eller husbilsläger.
+  - `paddocks`: hagar med får, kor, hästar eller renar.
+  - `bales`: höbalar.
+  - `vehicles`: traktor, snöskoter, lastbil eller truck som kör fram och
+    tillbaka.
+  - `walkers`: folk som promenerar.
+  - `birds`: fåglar som cirklar.
+  - `balloon`: en luftballong.
+  - `extras`: oljepumpar, rullande buskar, vindpumpar, snögubbar,
+    skridskoåkare och arbetsplatser (`lifeExtras.ts`).
+
+  Små figurer ritas instansierat per 80 m-ruta och animeras i shadern.
+  Större saker som rör sig flyttas av `animate` och måste hållas utanför
+  `batchStatic` (`moving`). Material med `onBeforeCompile` som skiljer sig
+  mellan banor eller teman behöver en egen `customProgramCacheKey`.
+  Annars återanvänder three.js fel program.
+- **Hus:** byggnader med fönsterväggar får automatiskt mjuka
+  kontaktskuggor (`grounding.ts`). Husen längs vägen får en stensatt yta
+  med bänkar och planteringar. Höjderna längs vägen sätts per tema i
+  `town.ts`: låga hus på landet, i öknen och i snön, torn i staden.
 - **Byggnader och landmärken:** varje tema har en gren i `buildTown`
   (`src/client/render/town.ts`). Där placeras temats byggnader med `place()`
   och `def.landmarks` läses. Egna modeller ligger i en egen fil, som

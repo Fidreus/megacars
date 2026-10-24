@@ -79,7 +79,7 @@ export function buildTrackView(track: Track): THREE.Group {
 /** Which ground extras a track's theme has (for shader program caching). */
 function extrasKey(track: Track): string {
   const theme = themeOf(track.def.theme);
-  return `${theme.clouds ? 'c' : ''}${theme.flowers ? 'f' : ''}`;
+  return `${theme.clouds ? 'c' : ''}${theme.flowers ? 'f' : ''}${theme.sand ? 's' : ''}${theme.snow ? 'w' : ''}`;
 }
 
 /** Shader defines and uniforms for the theme's ground extras (flowers, clouds). */
@@ -90,6 +90,8 @@ function groundExtras(track: Track, shader: { uniforms: Record<string, THREE.IUn
     shader.uniforms.uTime = animTime;
     head += '#define CLOUDS\nuniform float uTime;\n';
   }
+  if (theme.sand) head += '#define SAND\n';
+  if (theme.snow) head += '#define SNOW\n';
   if (theme.flowers) {
     shader.uniforms.uFlowers = { value: theme.flowers.map((c) => new THREE.Color(c)) };
     head += '#define FLOWERS\nuniform vec3 uFlowers[3];\n';
@@ -133,6 +135,25 @@ function buildGround(track: Track): THREE.Mesh {
           float which = hash12(cell + 19.0);
           diffuseColor.rgb = which < 0.45 ? uFlowers[0] : which < 0.8 ? uFlowers[1] : uFlowers[2];
         }
+        #endif
+        #ifdef SAND
+        // Dunes (broad light and shade), wind ripples across them, and the odd
+        // dark tuft of dry scrub.
+        float dune = valueNoise(vWPos.xz * 0.013 + 9.0);
+        diffuseColor.rgb *= 0.93 + 0.12 * dune;
+        float rip = sin(dot(vWPos.xz, vec2(0.55, 0.84)) * 1.7 + valueNoise(vWPos.xz * 0.04) * 9.0);
+        if (rip > 0.82) diffuseColor.rgb *= 0.93;
+        if (rip < -0.9) diffuseColor.rgb *= 1.04;
+        if (hash12(floor(vWPos.xz * 1.6) + 31.0) > 0.9975) diffuseColor.rgb = vec3(0.47, 0.42, 0.25);
+        #endif
+        #ifdef SNOW
+        // Drifts: blue-shaded hollows between wind-blown mounds, streaks
+        // along the wind, and glints where the sun catches the crust.
+        float drift = valueNoise(vec2(vWPos.x * 0.02, vWPos.z * 0.045) + 4.0);
+        diffuseColor.rgb *= mix(vec3(1.0), vec3(0.86, 0.91, 1.0), smoothstep(0.5, 0.75, drift));
+        float streak = valueNoise(vec2(vWPos.x * 0.06, vWPos.z * 0.9));
+        if (streak > 0.78) diffuseColor.rgb *= 0.96;
+        if (hash12(floor(vWPos.xz * 2.5) + 53.0) > 0.996) diffuseColor.rgb = vec3(1.05, 1.08, 1.12);
         #endif
         #ifdef CLOUDS
         diffuseColor.rgb *= cloudShade(vWPos.xz, uTime);

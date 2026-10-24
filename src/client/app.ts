@@ -50,7 +50,8 @@ import { buildProps } from './render/props.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
 import { buildTown } from './render/town.ts';
-import { buildCountryLife } from './render/countryLife.ts';
+import { buildTrackLife } from './render/trackLife.ts';
+import { contactShadows } from './render/grounding.ts';
 import { batchStatic } from './render/batch.ts';
 import { Music, MUSIC_MODES, type MusicMode, type MusicScene } from './audio/music.ts';
 import { drawCredits } from './ui/screens/credits.ts';
@@ -158,6 +159,8 @@ export class App {
   private tuningPanel: TuningPanel | null = null;
   /** Extra zoom for looking at the scenery (debug). */
   debugZoom = 1;
+  /** Point the camera here instead of at the car (debug). */
+  debugLook: { x: number; z: number } | null = null;
   /** Every pause menu item; the tuning one is shown in free practice only. */
   private pauseAll: MenuItem[] = [];
   private tuneItem: MenuItem | null = null;
@@ -1101,8 +1104,9 @@ export class App {
     }
     const moving = new Set<THREE.Object3D>(props.nightLights);
     this.sceneryAnimate = null;
-    if (themeOf(track.def.theme).countryLife) {
-      const life = buildCountryLife(track, keepOut);
+    const recipe = themeOf(track.def.theme).life;
+    if (recipe) {
+      const life = buildTrackLife(track, keepOut, recipe, props.pond);
       g.add(life.group);
       keepOut.push(...life.keepOut);
       for (const o of life.moving) moving.add(o);
@@ -1113,6 +1117,8 @@ export class App {
     keepOut.push(...town.keepOut);
     this.windowMats = town.windows;
     g.add(buildScenery(track, keepOut));
+    const shadows = contactShadows(g, new Set<THREE.Material>(town.windows));
+    if (shadows) g.add(shadows);
     // Merge the many small static meshes into a few per area (draw calls).
     batchStatic(g, new Set(town.windows), moving);
     this.debugView = buildTrackDebugView(track, this.tuning);
@@ -1745,8 +1751,8 @@ export class App {
       lx = Math.sin(cam.yaw) * lead;
       lz = -Math.cos(cam.yaw) * lead;
     }
-    const tx = view.x + lx;
-    const tz = view.z + lz;
+    const tx = this.debugLook ? this.debugLook.x : view.x + lx;
+    const tz = this.debugLook ? this.debugLook.z : view.z + lz;
     const target = this.camTargets[v];
     if (!this.camInit[v]) {
       target.set(tx, view.y, tz);
