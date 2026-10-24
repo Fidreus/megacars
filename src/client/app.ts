@@ -50,6 +50,7 @@ import { buildProps } from './render/props.ts';
 import { RetroRenderer } from './render/renderer.ts';
 import { buildScenery } from './render/scenery.ts';
 import { buildTown } from './render/town.ts';
+import { buildCountryLife } from './render/countryLife.ts';
 import { batchStatic } from './render/batch.ts';
 import { Music, MUSIC_MODES, type MusicMode, type MusicScene } from './audio/music.ts';
 import { drawCredits } from './ui/screens/credits.ts';
@@ -209,6 +210,8 @@ export class App {
   private readonly camInit = [false, false];
   private readonly tagPos = new THREE.Vector3();
   private steam: SteamSource[] = [];
+  /** Scenery that moves on the CPU each frame (tractor, balloon). */
+  private sceneryAnimate: ((t: number) => void) | null = null;
   /** Building window materials, lit at night. */
   private windowMats: THREE.MeshToonMaterial[] = [];
   /** Camera shake strength 0..1 (decays). */
@@ -1096,13 +1099,22 @@ export class App {
       keepOut.push(...plant.keepOut);
       this.steam = plant.steam;
     }
+    const moving = new Set<THREE.Object3D>(props.nightLights);
+    this.sceneryAnimate = null;
+    if (themeOf(track.def.theme).countryLife) {
+      const life = buildCountryLife(track, keepOut);
+      g.add(life.group);
+      keepOut.push(...life.keepOut);
+      for (const o of life.moving) moving.add(o);
+      this.sceneryAnimate = life.animate;
+    }
     const town = buildTown(track, track.def.theme, keepOut);
     g.add(town.group);
     keepOut.push(...town.keepOut);
     this.windowMats = town.windows;
     g.add(buildScenery(track, keepOut));
     // Merge the many small static meshes into a few per area (draw calls).
-    batchStatic(g, new Set(town.windows), new Set(props.nightLights));
+    batchStatic(g, new Set(town.windows), moving);
     this.debugView = buildTrackDebugView(track, this.tuning);
     g.add(this.debugView);
     this.nightLights = props.nightLights;
@@ -1685,6 +1697,7 @@ export class App {
     this.view.update(alpha, dt, 0.19 / cam0.metersPerPixel, this.renderer.paletteMode !== PaletteMode.Off);
     this.view.particles.light.value = this.mood.particleLight;
     animTime.value = performance.now() / 1000;
+    this.sceneryAnimate?.(animTime.value);
     this.updateAudio();
     this.drawUi(dt);
     for (let v = 0; v < views; v++) {

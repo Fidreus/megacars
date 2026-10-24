@@ -25,6 +25,18 @@ export interface Theme {
   patchColors?: Partial<Record<number, string>>;
   /** Sponsor boards: text, background, text colour. */
   sponsors?: [string, string, string][];
+  /** Flower colours speckled over meadows in the ground. */
+  flowers?: [string, string, string];
+  /** Mowing stripes across a grass run-off. */
+  mowed?: boolean;
+  /** Cloud shadows drifting over the ground and the road. */
+  clouds?: boolean;
+  /** Trees gather into woods with open meadows between (0 = spread evenly, 1 = only in woods). */
+  woods?: number;
+  /** Some leafy trees in blossom. */
+  blossom?: string[];
+  /** Country life round the track: spectator banks, marshals, paddocks with animals, birds, a balloon. */
+  countryLife?: boolean;
 }
 
 const COUNTRYSIDE: Theme = {
@@ -32,6 +44,12 @@ const COUNTRYSIDE: Theme = {
   trees: 'cone',
   treeColors: ['#2f6b2e', '#3c7d34', '#2a5f33', '#4a8a3a', '#356f2a'],
   treeDensity: 1,
+  flowers: ['#f4f0e0', '#f2d23a', '#d878c8'],
+  mowed: true,
+  clouds: true,
+  woods: 0.93,
+  blossom: ['#f2b8c8', '#f8e8ee', '#e890b0'],
+  countryLife: true,
   bushColors: ['#2f6b2e', '#3c7d34', '#2a5f33', '#4a8a3a', '#356f2a'],
   rockColors: ['#8c8a84', '#a3a097'],
   rockCount: 120,

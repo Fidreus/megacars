@@ -145,6 +145,14 @@ export const MY_TRACK: TrackDef = {
   stenar, hus, damm och reklamskyltar (`sponsors`). Med `patchColors` kan en
   yta ritas i en annan färg, till exempel olja som öl. Ett okänt tema
   faller tillbaka på `countryside`.
+- **Liv och mark (countryside visar hur):** `flowers` ger blomsterängar i
+  marken, `mowed` ger klippta ränder i en gräsrunoff, `clouds` ger
+  drivande molnskuggor, `woods` samlar träden i skogsdungar och `blossom`
+  ger blommande träd. `countryLife` lägger till publikslänter i kurvorna,
+  funktionärer, ett tältläger, hagar med djur, höbalar, en traktor,
+  måsar och en luftballong (`countryLife.ts`). Allt som rör sig ritas
+  instansierat och animeras i shadern, eller flyttas av `animate`. Det
+  som flyttas måste hållas utanför `batchStatic`.
 - **Byggnader och landmärken:** varje tema har en gren i `buildTown`
   (`src/client/render/town.ts`). Där placeras temats byggnader med `place()`
   och `def.landmarks` läses. Egna modeller ligger i en egen fil, som

@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { distanceToCentreline } from '../../shared/track/builder.ts';
 import type { Track } from '../../shared/track/types.ts';
-import { makeRng } from '../../shared/math/rng.ts';
+import { hash3, makeRng } from '../../shared/math/rng.ts';
 import { toon } from './materials.ts';
 import type { KeepOut } from './props.ts';
 import { merge } from './carMesh.ts';
@@ -36,7 +36,20 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
 
   // Trees: cone crowns on short trunks, a few rounder deciduous ones.
   const area = (b.maxX - b.minX + pad * 2) * (b.maxZ - b.minZ + pad * 2);
-  const treeCount = Math.min(1400, Math.round((area / 260) * theme.treeDensity));
+  const woods = theme.woods ?? 0;
+  // Woods pack the same trees closer, so a few more of them.
+  const treeCount = Math.min(1400 + 1000 * woods, Math.round((area / 260) * theme.treeDensity * (1 + woods * 0.6)));
+  const seed = track.def.seed ?? 1;
+  /** How wooded a spot is, 0..1: slow value noise, so woods come in patches. */
+  const woodland = (x: number, z: number) => {
+    const u = x / 75, v = z / 75;
+    const i = Math.floor(u), j = Math.floor(v);
+    const fu = u - i, fv = v - j;
+    const su = fu * fu * (3 - 2 * fu), sv = fv * fv * (3 - 2 * fv);
+    const h = (a: number, c: number) => hash3(a, c, seed);
+    const n = (h(i, j) * (1 - su) + h(i + 1, j) * su) * (1 - sv) + (h(i, j + 1) * (1 - su) + h(i + 1, j + 1) * su) * sv;
+    return Math.min(1, Math.max(0, (n - 0.5) / 0.14));
+  };
   // Conifer: three stacked tiers. Leafy tree: three lumps. Both shaded darker
   // at the bottom and lighter on top (vertex colours times the instance colour).
   let crownGeo: THREE.BufferGeometry = shadeByHeight(merge([
@@ -77,19 +90,40 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
   }
   const trunkGeo = new THREE.CylinderGeometry(0.22, 0.3, 1.8, 5);
   trunkGeo.translate(0, 0.9, 0);
-  const crowns = new THREE.InstancedMesh(crownGeo, toon('#ffffff', { vertexColors: !!crownGeo.getAttribute('color') }), treeCount);
-  const rounds = new THREE.InstancedMesh(roundGeo, toon('#ffffff', { vertexColors: !!roundGeo.getAttribute('color') }), treeCount);
-  const trunks = new THREE.InstancedMesh(trunkGeo, toon('#6b4a2e'), treeCount * 2);
-  let nc = 0, nr = 0, nt = 0;
+  const crowns = new Chunked(crownGeo, toon('#ffffff', { vertexColors: !!crownGeo.getAttribute('color') }));
+  const rounds = new Chunked(roundGeo, toon('#ffffff', { vertexColors: !!roundGeo.getAttribute('color') }));
+  const trunks = new Chunked(trunkGeo, toon('#6b4a2e'));
   const greens = theme.treeColors;
   const capped = theme.trees === 'snowpine';
   const trunkless = theme.trees === 'cactus';
   const leafy = theme.trees === 'leafy';
-  for (let i = 0; i < treeCount; i++) {
+  // Where the trees stand. With woods most of them grow in copses - tight
+  // round groups in the wooded patches - and the rest alone in the fields.
+  const spots: { x: number; z: number; wood: number }[] = [];
+  const open = (x: number, z: number) =>
+    distanceToCentreline(track, x, z) >= clear && !keepOut.some((k) => (x - k.x) ** 2 + (z - k.z) ** 2 < k.r * k.r);
+  for (let tries = 0; tries < 400 && spots.length < treeCount * woods * 0.8; tries++) {
+    const c = pick(clear + 4, 1e9);
+    if (!c || woodland(c[0], c[1]) < 0.3) continue;
+    const r = 9 + rnd() * 16;
+    const n = Math.round((r * r) / 5);
+    for (let k = 0; k < n; k++) {
+      const a = rnd() * Math.PI * 2;
+      const d = r * Math.sqrt(rnd());
+      const x = c[0] + Math.cos(a) * d;
+      const z = c[1] + Math.sin(a) * d;
+      if (open(x, z)) spots.push({ x, z, wood: 1 - d / r });
+    }
+  }
+  while (spots.length < treeCount) {
     const p = pick(clear, 1e9);
-    if (!p) continue;
-    // Cluster: skip some trees close to the road for a more natural edge.
-    const s = 0.75 + rnd() * 0.6;
+    if (!p) break;
+    spots.push({ x: p[0], z: p[1], wood: 0 });
+  }
+  for (const spot of spots.slice(0, treeCount)) {
+    const p = [spot.x, spot.z];
+    // Bigger trees in the heart of a wood.
+    const s = (0.75 + rnd() * 0.6) * (1 + 0.3 * spot.wood);
     dummy.position.set(p[0], 0, p[1]);
     dummy.rotation.set(0, rnd() * Math.PI * 2, 0);
     dummy.scale.set(s, s * (0.85 + rnd() * 0.4), s);
@@ -97,35 +131,26 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
     color.set(greens[Math.floor(rnd() * greens.length)]);
     if (capped) {
       // Every fir gets a snow cap.
-      crowns.setMatrixAt(nc, dummy.matrix);
-      crowns.setColorAt(nc++, color);
-      rounds.setMatrixAt(nr, dummy.matrix);
-      rounds.setColorAt(nr++, color.set('#f2f6fa'));
+      crowns.add(dummy.matrix, color);
+      rounds.add(dummy.matrix, color.set('#f2f6fa'));
     } else if (leafy || rnd() >= 0.7) {
-      rounds.setMatrixAt(nr, dummy.matrix);
-      rounds.setColorAt(nr++, color.multiplyScalar(1.1));
+      // Now and then a tree in blossom, out in the open.
+      if (theme.blossom && spot.wood === 0 && rnd() < 0.2) color.set(theme.blossom[Math.floor(rnd() * theme.blossom.length)]);
+      else color.multiplyScalar(1.1);
+      rounds.add(dummy.matrix, color);
     } else {
-      crowns.setMatrixAt(nc, dummy.matrix);
-      crowns.setColorAt(nc++, color);
+      crowns.add(dummy.matrix, color);
     }
-    if (!trunkless) trunks.setMatrixAt(nt++, dummy.matrix);
+    if (!trunkless) trunks.add(dummy.matrix);
   }
-  for (const [mesh, count] of [[crowns, nc], [rounds, nr], [trunks, nt]] as const) {
-    mesh.count = count;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    group.add(mesh);
-  }
+  for (const c of [crowns, rounds, trunks]) group.add(...c.meshes(true));
 
   // Bushes hugging the outside of the barriers.
   const bushGeo = new THREE.IcosahedronGeometry(0.9, 0);
   bushGeo.scale(1, 0.6, 1);
   bushGeo.translate(0, 0.45, 0);
   const bushCount = Math.round(track.length / 9);
-  const bushes = new THREE.InstancedMesh(bushGeo, toon('#ffffff'), bushCount);
-  let nb = 0;
+  const bushes = new Chunked(bushGeo, toon('#ffffff'));
   for (let i = 0; i < bushCount; i++) {
     const p = pick(clear - 1.5, clear + 7, 60);
     if (!p) continue;
@@ -134,19 +159,14 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
     dummy.rotation.set(0, rnd() * 6.28, 0);
     dummy.scale.set(s, s, s);
     dummy.updateMatrix();
-    bushes.setMatrixAt(nb, dummy.matrix);
-    bushes.setColorAt(nb++, color.set(theme.bushColors[Math.floor(rnd() * theme.bushColors.length)]).multiplyScalar(0.9));
+    bushes.add(dummy.matrix, color.set(theme.bushColors[Math.floor(rnd() * theme.bushColors.length)]).multiplyScalar(0.9));
   }
-  bushes.count = nb;
-  bushes.castShadow = true;
-  bushes.receiveShadow = true;
-  group.add(bushes);
+  group.add(...bushes.meshes(true));
 
   // Rocks.
   const rockGeo = new THREE.DodecahedronGeometry(0.8, 0);
   rockGeo.translate(0, 0.3, 0);
-  const rocks = new THREE.InstancedMesh(rockGeo, toon('#ffffff'), theme.rockCount);
-  let nk = 0;
+  const rocks = new Chunked(rockGeo, toon('#ffffff'));
   for (let i = 0; i < theme.rockCount; i++) {
     const p = pick(clear + 2, 1e9);
     if (!p) continue;
@@ -155,14 +175,52 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
     dummy.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
     dummy.scale.set(s, s * 0.7, s);
     dummy.updateMatrix();
-    rocks.setMatrixAt(nk, dummy.matrix);
-    rocks.setColorAt(nk++, color.set(theme.rockColors[Math.floor(rnd() * theme.rockColors.length)]));
+    rocks.add(dummy.matrix, color.set(theme.rockColors[Math.floor(rnd() * theme.rockColors.length)]));
   }
-  rocks.count = nk;
-  rocks.castShadow = true;
-  group.add(rocks);
+  group.add(...rocks.meshes(true, false));
 
   return group;
+}
+
+/**
+ * Instances sorted into square cells with one InstancedMesh per cell, so the
+ * camera (and the shadow pass) only draws the cells it can see instead of
+ * every tree on the map.
+ */
+class Chunked {
+  private readonly cells = new Map<string, { m: THREE.Matrix4; c: THREE.Color | null }[]>();
+  private readonly geo: THREE.BufferGeometry;
+  private readonly mat: THREE.Material;
+  private readonly size: number;
+
+  constructor(geo: THREE.BufferGeometry, mat: THREE.Material, size = 80) {
+    this.geo = geo;
+    this.mat = mat;
+    this.size = size;
+  }
+
+  add(m: THREE.Matrix4, c?: THREE.Color): void {
+    const key = `${Math.floor(m.elements[12] / this.size)},${Math.floor(m.elements[14] / this.size)}`;
+    let list = this.cells.get(key);
+    if (!list) this.cells.set(key, (list = []));
+    list.push({ m: m.clone(), c: c ? c.clone() : null });
+  }
+
+  meshes(castShadow: boolean, receiveShadow = true): THREE.InstancedMesh[] {
+    const out: THREE.InstancedMesh[] = [];
+    for (const list of this.cells.values()) {
+      const mesh = new THREE.InstancedMesh(this.geo, this.mat, list.length);
+      list.forEach((it, k) => {
+        mesh.setMatrixAt(k, it.m);
+        if (it.c) mesh.setColorAt(k, it.c);
+      });
+      mesh.castShadow = castShadow;
+      mesh.receiveShadow = receiveShadow;
+      mesh.computeBoundingSphere();
+      out.push(mesh);
+    }
+    return out;
+  }
 }
 
 /** Vertex colours from `lo` at the bottom to `hi` at the top (multiplies the instance colour). */

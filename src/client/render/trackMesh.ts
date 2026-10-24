@@ -11,7 +11,7 @@ import { buildBridges } from './bridgeMesh.ts';
 import { buildPitView } from './pitMesh.ts';
 import { buildBoostPads } from './boostMesh.ts';
 import { themeOf } from './theme.ts';
-import { toon } from './materials.ts';
+import { animTime, toon } from './materials.ts';
 
 export const SURFACE_COLORS: Record<number, string> = {
   [Surface.Asphalt]: '#3c3d44',
@@ -42,6 +42,13 @@ float valueNoise(vec2 p) {
   return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
              mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
 }
+// Cloud shadows drifting over the ground (ground and road): soft-edged
+// blobs that darken what is under them.
+float cloudShade(vec2 p, float t) {
+  vec2 q = p + t * vec2(2.4, 1.0);
+  float c = valueNoise(q * 0.0095) * 0.7 + valueNoise(q * 0.031 + 5.0) * 0.3;
+  return 1.0 - 0.2 * smoothstep(0.54, 0.64, c);
+}
 `;
 
 /** Adds a world-position varying to a built-in material's shaders. */
@@ -69,6 +76,21 @@ export function buildTrackView(track: Track): THREE.Group {
   return group;
 }
 
+/** Shader defines and uniforms for the theme's ground extras (flowers, clouds). */
+function groundExtras(track: Track, shader: { uniforms: Record<string, THREE.IUniform>; fragmentShader: string }): string {
+  const theme = themeOf(track.def.theme);
+  let head = '';
+  if (theme.clouds) {
+    shader.uniforms.uTime = animTime;
+    head += '#define CLOUDS\nuniform float uTime;\n';
+  }
+  if (theme.flowers) {
+    shader.uniforms.uFlowers = { value: theme.flowers.map((c) => new THREE.Color(c)) };
+    head += '#define FLOWERS\nuniform vec3 uFlowers[3];\n';
+  }
+  return head;
+}
+
 function buildGround(track: Track): THREE.Mesh {
   const b = track.bounds;
   const pad = 500;
@@ -78,7 +100,8 @@ function buildGround(track: Track): THREE.Mesh {
   const mat = toon(themeOf(track.def.theme).ground);
   mat.onBeforeCompile = (shader) => {
     withWorldPos(shader);
-    shader.fragmentShader = shader.fragmentShader.replace(
+    const head = groundExtras(track, shader);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${head}`).replace(
       '#include <color_fragment>',
       `#include <color_fragment>
       {
@@ -89,6 +112,22 @@ function buildGround(track: Track): THREE.Mesh {
         if (n > 0.94) k += 0.13;
         if (n < 0.04) k -= 0.12;
         diffuseColor.rgb *= k;
+        #ifdef FLOWERS
+        // Meadows: where a slow noise says so, the grass is lush and dotted
+        // with flowers; elsewhere a few strays.
+        float bloom = smoothstep(0.58, 0.78, valueNoise(vWPos.xz * 0.028 + 41.0));
+        // Flowers grow in clumps a few metres across, only in the meadows.
+        float clump = bloom * smoothstep(0.7, 0.86, valueNoise(vWPos.xz * 0.3 + 3.0));
+        diffuseColor.rgb *= mix(vec3(1.0), vec3(1.1, 1.08, 0.86), clump * 0.6);
+        vec2 cell = floor(vWPos.xz * 2.5);
+        if (hash12(cell + 7.0) > 1.0 - 0.4 * clump) {
+          float which = hash12(cell + 19.0);
+          diffuseColor.rgb = which < 0.45 ? uFlowers[0] : which < 0.8 ? uFlowers[1] : uFlowers[2];
+        }
+        #endif
+        #ifdef CLOUDS
+        diffuseColor.rgb *= cloudShade(vWPos.xz, uTime);
+        #endif
       }`,
     );
   };
@@ -158,10 +197,13 @@ function buildRoad(track: Track): THREE.Mesh {
     uCurbB: { value: new THREE.Color('#ececec') },
     uLength: { value: track.length },
   };
+  const theme = themeOf(track.def.theme);
+  const mowed = theme.mowed && (track.def.runoffSurface ?? Surface.Grass) === Surface.Grass && !theme.runoff;
   const mat = toon('#ffffff');
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     withWorldPos(shader);
+    const head = groundExtras(track, shader) + (mowed ? '#define MOWED\n' : '');
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aRoad;\nvarying vec4 vRoad;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRoad = aRoad;');
@@ -169,6 +211,7 @@ function buildRoad(track: Track): THREE.Mesh {
       .replace(
         '#include <common>',
         `#include <common>
+        ${head}
         #define MAX_PATCHES ${MAX_PATCHES}
         varying vec4 vRoad;
         uniform vec4 uPatch[MAX_PATCHES];
@@ -231,11 +274,18 @@ function buildRoad(track: Track): THREE.Mesh {
             }
           } else {
             col = uRunoff * (0.84 + 0.14 * n1 + 0.1 * n2);
+            #ifdef MOWED
+            // Mown in bands across the run-off, like a real circuit's verges.
+            col *= mod(floor(sAlong / 5.0), 2.0) < 1.0 ? 1.08 : 0.95;
+            #endif
             for (int k = 0; k < MAX_PATCHES; k++) {
               if (k >= uPatchCount) break;
               if (uPatch[k].w > 0.5 && patchEdge(k, vWPos.xz) < 1.0) col = uPatchColor[k] * (0.84 + 0.2 * n1);
             }
           }
+          #ifdef CLOUDS
+          col *= cloudShade(vWPos.xz, uTime);
+          #endif
           diffuseColor.rgb = col;
         }`,
       );
