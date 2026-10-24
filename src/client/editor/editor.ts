@@ -55,6 +55,8 @@ interface Draft {
 }
 
 interface Button {
+  /** Buttons are drawn anew every frame: the label and place say which one it is. */
+  key: string;
   x: number;
   y: number;
   w: number;
@@ -131,7 +133,8 @@ export class TrackEditor {
   private drag: Drag | null = null;
   private dragUndo = false;
   private pinch: { d: number; zoom: number; mx: number; my: number; camX: number; camZ: number } | null = null;
-  private pressed: Button | null = null;
+  /** The button held down (its key: a click lasts several frames). */
+  private pressed: string | null = null;
   private buttons: Button[] = [];
   private note = '';
   private noteTime = 0;
@@ -431,7 +434,7 @@ export class TrackEditor {
     if (this.pointers.size > 2) return;
     const btn = this.buttonAt(x, y);
     if (btn) {
-      this.pressed = btn;
+      this.pressed = btn.key;
       return;
     }
     if (e.button === 2 || e.button === 1) {
@@ -525,10 +528,11 @@ export class TrackEditor {
       this.drag = null;
       return;
     }
-    const btn = this.pressed;
+    const held = this.pressed;
     this.pressed = null;
-    if (btn) {
-      if (!cancel && this.buttonAt(p.x, p.y) === btn && !btn.off) btn.act();
+    if (held) {
+      const btn = this.buttonAt(p.x, p.y);
+      if (!cancel && btn?.key === held && !btn.off) btn.act();
       return;
     }
     const dr = this.drag;
@@ -1007,10 +1011,10 @@ export class TrackEditor {
     const k = this.k;
     const w = opts.w ?? textWidth(label, k) + 8 * k;
     const h = 13 * k;
-    const b: Button = { x, y, w, h, act, on: opts.on, off: opts.off };
+    const b: Button = { key: `${label}@${Math.round(x)},${Math.round(y)}`, x, y, w, h, act, on: opts.on, off: opts.off };
     this.buttons.push(b);
     const ctx = this.ctx;
-    const down = this.pressed === b;
+    const down = this.pressed === b.key;
     ctx.fillStyle = opts.on ? '#3a3410' : down ? '#2a3046' : 'rgba(8,10,24,0.85)';
     ctx.fillRect(x, y, w, h);
     ctx.fillStyle = opts.on ? '#ffd84a' : '#4a5470';
