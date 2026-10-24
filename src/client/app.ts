@@ -59,7 +59,7 @@ import { buildIndustry, type SteamSource } from './render/industry.ts';
 import { themeOf } from './render/theme.ts';
 import { buildTrackView } from './render/trackMesh.ts';
 import { drawText, LINE_H, textWidth } from './ui/font.ts';
-import { Menu, type MenuItem } from './ui/menu.ts';
+import { cycle, Menu, type MenuEvents, type MenuItem } from './ui/menu.ts';
 import { drawCountdown, drawPlayerHud, formatTime, Minimap } from './ui/screens/hud.ts';
 import { drawResults } from './ui/screens/results.ts';
 import { connText, drawLobby, inviteLink, pingColor } from './ui/screens/lobby.ts';
@@ -71,7 +71,7 @@ import {
 import { buy, CAR_MODELS } from '../shared/game/shop.ts';
 import { DIVISIONS, endSeason, loadCareer, newCareer, saveCareer, type Career } from './game/career.ts';
 import { drawSeasonEnd } from './ui/screens/season.ts';
-import type { RaceSpec } from '../shared/net/protocol.ts';
+import type { RaceSpec, RoomConfig } from '../shared/net/protocol.ts';
 import { CATCH_UP, farBehind, leaderDistance } from '../shared/sim/catchUp.ts';
 import { setBoostPadsLit } from './render/boostMesh.ts';
 
@@ -114,8 +114,11 @@ function lapsLabel(track: string, laps: number): string {
 
 const CAM_HEIGHT_NAMES = ['LOW', 'NORMAL', 'HIGH'];
 
-/** title: main menu; online: connect/join; lobby: in a room; race: a race on screen. */
-type Mode = 'title' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'options' | 'controls' | 'help' | 'records' | 'rooms' | 'credits';
+/**
+ * title: main menu; setup: single race settings; page: a sub-menu (options,
+ * race settings...); online: connect/join; lobby: in a room; race: a race on screen.
+ */
+type Mode = 'title' | 'setup' | 'page' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'controls' | 'help' | 'records' | 'rooms' | 'credits';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -164,7 +167,6 @@ export class App {
   /** Every pause menu item; the tuning one is shown in free practice only. */
   private pauseAll: MenuItem[] = [];
   private tuneItem: MenuItem | null = null;
-  private touchItem: MenuItem | null = null;
   private readonly titleMenu: Menu;
   private readonly pauseMenu: Menu;
   private readonly onlineMenu: Menu;
@@ -180,7 +182,15 @@ export class App {
   /** Career in progress (its current season is `cup`). */
   private career: Career | null = null;
   private readonly careerMenu: Menu;
-  private readonly optionsMenu: Menu;
+  /** Single race: track, laps, opponents... and start. */
+  private readonly setupMenu: Menu;
+  /** Sub-menus (options, the room's race settings...): a stack, BACK pops one. */
+  private pages: { title: string; menu: Menu; hint?: string }[] = [];
+  /** The screen the last page goes back to. */
+  private pageReturn: Mode = 'title';
+  /** The pause menu's options page (null: the pause menu itself). */
+  private pauseSub: Menu | null = null;
+  private menuEvents: MenuEvents = {};
   /** Key and gamepad bindings (saved in the browser). */
   readonly controls = loadControls();
   private readonly controlsScreen: ControlsScreen;
@@ -319,7 +329,9 @@ export class App {
 
     const beep = () => playUi(this.audio, 'move');
     const change = () => playUi(this.audio, 'change');
+    this.menuEvents = { onMove: beep, onChange: change };
     this.titleMenu = new Menu(this.buildTitleItems(), { onMove: beep, onChange: change });
+    this.setupMenu = new Menu(this.buildSetupItems(), { onMove: beep, onChange: change });
     this.pauseMenu = new Menu([
       { label: () => 'RESUME', select: () => (this.paused = false) },
       {
@@ -335,6 +347,7 @@ export class App {
         disabled: () => !(this.session instanceof RaceSession),
         select: () => this.restartRace(),
       },
+      { label: () => 'SOUND & CAMERA', select: () => this.openPauseOptions() },
       {
         label: () => (this.netRace ? 'LEAVE ROOM' : 'QUIT TO MENU'),
         select: () => (this.netRace ? this.leaveRoom() : this.toTitle()),
@@ -351,10 +364,17 @@ export class App {
     this.online = new Online({
       race: (s) => this.startOnlineRace(s),
       room: (room) => {
+        const inLobby = this.mode === 'lobby' || (this.mode === 'page' && this.pageReturn === 'lobby');
         if (room && (this.mode === 'online' || this.mode === 'rooms')) this.toLobby();
-        else if (!room && this.mode === 'lobby') this.mode = 'online';
-        // The host picked another track or class: show it behind the lobby (and build it now, not at the start).
-        else if (room && this.mode === 'lobby' && this.lobbyShows !== `${room.config.track}@${room.config.league}`) this.toLobby(false);
+        else if (!room && inLobby) {
+          this.pages = [];
+          this.mode = 'online';
+        } else if (room && inLobby && this.lobbyShows !== `${room.config.track}@${room.config.league}`) {
+          // The host picked another track or class: show it behind the lobby (and build it now, not at the start).
+          const onPage = this.mode === 'page';
+          this.toLobby(false);
+          if (onPage) this.mode = 'page';
+        }
       },
       notice: (text) => this.flashMessage(text, 2.5),
     });
@@ -381,21 +401,16 @@ export class App {
           this.openCupShop(0);
         },
       },
+      ...this.cupSettingItems(),
       { label: () => 'BACK', select: () => this.toTitle() },
-    ], { onMove: beep });
+    ], { onMove: beep, onChange: change });
     this.music = new Music(this.audio);
     this.music.mode = this.settings.musicMode as MusicMode;
     this.music.volume = this.settings.musicVolume / 10;
     this.audio.volume = (this.settings.soundVolume / 10) * 0.9;
     this.music.onSong = () => (this.songToast = 4);
-    this.optionsMenu = new Menu(this.buildOptionItems(), { onMove: beep, onChange: change });
     this.recordsScreen = new RecordsScreen(() => this.toTitle(), () => playUi(this.audio, 'move'));
-    this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'options'), (k) => playUi(this.audio, k));
-    // Music on/off, volumes and next song are also in the pause menu (Esc).
-    this.pauseMenu.items.splice(3, 0, ...this.buildOptionItems().slice(0, 6));
-    // Touch screens: the steering choice right after the camera settings.
-    this.touchItem = this.touchSteerItem();
-    this.pauseMenu.items.splice(9, 0, this.touchItem);
+    this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'page'), (k) => playUi(this.audio, k));
     this.pauseAll = this.pauseMenu.items;
     this.tuneItem = this.pauseAll[1];
     this.careerMenu = new Menu([
@@ -509,9 +524,6 @@ export class App {
   // ---------------------------------------------------------------- menus
 
   private buildTitleItems() {
-    const s = this.settings;
-    const changed = () => saveSettings(s);
-    const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
     const update = this.update.available
       ? [{
         label: () => (this.update.version && this.update.version !== VERSION ? `NEW VERSION ${this.update.version} - UPDATE NOW` : 'GAME UPDATED - LOAD THE NEW VERSION'),
@@ -520,25 +532,36 @@ export class App {
       : [];
     return [
       ...update,
-      { label: () => 'START RACE', select: () => this.startRace(s) },
-      { label: () => 'CAREER', select: () => this.toCareer() },
+      { label: () => 'SINGLE RACE', select: () => this.toSetup() },
       { label: () => 'CHAMPIONSHIP', select: () => { this.career = null; this.mode = 'cup'; this.cupMenu.index = loadCup() ? 0 : 1; } },
+      { label: () => 'CAREER', select: () => this.toCareer() },
       { label: () => 'PLAY ONLINE', select: () => this.toOnline() },
       {
-        label: () => (s.players === 1 ? 'PLAYERS: 1' : 'PLAYERS: 2 SPLIT SCREEN'),
-        change: () => {
-          s.players = s.players === 1 ? 2 : 1;
-          s.opponents = Math.min(s.opponents, 8 - s.players);
-          changed();
+        label: () => 'RECORDS',
+        select: () => {
+          this.online.commitName();
+          this.mode = 'records';
+          this.recordsScreen.me = cleanName(this.online.name);
+          this.recordsScreen.open(this.settings.track, this.settings.league);
         },
       },
+      { label: () => 'OPTIONS', select: () => this.openOptions() },
+      { label: () => 'HOW TO PLAY', select: () => (this.mode = 'help') },
+    ];
+  }
+
+  /** Single race: the race settings with a start button (the track shows behind). */
+  private buildSetupItems(): MenuItem[] {
+    const s = this.settings;
+    const changed = () => saveSettings(s);
+    return [
       {
         label: () => `TRACK: ${TRACKS[s.track].name.toUpperCase()}`,
         change: (d: number) => {
           const i = TRACK_LIST.findIndex((t) => t.id === s.track);
           s.track = TRACK_LIST[cycle(i, TRACK_LIST.length, d)].id;
           changed();
-          this.toTitle();
+          this.showAttract('setup');
         },
       },
       { label: () => lapsLabel(s.track, s.laps), change: (d: number) => { s.laps = 1 + cycle(s.laps - 1, 9, d); changed(); } },
@@ -549,27 +572,70 @@ export class App {
       { label: () => `DIFFICULTY: ${DIFFICULTIES[s.difficulty]}`, change: (d: number) => { s.difficulty = cycle(s.difficulty, 3, d); changed(); } },
       { label: () => `WEAPONS: ${s.weapons ? 'ON' : 'OFF'}`, change: () => { s.weapons = !s.weapons; changed(); } },
       { label: () => `LEAGUE: ${LEAGUE_NAMES[s.league]}`, change: (d: number) => { s.league = LEAGUES[cycle(LEAGUES.indexOf(s.league), LEAGUES.length, d)]; changed(); } },
-      { label: () => 'OPTIONS', select: () => { this.mode = 'options'; this.optionsMenu.index = 0; } },
-      { label: () => 'HOW TO PLAY', select: () => (this.mode = 'help') },
       {
-        label: () => `YOUR NAME: ${this.online.name}`,
-        text: { get: () => this.online.name, set: (v: string) => (this.online.name = v), max: 12, allowed: /[A-Z0-9 ._-]/ },
-        select: () => {
-          this.online.commitName();
-          this.flashMessage(`HELLO ${this.online.name}!`, 1.5);
+        label: () => (s.players === 1 ? 'PLAYERS: 1' : 'PLAYERS: 2 SPLIT SCREEN'),
+        change: () => {
+          s.players = s.players === 1 ? 2 : 1;
+          s.opponents = Math.min(s.opponents, 8 - s.players);
+          changed();
         },
       },
-      {
-        label: () => 'RECORDS',
-        select: () => {
-          this.online.commitName();
-          this.mode = 'records';
-          this.recordsScreen.me = cleanName(this.online.name);
-          this.recordsScreen.open(this.settings.track, this.settings.league);
-        },
-      },
+      { label: () => 'START RACE', select: () => this.startRace(s) },
       { label: () => 'FREE PRACTICE', select: () => this.startRace({ ...s, practice: true, players: 1, opponents: 0 }) },
+      { label: () => 'BACK', select: () => this.toTitle() },
     ];
+  }
+
+  private toSetup(): void {
+    this.showAttract('setup');
+    this.setupMenu.index = 7;
+  }
+
+  /** New championships: laps, difficulty, weapons and class (shared with the single race). */
+  private cupSettingItems(): MenuItem[] {
+    const s = this.settings;
+    const changed = () => saveSettings(s);
+    return [
+      { label: () => `LAPS: ${s.laps}`, change: (d: number) => { s.laps = 1 + cycle(s.laps - 1, 9, d); changed(); } },
+      { label: () => `DIFFICULTY: ${DIFFICULTIES[s.difficulty]}`, change: (d: number) => { s.difficulty = cycle(s.difficulty, 3, d); changed(); } },
+      { label: () => `WEAPONS: ${s.weapons ? 'ON' : 'OFF'}`, change: () => { s.weapons = !s.weapons; changed(); } },
+      { label: () => `LEAGUE: ${LEAGUE_NAMES[s.league]}`, change: (d: number) => { s.league = LEAGUES[cycle(LEAGUES.indexOf(s.league), LEAGUES.length, d)]; changed(); } },
+    ];
+  }
+
+  // ---------------------------------------------------------------- pages
+
+  /** Open a sub-menu over the current screen (a BACK row is added). */
+  private openPage(title: string, items: MenuItem[], hint?: string): void {
+    if (this.mode !== 'page') {
+      this.pageReturn = this.mode;
+      this.pages = [];
+    }
+    this.pages.push({ title, menu: new Menu([...items, { label: () => 'BACK', select: () => this.closePage() }], this.menuEvents), hint });
+    this.mode = 'page';
+  }
+
+  /** Back one page; from the first one, back to the screen it opened over. */
+  private closePage(): void {
+    this.pages.pop();
+    if (!this.pages.length) this.mode = this.pageReturn;
+  }
+
+  private openOptions(): void {
+    this.openPage('OPTIONS', [
+      { label: () => 'SOUND & MUSIC', select: () => this.openPage('SOUND & MUSIC', this.soundItems(), 'TIP: DRAG YOUR OWN .MOD / .XM FILES ONTO THE GAME TO ADD THEM - THEY STAY ON YOUR COMPUTER') },
+      { label: () => 'GRAPHICS & CAMERA', select: () => this.openPage('GRAPHICS & CAMERA', this.displayItems(), 'M TIME OF DAY   3 CRT   4 COLOURS') },
+      { label: () => 'CONTROLS', select: () => this.openPage('CONTROLS', this.controlItems()) },
+      { label: () => 'PLAYER', select: () => this.openPage('PLAYER', this.playerItems(), 'YOUR NAME IN ONLINE ROOMS AND ON THE RECORD BOARDS') },
+    ]);
+  }
+
+  /** The pause menu's own page: sound and camera without leaving the race. */
+  private openPauseOptions(): void {
+    const items: MenuItem[] = [...this.soundItems().slice(0, 4), ...this.displayItems().slice(0, 2)];
+    if (this.touch.enabled) items.push(this.touchSteerItem());
+    items.push({ label: () => 'BACK', select: () => (this.pauseSub = null) });
+    this.pauseSub = new Menu(items, this.menuEvents);
   }
 
   private buildOnlineItems() {
@@ -603,12 +669,10 @@ export class App {
 
   private buildLobbyItems() {
     const o = () => this.online;
-    const cfg = () => o().room?.config;
     const notHost = () => !o().isHost;
     const busy = () => o().room?.state === 'race';
-    const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
     const everyoneReady = () => !!o().room?.players.every((p) => p.ready || !p.connected || p.id === o().room?.hostId);
-    const pub = () => !!cfg()?.public;
+    const pub = () => !!o().room?.config.public;
     return [
       {
         label: () => {
@@ -620,11 +684,25 @@ export class App {
         disabled: () => busy() || (o().isHost && !pub() && !everyoneReady()),
         select: () => (o().isHost && !pub() ? o().start() : o().setReady(!o().myInfo?.ready)),
       },
+      { label: () => (o().isHost ? 'RACE SETTINGS' : 'RACE SETTINGS (HOST CHOOSES)'), select: () => this.openPage('RACE SETTINGS', this.roomSettingItems()) },
       {
-        label: () => `ROOM: ${pub() ? 'PUBLIC - IN THE ROOM LIST' : 'PRIVATE - CODE ONLY'}`,
-        disabled: notHost,
-        change: () => o().configure({ public: !pub() }),
+        label: () => (o().room?.config.upgrades === false ? 'SHOP: CLOSED' : `SHOP  $${o().profile?.money ?? '...'}`),
+        disabled: () => busy() || o().room?.config.upgrades === false,
+        select: () => this.openOnlineShop(),
       },
+      { label: () => 'NEW SEASON', disabled: () => notHost() || busy() || !o().room?.races, select: () => o().newSeason() },
+      { label: () => 'COPY INVITE LINK', select: () => this.copyInvite() },
+      { label: () => 'LEAVE ROOM', select: () => this.leaveRoom() },
+    ];
+  }
+
+  /** What the host decides for the room's races (others see them greyed out). */
+  private roomSettingItems(): MenuItem[] {
+    const o = () => this.online;
+    const cfg = () => o().room?.config;
+    const notHost = () => !o().isHost;
+    const pub = () => !!cfg()?.public;
+    return [
       {
         label: () => `TRACK: ${TRACKS[cfg()?.track ?? '']?.name.toUpperCase() ?? '?'}`,
         disabled: notHost,
@@ -650,18 +728,21 @@ export class App {
       {
         label: () => `LEAGUE: ${LEAGUE_NAMES[leagueOf(cfg()?.league)]}`,
         disabled: notHost,
-        change: () => o().configure({ league: LEAGUES[(LEAGUES.indexOf(leagueOf(cfg()?.league)) + 1) % LEAGUES.length] }),
-      },
-      {
-        label: () => (cfg()?.upgrades === false ? 'SHOP: CLOSED' : `SHOP  $${o().profile?.money ?? '...'}`),
-        disabled: () => busy() || cfg()?.upgrades === false,
-        select: () => this.openOnlineShop(),
+        change: (d: number) => o().configure({ league: LEAGUES[cycle(LEAGUES.indexOf(leagueOf(cfg()?.league)), LEAGUES.length, d)] }),
       },
       { label: () => `UPGRADES: ${cfg()?.upgrades === false ? 'OFF' : 'ON'}`, disabled: notHost, change: () => o().configure({ upgrades: cfg()?.upgrades === false }) },
-      { label: () => 'NEW SEASON', disabled: () => notHost() || busy() || !o().room?.races, select: () => o().newSeason() },
-      { label: () => 'COPY INVITE LINK', select: () => this.copyInvite() },
-      { label: () => 'LEAVE ROOM', select: () => this.leaveRoom() },
+      {
+        label: () => `ROOM: ${pub() ? 'PUBLIC - IN THE ROOM LIST' : 'PRIVATE - CODE ONLY'}`,
+        disabled: notHost,
+        change: () => o().configure({ public: !pub() }),
+      },
     ];
+  }
+
+  /** One line about the room's next race: track, laps, cars, weapons, class. */
+  private raceSummary(c: RoomConfig): string {
+    const track = TRACKS[c.track]?.name.toUpperCase() ?? '?';
+    return `${track}   ${raceLaps(c.track, c.laps)} LAPS   ${c.ai} AI   WEAPONS ${c.weapons === false ? 'OFF' : 'ON'}   ${LEAGUE_NAMES[leagueOf(c.league)]}`;
   }
 
   /** The public room list (refreshed every few seconds while shown). */
@@ -745,6 +826,8 @@ export class App {
   }
 
   private startOnlineRace(s: OnlineSession): void {
+    this.pages = [];
+    this.pauseSub = null;
     this.mode = 'race';
     this.paused = false;
     this.pitHinted = false;
@@ -753,10 +836,9 @@ export class App {
     this.setSession(s);
   }
 
-  private buildOptionItems() {
+  private soundItems(): MenuItem[] {
     const s = this.settings;
     const changed = () => saveSettings(s);
-    const cycle = (v: number, n: number, d: number) => (v + d + n) % n;
     const clamp10 = (v: number) => Math.max(0, Math.min(10, v));
     const bar = (v: number) => '■'.repeat(v) + '□'.repeat(10 - v);
     return [
@@ -785,6 +867,19 @@ export class App {
         },
       },
       { label: () => 'NEXT SONG  (N)', select: () => this.music.next() },
+      {
+        label: () => (this.music.own.size ? `MY MUSIC: ${this.music.own.size} FILES - CLEAR` : 'MY MUSIC: DROP .MOD/.XM FILES ON THE GAME'),
+        disabled: () => this.music.own.size === 0,
+        select: () => void this.music.clearOwn().then(() => this.flashMessage('MY MUSIC CLEARED')),
+      },
+      { label: () => 'MUSIC CREDITS', select: () => (this.mode = 'credits') },
+    ];
+  }
+
+  private displayItems(): MenuItem[] {
+    const s = this.settings;
+    const changed = () => saveSettings(s);
+    return [
       this.cameraItem(),
       this.camHeightItem(),
       {
@@ -813,6 +908,19 @@ export class App {
           changed();
         },
       },
+    ];
+  }
+
+  private controlItems(): MenuItem[] {
+    const s = this.settings;
+    return [
+      {
+        label: () => 'KEYS AND GAMEPAD',
+        select: () => {
+          this.mode = 'controls';
+          this.controlsScreen.menu.index = 0;
+        },
+      },
       this.touchSteerItem(),
       {
         label: () => `TOUCH GAS: ${{ thumb: 'AUTO WHILE THUMB IS DOWN', always: 'AUTO ALWAYS', button: 'GAS BUTTON' }[s.touchGas]}`,
@@ -821,23 +929,22 @@ export class App {
           s.touchGas = modes[cycle(modes.indexOf(s.touchGas), 3, d)];
           this.touch.gasMode = s.touchGas;
           this.touch.relayout();
-          changed();
+          saveSettings(s);
         },
       },
+    ];
+  }
+
+  private playerItems(): MenuItem[] {
+    return [
       {
-        label: () => (this.music.own.size ? `MY MUSIC: ${this.music.own.size} FILES - CLEAR` : 'MY MUSIC: DROP .MOD/.XM FILES ON THE GAME'),
-        disabled: () => this.music.own.size === 0,
-        select: () => void this.music.clearOwn().then(() => this.flashMessage('MY MUSIC CLEARED')),
-      },
-      {
-        label: () => 'CONTROLS (KEYS AND GAMEPAD)',
+        label: () => `YOUR NAME: ${this.online.name}`,
+        text: { get: () => this.online.name, set: (v: string) => (this.online.name = v), max: 12, allowed: /[A-Z0-9 ._-]/ },
         select: () => {
-          this.mode = 'controls';
-          this.controlsScreen.menu.index = 0;
+          this.online.commitName();
+          this.flashMessage(`HELLO ${this.online.name}!`, 1.5);
         },
       },
-      { label: () => 'MUSIC CREDITS', select: () => (this.mode = 'credits') },
-      { label: () => 'BACK', select: () => this.toTitle() },
     ];
   }
 
@@ -946,7 +1053,8 @@ export class App {
 
   /** What the music should be doing for the current screen. */
   private musicScene(): MusicScene {
-    if (this.mode === 'title' || this.mode === 'options' || this.mode === 'controls' || this.mode === 'help' || this.mode === 'records' || this.mode === 'credits') return { kind: 'title' };
+    const titleish: Mode[] = ['title', 'setup', 'controls', 'help', 'records', 'credits'];
+    if (titleish.includes(this.mode) || (this.mode === 'page' && this.pageReturn === 'title')) return { kind: 'title' };
     if (this.mode === 'seasonEnd' || this.mode === 'standings' || this.showingResults) return { kind: 'results' };
     if (this.mode === 'race') return { kind: 'race', track: this.session.track.def.id };
     return { kind: 'menu' };
@@ -959,6 +1067,7 @@ export class App {
 
   /** A menu screen over the attract-mode race. */
   private showAttract(mode: Mode, over?: Partial<RaceSettings>): void {
+    if (mode !== 'page') this.pages = [];
     this.mode = mode;
     this.paused = false;
     this.tuningPanel?.hide();
@@ -966,6 +1075,8 @@ export class App {
   }
 
   startRace(settings: RaceSettings, spec?: RaceSpec): void {
+    this.pages = [];
+    this.pauseSub = null;
     this.mode = 'race';
     this.paused = false;
     this.pitHinted = false;
@@ -1159,7 +1270,7 @@ export class App {
   }
 
   private syncPauseMenu(): void {
-    const want = this.pauseAll.filter((it) => (it !== this.tuneItem || this.practicing) && (it !== this.touchItem || this.touch.enabled));
+    const want = this.pauseAll.filter((it) => it !== this.tuneItem || this.practicing);
     if (want.length !== this.pauseMenu.items.length) this.pauseMenu.items = want;
   }
 
@@ -1266,15 +1377,16 @@ export class App {
   get activeMenu(): Menu | null {
     if (this.askName && this.showingResults) return this.nameMenu;
     if (this.mode === 'title') return this.titleMenu;
+    if (this.mode === 'setup') return this.setupMenu;
+    if (this.mode === 'page') return this.pages[this.pages.length - 1]?.menu ?? null;
     if (this.mode === 'online') return this.onlineMenu;
     if (this.mode === 'lobby') return this.lobbyMenu;
     if (this.mode === 'rooms') return this.roomsMenu;
     if (this.mode === 'cup') return this.cupMenu;
-    if (this.mode === 'options') return this.optionsMenu;
     if (this.mode === 'controls') return this.controlsScreen.menu;
     if (this.mode === 'career') return this.careerMenu;
     if (this.mode === 'shop') return this.shop?.menu ?? null;
-    return this.paused ? this.pauseMenu : null;
+    return this.paused ? (this.pauseSub ?? this.pauseMenu) : null;
   }
 
   private handleKeys(dt: number): void {
@@ -1376,6 +1488,17 @@ export class App {
       this.titleMenu.handle(nav);
       return;
     }
+    if (this.mode === 'setup') {
+      if (nav.back) this.toTitle();
+      else this.setupMenu.handle(nav);
+      return;
+    }
+    if (this.mode === 'page') {
+      const page = this.pages[this.pages.length - 1];
+      if (!page || nav.back) this.closePage();
+      else page.menu.handle(nav);
+      return;
+    }
     if (this.mode === 'online') {
       if (nav.back) this.toTitle();
       else this.onlineMenu.handle(nav);
@@ -1393,11 +1516,6 @@ export class App {
     if (this.mode === 'shop') {
       if (nav.back && this.netRace === null && this.online.room && !this.cup) this.toLobby();
       else this.shop?.handle(nav);
-      return;
-    }
-    if (this.mode === 'options') {
-      if (nav.back) this.toTitle();
-      else this.optionsMenu.handle(nav);
       return;
     }
     if (this.mode === 'controls') {
@@ -1418,7 +1536,7 @@ export class App {
       return;
     }
     if (this.mode === 'credits') {
-      if (nav.back || nav.confirm || nav.click) this.mode = 'options';
+      if (nav.back || nav.confirm || nav.click) this.mode = 'page';
       return;
     }
     if (this.mode === 'career') {
@@ -1465,7 +1583,9 @@ export class App {
       return;
     }
     if (this.paused) {
-      if (nav.back) this.paused = false;
+      if (nav.back && this.pauseSub) this.pauseSub = null;
+      else if (nav.back) this.paused = false;
+      else if (this.pauseSub) this.pauseSub.handle(nav);
       else {
         this.syncPauseMenu();
         this.pauseMenu.handle(nav);
@@ -1474,6 +1594,7 @@ export class App {
     }
     if (nav.pause) {
       this.paused = true;
+      this.pauseSub = null;
       this.pauseMenu.index = 0;
     }
   }
@@ -1929,18 +2050,21 @@ export class App {
       drawText(ctx, `${TRACK_LIST.length} RACES: ${names}`, W / 2, top + 22, { color: '#9fd8ff', align: 'center' });
       drawText(ctx, 'WIN PRIZE MONEY AND POINTS - UPGRADE YOUR CAR BETWEEN RACES', W / 2, top + 34, { color: '#c8d0dc', align: 'center' });
       this.cupMenu.draw(ctx, W / 2, top + 56, fitScale(this.cupMenu, top + 56, H - 30), dt, true, H - 30);
-      const s = this.settings;
-      drawText(ctx, `PLAYERS ${s.players}   OPPONENTS ${s.opponents}   ${DIFFICULTIES[s.difficulty]}   LAPS ${s.laps}   WEAPONS ${s.weapons ? 'ON' : 'OFF'}`, W / 2, H - 22, { color: '#8090a8', align: 'center' });
-      drawText(ctx, 'NEW CHAMPIONSHIPS USE THE SETTINGS FROM THE MAIN MENU', W / 2, H - 11, { color: '#8090a8', align: 'center' });
+      drawText(ctx, 'A NEW CHAMPIONSHIP USES THE SETTINGS ABOVE', W / 2, H - 11, { color: '#8090a8', align: 'center' });
     } else if (this.mode === 'career') {
       this.drawCareer(ctx, W, H, dt);
-    } else if (this.mode === 'options') {
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    } else if (this.mode === 'page' && this.pages.length) {
+      const page = this.pages[this.pages.length - 1];
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fillRect(0, 0, W, H);
-      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), logoWidth(W, H), this.time);
-      drawText(ctx, 'OPTIONS', W / 2, top, { scale: 2, color: '#ffffff', align: 'center' });
-      this.optionsMenu.draw(ctx, W / 2, top + 30, fitScale(this.optionsMenu, top + 30, H - 30), dt, true, H - 30);
-      drawText(ctx, 'TIP: DRAG YOUR OWN .MOD / .XM FILES ONTO THE GAME TO ADD THEM - THEY STAY ON YOUR COMPUTER', W / 2, H - 11, { color: '#8090a8', align: 'center' });
+      const top = Math.round(H * 0.1);
+      // Where we are: OPTIONS > SOUND & MUSIC.
+      if (this.pages.length > 1) drawText(ctx, this.pages.slice(0, -1).map((p) => p.title).join(' > '), W / 2, top - 14, { color: '#8090a8', align: 'center' });
+      drawText(ctx, page.title, W / 2, top, { scale: 2, color: '#ffd84a', align: 'center' });
+      page.menu.draw(ctx, W / 2, top + 30, fitScale(page.menu, top + 30, H - 30), dt, true, H - 30);
+      drawText(ctx, page.hint ?? 'ENTER SELECT   ←→ CHANGE   ESC BACK', W / 2, H - 11, { color: '#8090a8', align: 'center' });
+    } else if (this.mode === 'setup') {
+      this.drawSetup(ctx, W, H, dt);
     } else if (this.mode === 'help') {
       drawHelp(ctx, W, H, this.controls);
     } else if (this.mode === 'records') {
@@ -1969,7 +2093,7 @@ export class App {
     } else if (this.mode === 'lobby' && this.online.room) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
-      const top = drawLobby(ctx, W, H, this.online.room, this.online.me, this.time);
+      const top = drawLobby(ctx, W, H, this.online.room, this.online.me, this.time, this.raceSummary(this.online.room.config));
       // How to drive, readable while waiting for the start.
       const help = this.controlsHelp(this.online.room.config.weapons !== false);
       const helpTop = H - 26 - help.length * 10;
@@ -2018,7 +2142,7 @@ export class App {
   private drawTouchExtras(ctx: CanvasRenderingContext2D, W: number, H: number): void {
     this.backRect = null;
     if (!this.touch.enabled) return;
-    const backModes: Mode[] = ['online', 'rooms', 'cup', 'shop', 'options', 'controls', 'help', 'records', 'credits', 'career'];
+    const backModes: Mode[] = ['setup', 'page', 'online', 'rooms', 'cup', 'shop', 'controls', 'help', 'records', 'credits', 'career'];
     if (backModes.includes(this.mode) && !(this.mode === 'controls' && this.controlsScreen.capturing)) {
       const r = { x: 4, y: 4, w: 52, h: 20 };
       ctx.fillStyle = 'rgba(10,12,26,0.75)';
@@ -2100,11 +2224,62 @@ export class App {
       drawText(ctx, 'PAUSED', W / 2, py, { scale: H < 320 ? 3 : 4, color: '#ffd84a', align: 'center' });
       const my = py + (H < 320 ? 32 : 44);
       this.syncPauseMenu();
-      this.pauseMenu.draw(ctx, W / 2, my, fitScale(this.pauseMenu, my, H - 8), 0, true, H - 8);
+      const menu = this.pauseSub ?? this.pauseMenu;
+      menu.draw(ctx, W / 2, my, fitScale(menu, my, H - 8), 0, true, H - 8);
     }
   }
 
   /** Career hub: where you stand, what you drive, continue or start over. */
+  /** Single race: settings on the left, the chosen track's outline and facts on the right. */
+  private drawSetup(ctx: CanvasRenderingContext2D, W: number, H: number, dt: number): void {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, 0, W, H);
+    const top = Math.round(H * 0.08);
+    const wide = W >= 420;
+    const mx = wide ? Math.round(W * 0.36) : W / 2;
+    drawText(ctx, 'SINGLE RACE', mx, top, { scale: 2, color: '#ffd84a', align: 'center' });
+    this.setupMenu.draw(ctx, mx, top + 28, fitScale(this.setupMenu, top + 28, H - 24), dt, true, H - 24);
+    if (wide) this.drawTrackCard(ctx, Math.round(W * 0.7), top + 20, Math.min(170, Math.round(W * 0.26)), this.track);
+    drawText(ctx, 'ENTER SELECT   ←→ CHANGE   ESC BACK', W / 2, H - 11, { color: '#8090a8', align: 'center' });
+  }
+
+  /** A track's outline with its name, length and look (centred at cx). */
+  private drawTrackCard(ctx: CanvasRenderingContext2D, cx: number, top: number, w: number, track: Track): void {
+    const h = Math.round(w * 0.8);
+    const x0 = Math.round(cx - w / 2);
+    ctx.fillStyle = 'rgba(8,10,24,0.72)';
+    ctx.fillRect(x0, top - 6, w, h + 52);
+    ctx.fillStyle = '#ffd84a';
+    ctx.fillRect(x0, top - 6, w, 1);
+    const b = track.bounds;
+    const k = Math.min((w - 16) / (b.maxX - b.minX), (h - 16) / (b.maxZ - b.minZ));
+    const ox = cx - ((b.minX + b.maxX) / 2) * k;
+    const oz = top + h / 2 - ((b.minZ + b.maxZ) / 2) * k;
+    ctx.strokeStyle = '#c8d0dc';
+    ctx.lineWidth = Math.max(2, Math.round(track.def.width * k));
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i <= track.n; i += 4) {
+      const j = i % track.n;
+      const x = ox + track.px[j] * k;
+      const z = oz + track.pz[j] * k;
+      if (i === 0) ctx.moveTo(x, z);
+      else ctx.lineTo(x, z);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    // The start line.
+    ctx.fillStyle = '#ffd84a';
+    ctx.fillRect(Math.round(ox + track.px[0] * k) - 2, Math.round(oz + track.pz[0] * k) - 2, 4, 4);
+    let y = top + h + 2;
+    drawText(ctx, track.def.name.toUpperCase(), cx, y, { color: '#ffffff', align: 'center' });
+    y += 11;
+    drawText(ctx, `${(track.length / 1000).toFixed(2)} KM   ${track.def.theme.toUpperCase()}`, cx, y, { color: '#9fd8ff', align: 'center' });
+    y += 11;
+    const best = this.localRecords[boardKey(track.def.id, this.settings.league)]?.lap ?? 0;
+    drawText(ctx, best ? `YOUR BEST LAP ${formatTime(best * DT)}` : 'NO LAP TIME YET', cx, y, { color: '#8090a8', align: 'center' });
+  }
+
   private drawCareer(ctx: CanvasRenderingContext2D, W: number, H: number, dt: number): void {
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(0, 0, W, H);

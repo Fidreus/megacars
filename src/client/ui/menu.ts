@@ -16,6 +16,11 @@ export interface MenuItem {
   text?: { get(): string; set(v: string): void; max: number; allowed: RegExp };
 }
 
+/** Step v by d through 0..n-1, wrapping round. */
+export function cycle(v: number, n: number, d: number): number {
+  return (((v + d) % n) + n) % n;
+}
+
 export interface MenuEvents {
   onMove?: () => void;
   onChange?: () => void;

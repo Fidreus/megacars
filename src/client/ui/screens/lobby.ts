@@ -6,13 +6,18 @@ import type { ConnState } from '../../net/connection.ts';
 import { drawText } from '../font.ts';
 
 /** Draws the room header and player list; returns the y where the menu goes. */
-export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, room: RoomInfo, me: number, time: number): number {
+export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, room: RoomInfo, me: number, time: number, summary = ''): number {
   const big = H >= 330 ? 3 : 2;
   let y = Math.round(H * 0.04);
   drawText(ctx, `${room.config.public ? 'PUBLIC' : 'PRIVATE'} ROOM ${room.code}`, W / 2, y, { scale: big, color: '#ffd84a', align: 'center' });
   y += 7 * big + 6;
   drawText(ctx, `INVITE: ${inviteLink(room.code)}`, W / 2, y, { color: '#9fd8ff', align: 'center' });
-  y += 14;
+  y += 12;
+  if (summary) {
+    drawText(ctx, summary, W / 2, y, { color: '#ffffff', align: 'center' });
+    y += 12;
+  }
+  y += 2;
   if (room.races > 0) {
     drawText(ctx, `SEASON: ${room.races} RACE${room.races === 1 ? '' : 'S'} RUN`, W / 2, y - 4, { color: '#c8d0dc', align: 'center' });
     y += 8;
