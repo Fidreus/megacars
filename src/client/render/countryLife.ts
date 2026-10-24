@@ -53,6 +53,8 @@ const PHASE = 'float ph = fract(sin(float(gl_InstanceID) * 12.9898) * 43758.5453
 /** Time-animated toon material: `code` runs after begin_vertex with `transformed`, `ph` and `uTime`. */
 function animated(code: string, opts: THREE.MeshToonMaterialParameters = {}): THREE.MeshToonMaterial {
   const mat = toon('#ffffff', opts);
+  // Every animated material shares this function's source: key the program by its code.
+  mat.customProgramCacheKey = () => code;
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = animTime;
     shader.vertexShader = shader.vertexShader

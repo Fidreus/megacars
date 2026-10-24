@@ -76,6 +76,12 @@ export function buildTrackView(track: Track): THREE.Group {
   return group;
 }
 
+/** Which ground extras a track's theme has (for shader program caching). */
+function extrasKey(track: Track): string {
+  const theme = themeOf(track.def.theme);
+  return `${theme.clouds ? 'c' : ''}${theme.flowers ? 'f' : ''}`;
+}
+
 /** Shader defines and uniforms for the theme's ground extras (flowers, clouds). */
 function groundExtras(track: Track, shader: { uniforms: Record<string, THREE.IUniform>; fragmentShader: string }): string {
   const theme = themeOf(track.def.theme);
@@ -98,6 +104,9 @@ function buildGround(track: Track): THREE.Mesh {
   geo.rotateX(-Math.PI / 2);
   geo.translate((b.minX + b.maxX) / 2, -0.06, (b.minZ + b.maxZ) / 2);
   const mat = toon(themeOf(track.def.theme).ground);
+  // Programs are cached by onBeforeCompile's source, which is the same for
+  // every track: key them by the theme's extras too.
+  mat.customProgramCacheKey = () => `ground:${extrasKey(track)}`;
   mat.onBeforeCompile = (shader) => {
     withWorldPos(shader);
     const head = groundExtras(track, shader);
@@ -200,6 +209,7 @@ function buildRoad(track: Track): THREE.Mesh {
   const theme = themeOf(track.def.theme);
   const mowed = theme.mowed && (track.def.runoffSurface ?? Surface.Grass) === Surface.Grass && !theme.runoff;
   const mat = toon('#ffffff');
+  mat.customProgramCacheKey = () => `road:${extrasKey(track)}:${mowed}`;
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     withWorldPos(shader);
