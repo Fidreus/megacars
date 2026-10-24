@@ -118,6 +118,8 @@ export class TrackEditor {
   private undoStack: string[] = [];
   private redoStack: string[] = [];
   private check: TrackCheck | null = null;
+  /** Corners in the draft when it was last checked. */
+  private checkedCorners = 0;
   private checkDue = 0;
   private tool: Tool = 'shape';
   private sel: Sel = null;
@@ -237,6 +239,8 @@ export class TrackEditor {
   private changed(): void {
     this.dirty = true;
     this.checkDue = 0.12;
+    // A corner more or less: the problems are marked by corner number, so check now.
+    if (this.draft.path.length !== this.checkedCorners) this.recheck();
   }
 
   private undo(redo = false): void {
@@ -252,6 +256,7 @@ export class TrackEditor {
   }
 
   private recheck(): void {
+    this.checkedCorners = this.draft.path.length;
     try {
       this.check = checkTrackDef(this.def);
     } catch {
@@ -394,8 +399,11 @@ export class TrackEditor {
     const s = this.sel;
     if (this.tool === 'shape') {
       if (s?.kind === 'point') {
+        // A corner with hardly any turn has its knob on top of it: then the corner wins.
         const [kx, kz] = this.knob(s.i);
-        if (near(kx, kz)) return { kind: 'radius', i: s.i };
+        const [cx, cy] = this.toScreen(d.path[s.i].x, d.path[s.i].z);
+        const [ox, oy] = this.toScreen(kx, kz);
+        if (near(kx, kz) && Math.hypot(ox - cx, oy - cy) > r) return { kind: 'radius', i: s.i };
       }
       for (let i = d.path.length - 1; i >= 0; i--) if (near(d.path[i].x, d.path[i].z)) return { kind: 'point', i, dx: d.path[i].x - wx, dz: d.path[i].z - wz };
       const st = this.startLine();
@@ -722,8 +730,25 @@ export class TrackEditor {
     const ctx = this.ctx;
     ctx.imageSmoothingEnabled = false;
     this.buttons = [];
-    this.drawMap(ctx);
-    this.drawUi(ctx);
+    // A drawing slip must never take the game down: check again and draw the next frame.
+    try {
+      this.validSel();
+      this.drawMap(ctx);
+      this.drawUi(ctx);
+    } catch (e) {
+      console.warn('editor: drawing failed', e);
+      this.sel = null;
+      this.recheck();
+    }
+  }
+
+  /** Drop a selection that points past its list (after an undo or a delete). */
+  private validSel(): void {
+    const s = this.sel;
+    if (!s) return;
+    const d = this.draft;
+    const n = s.kind === 'point' ? d.path.length : s.kind === 'patch' ? d.patches.length : s.kind === 'ramp' ? d.ramps.length : d.landmarks.length;
+    if (s.i < 0 || s.i >= n) this.sel = null;
   }
 
   private drawMap(ctx: CanvasRenderingContext2D): void {
@@ -966,11 +991,12 @@ export class TrackEditor {
     const c = this.check;
     if (!c) return out;
     const t = c.track;
+    const n = this.draft.path.length;
     for (const e of c.errors) {
       let m = /corner (\d+)/.exec(e);
-      if (m) out.corners.add(Number(m[1]));
+      if (m && Number(m[1]) < n) out.corners.add(Number(m[1]));
       m = /straight (\d+)->(\d+)/.exec(e);
-      if (m) out.segments.push([Number(m[1]), Number(m[2])]);
+      if (m && Number(m[1]) < n && Number(m[2]) < n) out.segments.push([Number(m[1]), Number(m[2])]);
       for (const s of e.matchAll(/s=(\d+)/g)) {
         const i = sampleIndexAt(t, Number(s[1]));
         out.spots.push([t.px[i], t.pz[i]]);
