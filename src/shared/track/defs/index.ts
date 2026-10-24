@@ -16,7 +16,29 @@ export const TRACKS: Readonly<Record<string, TrackDef>> = Object.fromEntries(TRA
 
 export const DEFAULT_TRACK = GREEN_VALLEY.id;
 
+/** Player tracks known here (made, downloaded or sent by a room's host), most recent last. */
+const custom = new Map<string, TrackDef>();
+const CUSTOM_KEEP = 64;
+
+/** Make a player track available by its id (to race, show or send). */
+export function registerTrack(def: TrackDef): void {
+  if (TRACKS[def.id]) return;
+  custom.delete(def.id);
+  custom.set(def.id, def);
+  while (custom.size > CUSTOM_KEEP) custom.delete(custom.keys().next().value!);
+}
+
+/** A track by id: one of the game's own, or a registered player track. */
+export function trackDef(id: string): TrackDef | undefined {
+  return TRACKS[id] ?? custom.get(id);
+}
+
+/** A track's name (its id if unknown). */
+export function trackName(id: string): string {
+  return trackDef(id)?.name ?? id;
+}
+
 /** Laps actually raced: the chosen count, times the track's lap scale (short tracks run more). */
 export function raceLaps(track: string, laps: number): number {
-  return laps * (TRACKS[track]?.lapScale ?? 1);
+  return laps * (trackDef(track)?.lapScale ?? 1);
 }

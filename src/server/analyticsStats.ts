@@ -2,7 +2,7 @@
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TRACKS } from '../shared/track/defs/index.ts';
+import { trackName } from '../shared/track/defs/index.ts';
 
 interface Line {
   ts: number;
@@ -177,7 +177,7 @@ export function summarize(lines: Line[], days: number, now = Date.now(), tzName 
     r.humans += Number(l.humans) || 0;
     roomTracks.set(String(l.track), r);
   }
-  const nameOf = (id: string) => TRACKS[id]?.name ?? id;
+  const nameOf = (id: string) => trackName(id);
   let lo = 0;
   const lengths = LENGTHS.map(([key, max]) => {
     const n = secs.filter((s) => s >= lo && s < max).length;

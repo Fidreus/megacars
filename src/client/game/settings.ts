@@ -2,7 +2,7 @@
 
 import type { SteerMode } from '../input/touch.ts';
 import { leagueOf, type League } from '../../shared/game/leagues.ts';
-import { DEFAULT_TRACK, TRACKS } from '../../shared/track/defs/index.ts';
+import { DEFAULT_TRACK, trackDef } from '../../shared/track/defs/index.ts';
 
 export const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD'] as const;
 
@@ -78,7 +78,7 @@ export function loadSettings(): RaceSettings {
   } catch {
     // Storage blocked or corrupt: use defaults.
   }
-  if (!TRACKS[s.track]) s.track = DEFAULT_TRACK;
+  if (!trackDef(s.track)) s.track = DEFAULT_TRACK;
   s.players = s.players === 2 ? 2 : 1;
   s.opponents = Math.max(0, Math.min(8 - s.players, Math.round(s.opponents)));
   s.laps = Math.max(1, Math.min(9, Math.round(s.laps)));

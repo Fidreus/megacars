@@ -18,7 +18,7 @@ import {
 import { copyInput, neutralInput, type CarInput } from '../shared/sim/input.ts';
 import { stepWorld } from '../shared/sim/step.ts';
 import { COUNTDOWN_TICKS, RacePhase, type World } from '../shared/sim/world.ts';
-import { DEFAULT_TRACK, TRACKS, raceLaps } from '../shared/track/defs/index.ts';
+import { DEFAULT_TRACK, raceLaps, trackDef } from '../shared/track/defs/index.ts';
 import type { Track } from '../shared/track/types.ts';
 
 /** What a room needs from a connection. */
@@ -223,7 +223,7 @@ export class Room {
     if (id !== this.hostId) return 'notHost';
     if (this.race) return 'busy';
     const cfg = this.config;
-    if (typeof c.track === 'string' && TRACKS[c.track]) cfg.track = c.track;
+    if (typeof c.track === 'string' && trackDef(c.track)) cfg.track = c.track;
     if (Number.isFinite(c.laps)) cfg.laps = Math.max(1, Math.min(9, Math.round(c.laps!)));
     if (Number.isFinite(c.ai)) cfg.ai = Math.max(0, Math.min(MAX_PLAYERS - 1, Math.round(c.ai!)));
     if (typeof c.weapons === 'boolean') cfg.weapons = c.weapons;

@@ -4,14 +4,14 @@
 import { DEFAULT_TUNING, type CarTuning } from '../config/tuning.ts';
 import type { RaceSpec } from '../net/protocol.ts';
 import { getTrack } from '../track/builder.ts';
-import { TRACKS } from '../track/defs/index.ts';
+import { trackDef } from '../track/defs/index.ts';
 import type { Track } from '../track/types.ts';
 import { createWorld, type World } from '../sim/world.ts';
 import { leagueTuning } from './leagues.ts';
 import { defaultLoadout, tuningFor } from './shop.ts';
 
 export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING): { track: Track; world: World; tunings: CarTuning[] } {
-  const def = TRACKS[spec.track];
+  const def = trackDef(spec.track);
   if (!def) throw new Error(`unknown track ${spec.track}`);
   const track = getTrack(def);
   const world = createWorld(track, spec.entrants.length, spec.seed, {

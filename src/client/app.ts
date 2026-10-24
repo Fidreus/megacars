@@ -6,7 +6,7 @@ import { DT } from '../shared/config/constants.ts';
 import { SURFACES, Surface } from '../shared/config/surfaces.ts';
 import { cloneTuning, DEFAULT_TUNING, type CarTuning } from '../shared/config/tuning.ts';
 import { boardKey, LEAGUE_NAMES, LEAGUES, leagueOf, leagueTuning } from '../shared/game/leagues.ts';
-import { TRACKS, TRACK_LIST, raceLaps } from '../shared/track/defs/index.ts';
+import { TRACKS, TRACK_LIST, raceLaps, trackDef, trackName } from '../shared/track/defs/index.ts';
 import type { Track } from '../shared/track/types.ts';
 import { Ev } from '../shared/sim/events.ts';
 import { copyInput, NEUTRAL_INPUT, type CarInput } from '../shared/sim/input.ts';
@@ -274,7 +274,7 @@ export class App {
     loadSavedTuning(this.tuning);
     this.settings = loadSettings();
     if (params.mood) this.settings.mood = params.mood;
-    if (TRACKS[params.track]) this.settings.track = params.track;
+    if (trackDef(params.track)) this.settings.track = params.track;
     if (params.laps) this.settings.laps = params.laps;
     if (params.p2) this.settings.players = 2;
     if (params.aiSet) this.settings.opponents = Math.min(8 - this.settings.players, params.ai);
@@ -556,7 +556,7 @@ export class App {
     const changed = () => saveSettings(s);
     return [
       {
-        label: () => `TRACK: ${TRACKS[s.track].name.toUpperCase()}`,
+        label: () => `TRACK: ${trackName(s.track).toUpperCase()}`,
         change: (d: number) => {
           const i = TRACK_LIST.findIndex((t) => t.id === s.track);
           s.track = TRACK_LIST[cycle(i, TRACK_LIST.length, d)].id;
@@ -704,7 +704,7 @@ export class App {
     const pub = () => !!cfg()?.public;
     return [
       {
-        label: () => `TRACK: ${TRACKS[cfg()?.track ?? '']?.name.toUpperCase() ?? '?'}`,
+        label: () => `TRACK: ${trackName(cfg()?.track ?? '?').toUpperCase()}`,
         disabled: notHost,
         change: (d: number) => {
           const i = TRACK_LIST.findIndex((t) => t.id === cfg()?.track);
@@ -741,7 +741,7 @@ export class App {
 
   /** One line about the room's next race: track, laps, cars, weapons, class. */
   private raceSummary(c: RoomConfig): string {
-    const track = TRACKS[c.track]?.name.toUpperCase() ?? '?';
+    const track = trackName(c.track).toUpperCase();
     return `${track}   ${raceLaps(c.track, c.laps)} LAPS   ${c.ai} AI   WEAPONS ${c.weapons === false ? 'OFF' : 'ON'}   ${LEAGUE_NAMES[leagueOf(c.league)]}`;
   }
 
@@ -762,7 +762,7 @@ export class App {
     if (!rooms) items.push({ label: () => (o.state === 'failed' ? 'SERVER NOT REACHABLE' : 'LOOKING FOR ROOMS...'), select: () => o.list(), disabled: () => true });
     else if (!rooms.length) items.push({ label: () => 'NO PUBLIC ROOMS YET - OPEN ONE', select: () => o.create(true) });
     for (const r of rooms ?? []) {
-      const track = TRACKS[r.track]?.name.toUpperCase() ?? r.track;
+      const track = trackName(r.track).toUpperCase();
       const state = r.state === 'race' ? 'RACING' : 'WAITING';
       items.push({ label: () => `${track}  ${r.players}/8 PLAYERS  ${state}  - ${r.host}`, select: () => o.join(r.code) });
     }
@@ -1120,7 +1120,7 @@ export class App {
     const d = humans[p];
     this.showAttract('shop');
     this.shop = this.makeShop({
-      title: () => `${this.career ? `DIV ${this.career.division} - ` : ''}${humans.length > 1 ? `${d.name} - ` : ''}RACE ${cup.race + 1} OF ${cup.tracks.length}: ${TRACKS[cup.tracks[cup.race]].name.toUpperCase()}`,
+      title: () => `${this.career ? `DIV ${this.career.division} - ` : ''}${humans.length > 1 ? `${d.name} - ` : ''}RACE ${cup.race + 1} OF ${cup.tracks.length}: ${trackName(cup.tracks[cup.race]).toUpperCase()}`,
       profile: () => d.profile,
       buy: (item) => {
         const err = buy(d.profile, item);

@@ -5,6 +5,7 @@
 //   npm run track -- tivoli                       a track in the game, by id
 //   npm run track -- src/shared/track/defs/x.ts   a def file not yet in the game
 //   npm run track -- draft.json                   a TrackDef as JSON
+//   npm run track -- <share code or link>         a player track
 //   options: --seeds 3 --laps 3 --weapons --svg out.svg
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -13,7 +14,7 @@ import { simulateRace } from '../src/shared/game/raceSim.ts';
 import { buildTrack } from '../src/shared/track/builder.ts';
 import { TRACKS } from '../src/shared/track/defs/index.ts';
 import type { Track, TrackDef } from '../src/shared/track/types.ts';
-import { validateTrack } from '../src/shared/track/validate.ts';
+import { checkTrackDef, decodeTrack } from '../src/shared/track/custom.ts';
 
 const args = process.argv.slice(2);
 const arg = (name: string, fallback: string) => {
@@ -28,6 +29,9 @@ if (!target || target.startsWith('--')) {
 
 async function loadDef(what: string): Promise<TrackDef> {
   if (what.endsWith('.json')) return JSON.parse(readFileSync(what, 'utf8')) as TrackDef;
+  // A share code (from the track editor's SHARE link).
+  const shared = decodeTrack(what.replace(/^.*[?&]t=/, ''));
+  if (shared) return shared;
   if (what.endsWith('.ts')) {
     const mod = (await import(pathToFileURL(resolve(what)).href)) as Record<string, unknown>;
     const def = Object.values(mod).find((v): v is TrackDef => typeof v === 'object' && v !== null && 'path' in v);
@@ -41,11 +45,9 @@ async function loadDef(what: string): Promise<TrackDef> {
 
 const def = await loadDef(target);
 const track = buildTrack(def);
-const errors = validateTrack(track);
-// What the tests over every track in the game ask for (pit.test.ts, catchUp.test.ts).
-if (!track.pit) errors.push('no pit lane: the start straight is too short or has no room beside it');
-else if (track.pit.box1 - track.pit.box0 <= 30) errors.push('pit box is 30 m or shorter: lengthen the start straight');
-if (track.boosts.length < 2) errors.push(`only ${track.boosts.length} catch-up pad(s), need 2: add straights of 24 m+ away from the start`);
+// Build errors plus what the tests over every track ask for (a pit lane, catch-up pads).
+const check = checkTrackDef(def);
+const errors = [...check.errors, ...check.missing];
 
 // Straight samples before and after the start line.
 const straight = (i: number) => Math.abs(track.curv[i]) < 1e-6;

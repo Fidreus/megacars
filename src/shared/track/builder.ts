@@ -42,6 +42,8 @@ interface Prim {
 }
 
 const cache = new Map<string, Track>();
+/** Built player tracks kept at once (each holds a big surface grid). */
+const CUSTOM_CACHE = 6;
 
 /** Builds (or returns the cached) track. Tracks are immutable once built. */
 export function getTrack(def: TrackDef): Track {
@@ -49,11 +51,21 @@ export function getTrack(def: TrackDef): Track {
   if (!t || t.def !== def) {
     t = buildTrack(def);
     cache.set(def.id, t);
+  } else if (def.id.startsWith('u-')) {
+    // Most recently used last.
+    cache.delete(def.id);
+    cache.set(def.id, t);
   }
+  const custom = [...cache.keys()].filter((id) => id.startsWith('u-'));
+  for (let k = 0; k < custom.length - CUSTOM_CACHE; k++) cache.delete(custom[k]);
   return t;
 }
 
-export function buildTrack(def: TrackDef): Track {
+/**
+ * Build a track. `lite` skips what only driving needs (the surface grid and
+ * the AI's racing line): enough to draw it and check it, several times faster.
+ */
+export function buildTrack(def: TrackDef, opts: { lite?: boolean } = {}): Track {
   const errors: string[] = [];
   const prims = buildPrims(def, errors);
 
@@ -159,7 +171,7 @@ export function buildTrack(def: TrackDef): Track {
     }
   }
   track.walls = buildWalls(track);
-  track.surface = buildSurfaceGrid(track);
+  if (!opts.lite) track.surface = buildSurfaceGrid(track);
   const ncp = Math.max(6, Math.round(length / 120));
   track.checkpoints = new Float64Array(ncp);
   for (let k = 0; k < ncp; k++) track.checkpoints[k] = (k * length) / ncp;
@@ -179,7 +191,7 @@ export function buildTrack(def: TrackDef): Track {
     track.ramps.push({ s0: s1 - r.length, s1, height: r.height });
   }
   track.boosts = placeBoostPads(track);
-  track.line = computeRacingLine(track);
+  if (!opts.lite) track.line = computeRacingLine(track);
   return track;
 }
 
