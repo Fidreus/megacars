@@ -159,10 +159,79 @@ grafiknivå MEDIUM i AUTO.
 spelare och väntar, annars ett som kör (man tittar och är med i nästa race),
 och finns inget öppnas ett nytt publikt rum där man väntar på andra.
 **PUBLIC ROOMS** listar öppna rum (uppdateras var tredje sekund) och man går
-med genom att välja ett. Rum kan vara **PUBLIC** (syns i listan) eller
+med genom att välja ett. Publika rum kör en turnering på tre slumpade banor
+ur spelet och slumpar nya när den är slut. Rum kan vara **PUBLIC** (syns i listan) eller
 **PRIVATE** (bara med koden); värden kan växla i lobbyn. Publika rum väntar
 inte på värden: när minst två är inne och alla har tryckt READY startar
 racet efter fem sekunders nedräkning.
+
+## Banskaparen
+
+**TRACK EDITOR** i titelmenyn öppnar **MY TRACKS**: dina egna banor, sparade
+i webbläsaren. **NEW TRACK** börjar från en rektangel, **NEW FROM A GAME
+TRACK** från en kopia av en av spelets banor (utom de med broar).
+
+Banskaparen visar banan uppifrån och fungerar med mus, pekskärm och tangenter:
+
+- **ROAD (1):** dra i hörnen för att forma vägen och i hörnets ratt för att
+  ändra radien. Tryck på vägen mellan två hörn för att lägga till ett hörn,
+  och dra startlinjen längs sista rakan.
+- **SURFACE (2):** måla ytor som grus, is, olja, blött, snö, vatten och gräs.
+- **RAMP (3):** lägg ut hopp, högst fyra.
+- **LANDMARK (4):** placera temats landmärken.
+- **SETTINGS:** namn, tema, bredd, bredare kurvor, runoff och dess yta, varv
+  och kortbanefaktor.
+
+Kortkommandon:
+
+| Tangent | Funktion |
+|---|---|
+| Ctrl+Z / Ctrl+Y | ångra / gör om |
+| Delete | ta bort det markerade |
+| G | fäst mot rutnätet |
+| F | passa in hela banan |
+| +/- och hjulet | zooma |
+| piltangenter eller WASD | panorera |
+
+Varje ändring kontrolleras direkt. Problem markeras på kartan, och
+statusraden visar längd, depå och antal pilar.
+
+- **AI TEST** kör åtta datorbilar i två korta lopp i en egen tråd.
+- **TEST DRIVE** kör fri träning på banan. Paus → **BACK TO THE EDITOR**
+  går tillbaka till banskaparen.
+- **SHARE** kopierar en länk (`?t=KOD`). Den som öppnar länken får banan i
+  sina My Tracks.
+- **PUBLISH** lägger ut banan i den gemensamma listan.
+
+Egna banor finns med i banvalet under Single Race. Personbästa på dem sparas
+bara lokalt, eftersom topplistorna gäller spelets egna banor. Koden är en
+kompakt sifferlista i base64url, och banans id (`u-…`) är en hash av
+innehållet. Samma bana har alltså samma id överallt. `npm run track -- <kod
+eller länk>` kontrollerar en delad bana från terminalen.
+
+**PUBLISHED TRACKS** (i My Tracks) listar publicerade banor sorterade på
+flest gillningar, nyast eller mest körda. Du kan köra en bana, gilla den,
+spara den till My Tracks eller öppna en kopia i banskaparen.
+
+Servern kontrollerar varje bana i en worker-tråd innan den listas. Banan måste
+bygga, ha depå och pilar, och alla datorbilar måste gå i mål. Det finns tre
+gränser:
+
+- varje adress kan publicera högst fem banor i timmen;
+- listan rymmer högst 2000 banor;
+- varje adress kan gilla en bana en gång.
+
+Banorna sparas i `$DATA_DIR/tracks.json`. API:
+
+| Anrop | Funktion |
+|---|---|
+| `GET /api/tracks?sort=new\|top\|played&page=0` | listar banor |
+| `POST /api/tracks` med `{code, author}` | publicerar en bana |
+| `POST /api/tracks/<id>/like` | gillar en bana |
+| `POST /api/tracks/<id>/play` | räknar en körning |
+| `DELETE /api/tracks/<id>` med `Authorization: Bearer <TRACKS_TOKEN>` | tar bort en bana |
+
+`TRACKS_TOKEN` faller tillbaka på `STATS_TOKEN`.
 
 ## Rekord och topplistor
 
@@ -207,9 +276,24 @@ Välj **PLAY ONLINE** i titelmenyn, skriv ditt namn och välj **CREATE ROOM**.
 Du får en rumskod på fyra bokstäver och en inbjudningslänk
 (`https://…/?room=KODE`) – **COPY INVITE LINK** kopierar den. Kompisar skriver
 in koden under **JOIN ROOM** eller öppnar länken. Upp till åtta personer per
-rum; värden väljer bana, varv, antal datorbilar och svårighetsgrad, de andra
-markerar sig som redo och värden startar. Efter målgång är alla tillbaka i
-lobbyn för nästa lopp. Den som kommer in mitt i ett lopp tittar på tills nästa.
+rum. Värden väljer banor under **TRACKS** och varv, antal datorbilar och
+svårighetsgrad under **RACE SETTINGS**. De andra markerar sig som redo, och
+värden startar. Efter målgång är alla tillbaka i lobbyn för nästa lopp. Den som
+kommer in mitt i ett lopp tittar på tills nästa.
+
+**TRACKS** är en turnering och kan innehålla upp till 12 banor i valfri
+ordning: slumpade banor, alla spelets banor, eller en blandning av spelets
+banor och dina egna. Med en enda bana körs den om och om igen och poängen
+samlas på hela säsongen.
+
+- Rummet kör banorna i tur och ordning. Mellan loppen visar lobbyn ställningen
+  sorterad på poäng, vilket lopp som är nästa och vilka banor som kommer
+  sedan.
+- Efter sista loppet visas vinnaren. Nästa START börjar en ny turnering, och
+  **NEW TOURNAMENT** nollställer den när som helst.
+- Värdens egna banor skickas som delningskod till servern. Servern
+  kontrollerar och bygger dem i en worker-tråd och skickar dem till alla i
+  rummet innan de används.
 
 Servern räknar loppet (60 tick/s) och skickar läget 20 gånger i sekunden.
 Din egen bil svarar direkt: klienten kör simuleringen några tick före servern
@@ -233,7 +317,8 @@ automatiskt inom en minut).
 URL-parametrar: `?mode=quick` (direkt till lopp), `?mode=practice`, `?p2=1`,
 `?laps=N`, `?ai=N` (motståndare), `?difficulty=0..2`,
 `?mood=day|sunset|night`, `?debug=1`, `?scale=N`, `?scanlines=1`, `?mute=1`,
-`?room=KODE` (gå direkt med i ett onlinerum).
+`?room=KODE` (gå direkt med i ett onlinerum), `?t=KOD` (en delad bana läggs i
+My Tracks).
 
 `npm run sim -- --seeds 20 --laps 3 [--track dustbowl] [--weapons]` kör headless AI-lopp och kontrollerar
 att alla bilar går i mål.
@@ -287,6 +372,7 @@ Inställningar (miljövariabler på servern):
 | `ANALYTICS_RETENTION_DAYS` | 90 | Dagar som sparas. Äldre filer raderas. |
 | `ANALYTICS_SALT` | slumpas | Saltet för hashen. Annars skapas `DATA_DIR/analytics/salt`. |
 | `STATS_TOKEN` | – | Slår på `/api/stats`. |
+| `TRACKS_TOKEN` | `STATS_TOKEN` | Tar bort publicerade banor (`DELETE /api/tracks/<id>`). |
 
 `DATA_DIR` ska peka på en persistent volym, annars försvinner loggen vid
 omstart.

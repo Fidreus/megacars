@@ -6,7 +6,7 @@ import { DT } from '../shared/config/constants.ts';
 import { SURFACES, Surface } from '../shared/config/surfaces.ts';
 import { cloneTuning, DEFAULT_TUNING, type CarTuning } from '../shared/config/tuning.ts';
 import { boardKey, LEAGUE_NAMES, LEAGUES, leagueOf, leagueTuning } from '../shared/game/leagues.ts';
-import { TRACKS, TRACK_LIST, raceLaps, trackDef, trackName } from '../shared/track/defs/index.ts';
+import { TRACKS, TRACK_LIST, raceLaps, registerTrack, trackDef, trackName } from '../shared/track/defs/index.ts';
 import type { Track } from '../shared/track/types.ts';
 import { Ev } from '../shared/sim/events.ts';
 import { copyInput, NEUTRAL_INPUT, type CarInput } from '../shared/sim/input.ts';
@@ -60,7 +60,8 @@ import { themeOf } from './render/theme.ts';
 import { buildTrackView } from './render/trackMesh.ts';
 import { TrackEditor, type EditorHost } from './editor/editor.ts';
 import { addFromCode, deleteTrack, myTracks, playable, saveTrack, savedDef, type SavedTrack } from './editor/myTracks.ts';
-import { canonicalDef, encodeTrack, isCustomId } from '../shared/track/custom.ts';
+import { canonicalDef, decodeTrack, encodeTrack, isCustomId } from '../shared/track/custom.ts';
+import { countPlay, liked, likeTrack, listTracks, publishTrack, type PublishedTrack, type TrackPage, type TrackSort } from './net/tracksApi.ts';
 import type { TrackDef } from '../shared/track/types.ts';
 import { drawText, LINE_H, textWidth } from './ui/font.ts';
 import { cycle, Menu, type MenuEvents, type MenuItem } from './ui/menu.ts';
@@ -243,6 +244,12 @@ export class App {
   private aiWorker: Worker | null = null;
   /** Tracks in a random online tournament. */
   private randomTracks = 3;
+  /** The published track list: how it is sorted, the page shown, and its state. */
+  private browseSort: TrackSort = 'top';
+  private browse: TrackPage | null = null;
+  private browseState: 'loading' | 'error' | 'ok' = 'loading';
+  /** Published tracks whose race has been counted this visit. */
+  private readonly playsCounted = new Set<string>();
 
   get trackEditor(): TrackEditor | null {
     return this.editor;
@@ -684,10 +691,10 @@ export class App {
     else this.refreshPage();
   }
 
-  /** Rebuild the top page's rows (a page made from a list that changed). */
-  private refreshPage(): void {
+  /** Rebuild the top page's rows (a page made from a list that changed), if it is `title` (or any). */
+  private refreshPage(title?: string): void {
     const page = this.pages[this.pages.length - 1];
-    if (page?.build) page.menu.items = this.pageItems(page.build());
+    if (page?.build && (title === undefined || page.title === title)) page.menu.items = this.pageItems(page.build());
   }
 
   // --------------------------------------------------------- track editor
@@ -697,8 +704,96 @@ export class App {
     this.openPage('MY TRACKS', () => [
       { label: () => 'NEW TRACK', select: () => this.openEditor(null, null) },
       { label: () => 'NEW FROM A GAME TRACK', select: () => this.openTemplates() },
+      { label: () => 'PUBLISHED TRACKS', select: () => this.openBrowse() },
       ...myTracks().map((t) => ({ label: () => savedLabel(t), select: () => this.openSavedTrack(t) })),
     ], 'KEPT IN THIS BROWSER - SHARE A LINK TO SEND ONE');
+  }
+
+  /** The published tracks: everybody's, best liked (or newest, most raced) first. */
+  private openBrowse(): void {
+    this.openPage('PUBLISHED TRACKS', () => this.browseItems(), 'ENTER OPENS A TRACK   ←→ SORTS   ESC BACK');
+    this.loadBrowse(0);
+  }
+
+  private loadBrowse(page: number): void {
+    this.browseState = 'loading';
+    this.refreshPage('PUBLISHED TRACKS');
+    void listTracks(this.browseSort, page).then((r) => {
+      this.browse = r.ok ? r : null;
+      this.browseState = r.ok ? 'ok' : 'error';
+      this.refreshPage('PUBLISHED TRACKS');
+    });
+  }
+
+  private browseItems(): MenuItem[] {
+    const sorts: TrackSort[] = ['top', 'new', 'played'];
+    const names: Record<TrackSort, string> = { top: 'MOST LIKED', new: 'NEWEST', played: 'MOST RACED' };
+    const sort = (d: number) => {
+      this.browseSort = sorts[cycle(sorts.indexOf(this.browseSort), sorts.length, d)];
+      this.loadBrowse(0);
+    };
+    const items: MenuItem[] = [{ label: () => `SORT: ${names[this.browseSort]}`, change: sort, select: () => sort(1) }];
+    const b = this.browse;
+    if (this.browseState === 'loading') items.push({ label: () => 'LOADING...', disabled: () => true });
+    else if (this.browseState === 'error' || !b) items.push({ label: () => 'CANNOT REACH THE SERVER - TRY AGAIN', select: () => this.loadBrowse(0) });
+    else if (!b.tracks.length) items.push({ label: () => 'NONE YET - PUBLISH ONE FROM THE EDITOR', disabled: () => true });
+    else {
+      for (const t of b.tracks) {
+        items.push({ label: () => `${t.name} - ${t.author}   ${t.likes} LIKE${t.likes === 1 ? '' : 'S'}`, select: () => this.openPublished(t) });
+      }
+      if (b.pages > 1) items.push({ label: () => `MORE (PAGE ${b.page + 1} OF ${b.pages})`, select: () => this.loadBrowse((b.page + 1) % b.pages) });
+    }
+    return items;
+  }
+
+  /** One published track: race it, like it, keep it, or start a track of your own from it. */
+  private openPublished(t: PublishedTrack): void {
+    const def = decodeTrack(t.code);
+    if (!def) return;
+    registerTrack(def);
+    const ok = playable(def.id);
+    const race = (practice: boolean) => {
+      this.settings.track = def.id;
+      saveSettings(this.settings);
+      if (practice) this.startRace({ ...this.settings, practice: true, players: 1, opponents: 0 });
+      else this.toSetup();
+    };
+    const saved = () => myTracks().some((m) => m.id === def.id);
+    this.openPage(t.name, [
+      { label: () => 'RACE', select: () => race(false), disabled: () => !ok },
+      { label: () => 'FREE PRACTICE', select: () => race(true), disabled: () => !ok },
+      {
+        label: () => (liked(t.id) ? `LIKED (${t.likes})` : `LIKE (${t.likes})`),
+        disabled: () => liked(t.id),
+        select: () => void likeTrack(t.id).then((r) => {
+          if (r.ok) t.likes = r.likes;
+          else if (r.error !== 'already liked') this.flashMessage(r.error === 'offline' ? 'CANNOT REACH THE SERVER' : 'COULD NOT LIKE IT', 2);
+        }),
+      },
+      {
+        label: () => (saved() ? 'SAVED IN MY TRACKS' : 'SAVE TO MY TRACKS'),
+        disabled: saved,
+        select: () => {
+          addFromCode(t.code, 'published', t.id);
+          this.flashMessage('SAVED IN MY TRACKS', 2);
+        },
+      },
+      { label: () => 'OPEN A COPY IN THE EDITOR', select: () => this.openEditor(def, null) },
+    ], `BY ${t.author} - ${(t.length / 1000).toFixed(2)} KM - ${t.theme.toUpperCase()} - RACED ${t.plays} TIME${t.plays === 1 ? '' : 'S'}`);
+    if (ok) this.showAttract('page', { track: def.id });
+  }
+
+  /** Editor: publish the track for everybody (the server checks it, AI test included). */
+  private publish(def: TrackDef): void {
+    const ed = this.editor;
+    if (!ed) return;
+    if (!ed.ok) return ed.flash('FIX THE MARKED PROBLEMS FIRST');
+    if (!window.confirm(`Publish "${def.name}" for everybody to see and race, by ${this.online.name}?`)) return;
+    ed.flash('PUBLISHING - THE SERVER TEST DRIVES IT FIRST...');
+    void publishTrack(encodeTrack(def), this.online.name).then((r) => {
+      if (r.ok) ed.flash(r.existed ? 'IT IS ALREADY PUBLISHED' : 'PUBLISHED - FIND IT UNDER PUBLISHED TRACKS');
+      else ed.flash(r.error === 'offline' ? 'CANNOT REACH THE SERVER' : `NOT PUBLISHED: ${(r.error ?? '').toUpperCase()}`);
+    });
   }
 
   /** A copy of a game track to start from (not the ones with bridges). */
@@ -782,13 +877,13 @@ export class App {
   private editorHost(): EditorHost {
     return {
       testDrive: (def) => {
-        this.startRace({ ...this.settings, track: def.id, practice: true, players: 1, opponents: 0 });
         this.testDriving = true;
+        this.startRace({ ...this.settings, track: def.id, practice: true, players: 1, opponents: 0 });
         this.flashMessage('TEST DRIVE - PAUSE TO GO BACK TO THE EDITOR', 3);
       },
       save: (def, slot) => saveTrack(def, slot).slot,
       share: (def) => this.copyTrackLink(encodeTrack(def)),
-      publish: () => this.editor?.flash('PUBLISHING IS NOT OPEN YET'),
+      publish: (def) => this.publish(def),
       aiTest: (def) => this.runAiTest(encodeTrack(def)),
       exit: () => {
         this.swallowNav = true;
@@ -1370,6 +1465,11 @@ export class App {
     const rs = this.session as RaceSession;
     // Player tracks have no world boards: their bests are kept here, with a stock car.
     this.localOnly = isCustomId(rs.track.def.id);
+    // A race on a published track counts on the list (the server ignores the rest).
+    if (this.localOnly && !this.testDriving && !this.playsCounted.has(rs.track.def.id)) {
+      this.playsCounted.add(rs.track.def.id);
+      countPlay(rs.track.def.id);
+    }
     const checked = specProblem(this.localOnly ? { ...rs.spec, track: TRACK_LIST[0].id } : rs.spec) === null;
     const fair = !this.localOnly || !(practice && isTuned(this.tuning));
     this.replay = !spec && rs.playerCars.length === 1 && checked && fair ? new ReplayRecorder() : null;

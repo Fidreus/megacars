@@ -8,11 +8,12 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { brotliCompress, constants as zlibConstants, gzipSync } from 'node:zlib';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TICK_RATE } from '../shared/config/constants.ts';
-import { Analytics, parseBeacon } from './analytics.ts';
+import { Analytics, clientIp, networkOf, parseBeacon } from './analytics.ts';
 import { renderHtml } from './analyticsHtml.ts';
 import { formatSummary, readLog, summarize } from './analyticsStats.ts';
 import { Client, GameServer } from './gameServer.ts';
 import { RecordStore } from './records.ts';
+import { TrackStore, type TrackSort } from './trackStore.ts';
 import type { RecordSubmission } from '../shared/game/records.ts';
 
 // SERVER_PORT wins in development (PORT may be set for the Vite dev server).
@@ -38,6 +39,11 @@ void analytics.prune();
 setInterval(() => void analytics.prune(), 6 * 3_600_000).unref();
 /** Reads /api/stats; without it the page is not there. */
 const STATS_TOKEN = process.env.STATS_TOKEN ?? '';
+/** Deletes published tracks (DELETE /api/tracks/<id>); the stats token if not set. */
+const TRACKS_TOKEN = process.env.TRACKS_TOKEN || STATS_TOKEN;
+/** Track list requests (likes, plays) per address per minute. */
+const TRACK_API_LIMIT = 60;
+const trackCalls = new Map<string, number[]>();
 /** Page reports per address per minute. */
 const BEACON_LIMIT = 60;
 const beacons = new Map<string, number[]>();
@@ -98,6 +104,10 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   }
   if (url.pathname === '/api/records') {
     handleRecords(req, res);
+    return;
+  }
+  if (url.pathname === '/api/tracks' || url.pathname.startsWith('/api/tracks/')) {
+    handleTracks(req, res, url);
     return;
   }
   if (url.pathname === '/api/event') {
@@ -229,6 +239,93 @@ function handleRecords(req: IncomingMessage, res: ServerResponse): void {
   });
 }
 
+/** A token from `Authorization: Bearer ...` matches `secret` (never when there is none). */
+function tokenOk(req: IncomingMessage, url: URL, secret: string): boolean {
+  if (!secret) return false;
+  const given = /^Bearer (.+)$/.exec(String(req.headers.authorization ?? ''))?.[1] ?? url.searchParams.get('token') ?? '';
+  const digest = (v: string) => createHash('sha256').update(v).digest();
+  return timingSafeEqual(digest(given), digest(secret));
+}
+
+/** A small JSON body (at most `max` bytes), or null. */
+function readJson(req: IncomingMessage, max: number, done: (body: unknown) => void): void {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  req.on('data', (c: Buffer) => {
+    size += c.length;
+    if (size > max) req.destroy();
+    else chunks.push(c);
+  });
+  req.on('end', () => {
+    try {
+      done(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    } catch {
+      done(null);
+    }
+  });
+}
+
+/**
+ * Published tracks. GET /api/tracks?sort=new|top|played&page=0 lists them;
+ * POST /api/tracks {code, author} publishes; POST /api/tracks/<id>/like and
+ * /play count; DELETE /api/tracks/<id> (admin token) removes one.
+ */
+function handleTracks(req: IncomingMessage, res: ServerResponse, url: URL): void {
+  const ip = networkOf(clientIp(req));
+  const who = trackStore.who(ip);
+  const now = Date.now();
+  const recent = (trackCalls.get(who) ?? []).filter((t) => now - t < 60_000);
+  recent.push(now);
+  trackCalls.set(who, recent);
+  if (trackCalls.size > 10_000) trackCalls.clear();
+  if (recent.length > TRACK_API_LIMIT) {
+    json(res, 429, { ok: false, error: 'slow down' });
+    return;
+  }
+  const [, , , id, action] = url.pathname.split('/');
+  if (!id) {
+    if (req.method === 'GET') {
+      const sort = (['new', 'top', 'played'].includes(url.searchParams.get('sort') ?? '') ? url.searchParams.get('sort') : 'new') as TrackSort;
+      json(res, 200, { ok: true, ...trackStore.list(sort, Number(url.searchParams.get('page')) || 0) });
+    } else if (req.method === 'POST') {
+      readJson(req, 4096, (body) => {
+        const b = (body ?? {}) as { code?: unknown; author?: unknown };
+        void trackStore.publish(b.code, b.author, who).then((r) => {
+          if (r.ok) console.log(`tracks: ${r.existed ? 'already had' : 'published'} ${r.track.name} (${r.track.id}) by ${r.track.author}`);
+          json(res, r.ok ? 200 : r.status, r);
+        });
+      });
+    } else json(res, 405, { ok: false, error: 'method' });
+    return;
+  }
+  if (req.method === 'DELETE' && !action) {
+    if (!tokenOk(req, url, TRACKS_TOKEN)) {
+      json(res, 401, { ok: false, error: 'token' });
+      return;
+    }
+    const ok = trackStore.remove(id);
+    if (ok) console.log(`tracks: deleted ${id}`);
+    json(res, ok ? 200 : 404, { ok });
+    return;
+  }
+  if (req.method === 'GET' && !action) {
+    const t = trackStore.get(id);
+    json(res, t ? 200 : 404, t ? { ok: true, track: t } : { ok: false, error: 'no such track' });
+    return;
+  }
+  if (req.method === 'POST' && action === 'like') {
+    const r = trackStore.like(id, who);
+    json(res, r.ok ? 200 : r.error === 'no such track' ? 404 : 409, r);
+    return;
+  }
+  if (req.method === 'POST' && action === 'play') {
+    const ok = trackStore.play(id, who);
+    json(res, ok ? 200 : 404, { ok });
+    return;
+  }
+  json(res, 404, { ok: false, error: 'not found' });
+}
+
 /** POST: a small report from the page (a race started, how long it was open). Always answers 204. */
 function handleEvent(req: IncomingMessage, res: ServerResponse): void {
   if (req.method !== 'POST') {
@@ -333,6 +430,7 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 const game = new GameServer();
+const trackStore = new TrackStore(DATA_DIR, game.tracks, process.env.ANALYTICS_SALT || 'megacars-tracks');
 game.log = (msg) => console.log(msg);
 game.event = (e) => analytics.log(null, e);
 
@@ -421,6 +519,7 @@ server.listen(PORT, () => {
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     for (const c of conns) c.ws.close(1012, 'server restarting');
+    trackStore.flush();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 1000).unref();
   });

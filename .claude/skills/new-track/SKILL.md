@@ -10,6 +10,25 @@ En bana är en `TrackDef` (data) i `src/shared/track/defs/`. Byggaren
 depå, catch-up-pilar och AI:ns ideallinje av den. Allt i `src/shared` körs
 identiskt på server och klient, så **en bana är en del av simuleringen**.
 
+## Spelarbanor (banskaparen)
+
+Spelare gör egna banor i spelets banskapare (`src/client/editor/`). Banan
+kanoniseras av `canonicalDef` i `src/shared/track/custom.ts`: den avrundas,
+hålls inom `LIMITS` och får inga broar. Id:t blir `u-` plus en hash av
+innehållet.
+
+- **Kod:** banan delas som en kod (`encodeTrack`/`decodeTrack`) i en länk
+  `?t=KOD`. `npm run track -- <kod eller länk>` kontrollerar en sådan bana.
+- **Kontroll:** `checkTrackDef` ger `errors`, som betyder att banan inte går
+  att köra, och `missing`, som betyder att depå eller pilar saknas.
+- **Register:** spelarbanor registreras med `registerTrack`. Allt som ska köra
+  en bana slår upp den med `trackDef(id)`/`trackName(id)`, aldrig `TRACKS[id]`.
+  `TRACKS` gäller bara spelets egna banor, till exempel topplistor.
+- **Online:** servern kontrollerar och bygger spelarbanor i
+  `src/server/trackWorker.ts` och publicerar dem via `src/server/trackStore.ts`.
+  En spelarbana blir en del av spelet genom att den läggs i `defs/` och i
+  `TRACK_LIST` enligt stegen nedan.
+
 ## Snabbt arbetsflöde
 
 1. Skriv definitionen i `src/shared/track/defs/<namn>.ts` (se mallen nedan).
