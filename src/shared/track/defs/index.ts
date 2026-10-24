@@ -23,8 +23,10 @@ const CUSTOM_KEEP = 64;
 /** Make a player track available by its id (to race, show or send). */
 export function registerTrack(def: TrackDef): void {
   if (TRACKS[def.id]) return;
+  // Already known (the same id is the same content): keep that one, so its build stays cached.
+  const had = custom.get(def.id);
   custom.delete(def.id);
-  custom.set(def.id, def);
+  custom.set(def.id, had ?? def);
   while (custom.size > CUSTOM_KEEP) custom.delete(custom.keys().next().value!);
 }
 

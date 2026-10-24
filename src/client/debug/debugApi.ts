@@ -19,6 +19,7 @@ export function installDebugApi(app: App): void {
       const r = app.renderer;
       return {
         mode: app.mode,
+        track: app.session.track.def.id,
         paused: app.paused,
         phase: app.world.race.phase,
         laps: app.world.race.laps,

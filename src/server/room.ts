@@ -8,7 +8,7 @@ import { leagueOf } from '../shared/game/leagues.ts';
 import { createRaceWorld } from '../shared/game/raceSetup.ts';
 import { makeRng } from '../shared/math/rng.ts';
 import {
-  AUTO_START_MS, LEAD_WINDOW, MAX_PLAYERS, SNAPSHOT_EVERY,
+  AUTO_START_MS, LEAD_WINDOW, MAX_PLAYERS, ROOM_TRACKS_MAX, SNAPSHOT_EVERY, TOUR_MAX,
   type Entrant, type PlayerInfo, type PublicRoom, type RaceSpec, type RoomConfig, type RoomInfo, type ServerMsg,
 } from '../shared/net/protocol.ts';
 import { encodeSnapshot } from '../shared/net/snapshot.ts';
@@ -18,8 +18,19 @@ import {
 import { copyInput, neutralInput, type CarInput } from '../shared/sim/input.ts';
 import { stepWorld } from '../shared/sim/step.ts';
 import { COUNTDOWN_TICKS, RacePhase, type World } from '../shared/sim/world.ts';
-import { DEFAULT_TRACK, raceLaps, trackDef } from '../shared/track/defs/index.ts';
-import type { Track } from '../shared/track/types.ts';
+import { isTrackBuilt } from '../shared/track/builder.ts';
+import { DEFAULT_TRACK, raceLaps, registerTrack, TRACK_LIST, TRACKS, trackDef, trackName } from '../shared/track/defs/index.ts';
+import type { Track, TrackDef } from '../shared/track/types.ts';
+
+/** A random tournament of the game's own tracks. */
+export function randomTour(n: number, rnd: () => number = Math.random): string[] {
+  const ids = TRACK_LIST.map((t) => t.id);
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+  }
+  return ids.slice(0, Math.max(1, Math.min(n, ids.length)));
+}
 
 /** What a room needs from a connection. */
 export interface Peer {
@@ -78,7 +89,17 @@ export class Room {
   readonly code: string;
   readonly members: Member[] = [];
   hostId = -1;
-  config: RoomConfig = { track: DEFAULT_TRACK, laps: 3, ai: 3, difficulty: 1, weapons: true, upgrades: true, public: false, league: 'standard', damageSlows: true };
+  config: RoomConfig = { track: DEFAULT_TRACK, tour: [DEFAULT_TRACK], laps: 3, ai: 3, difficulty: 1, weapons: true, upgrades: true, public: false, league: 'standard', damageSlows: true };
+  /** Races of the tournament run so far (a one-track tour just repeats). */
+  tourIndex = 0;
+  /** The host's player tracks (id -> share code and definition), checked by the server. */
+  readonly defs = new Map<string, { code: string; def: TrackDef }>();
+  /** Player tracks still being checked (they may be in the tour already). */
+  readonly pending = new Set<string>();
+  /** A player track has to be built before the race can start (the server does it in a worker). */
+  needBuild: (def: TrackDef, code: string) => void = () => {};
+  /** The host pressed START while a track was still being built: start when it is. */
+  startWanted = false;
   /** Public rooms: when the race starts by itself (ms, 0 = not counting down). */
   startsAt = 0;
   private now = 0;
@@ -120,6 +141,7 @@ export class Room {
     const profile = newProfile();
     this.members.push({ id: peer.id, name: this.uniqueName(peer.id, peer.name), color, ready: false, peer, droppedAt: 0, profile, lastPlace: 0 });
     if (this.hostId < 0 || !this.member(this.hostId)) this.hostId = peer.id;
+    this.sendDefs(peer);
     this.broadcastRoom();
     peer.send({ t: 'profile', profile });
     if (this.race) this.sendRace(peer);
@@ -155,6 +177,7 @@ export class Room {
     m.peer = peer;
     m.name = this.uniqueName(peer.id, peer.name);
     if (this.hostId < 0 || !this.member(this.hostId)?.peer) this.hostId = peer.id;
+    this.sendDefs(peer);
     const d = this.race?.drivers.find((x) => x.memberId === peer.id);
     if (d && this.race) {
       const car = this.race.world.cars[d.car];
@@ -223,7 +246,10 @@ export class Room {
     if (id !== this.hostId) return 'notHost';
     if (this.race) return 'busy';
     const cfg = this.config;
-    if (typeof c.track === 'string' && trackDef(c.track)) cfg.track = c.track;
+    if (Array.isArray(c.tour)) {
+      const tour = c.tour.filter((id): id is string => typeof id === 'string' && this.knows(id)).slice(0, TOUR_MAX);
+      if (tour.length) this.setTour(tour);
+    } else if (typeof c.track === 'string' && this.knows(c.track)) this.setTour([c.track]);
     if (Number.isFinite(c.laps)) cfg.laps = Math.max(1, Math.min(9, Math.round(c.laps!)));
     if (Number.isFinite(c.ai)) cfg.ai = Math.max(0, Math.min(MAX_PLAYERS - 1, Math.round(c.ai!)));
     if (typeof c.weapons === 'boolean') cfg.weapons = c.weapons;
@@ -234,6 +260,58 @@ export class Room {
     if (c.league !== undefined) cfg.league = leagueOf(c.league);
     this.broadcastRoom();
     return null;
+  }
+
+  /** A track this room can race: the game's own or one of the host's (checked or being checked). */
+  knows(id: string): boolean {
+    return !!TRACKS[id] || this.defs.has(id) || this.pending.has(id);
+  }
+
+  setTour(tour: string[]): void {
+    const same = tour.length === this.config.tour.length && tour.every((id, i) => id === this.config.tour[i]);
+    this.config.tour = tour;
+    if (!same) this.tourIndex = 0;
+    this.config.track = tour[Math.min(this.tourIndex, tour.length - 1)];
+  }
+
+  /** The tournament has been raced to the end (a single track never ends). */
+  get tourOver(): boolean {
+    return this.config.tour.length > 1 && this.tourIndex >= this.config.tour.length;
+  }
+
+  /** The host sent a player track; it is in the room once the server has checked it. */
+  trackPending(id: string): void {
+    this.pending.add(id);
+  }
+
+  /** A checked player track: everybody gets it before it is used. */
+  addTrack(def: TrackDef, code: string): void {
+    this.pending.delete(def.id);
+    if (!this.defs.has(def.id)) {
+      // Full: forget the ones the tournament doesn't use.
+      for (const id of [...this.defs.keys()]) {
+        if (this.defs.size < ROOM_TRACKS_MAX) break;
+        if (!this.config.tour.includes(id)) this.defs.delete(id);
+      }
+      if (this.defs.size >= ROOM_TRACKS_MAX) return;
+      this.defs.set(def.id, { code, def });
+    }
+    for (const m of this.members) if (m.peer) this.sendDefs(m.peer);
+    this.broadcastRoom();
+  }
+
+  /** A player track failed its check: out of the tournament again. */
+  dropTrack(id: string): void {
+    this.pending.delete(id);
+    const tour = this.config.tour.filter((t) => t !== id);
+    if (tour.length !== this.config.tour.length) this.setTour(tour.length ? tour : [DEFAULT_TRACK]);
+    this.startWanted = false;
+    this.broadcastRoom();
+  }
+
+  private sendDefs(peer: Peer): void {
+    if (!this.defs.size) return;
+    peer.send({ t: 'trackDefs', defs: Object.fromEntries([...this.defs].map(([id, d]) => [id, d.code])) });
   }
 
   info(): RoomInfo {
@@ -250,7 +328,10 @@ export class Room {
       lastPlace: m.lastPlace,
     }));
     const startsIn = this.startsAt ? Math.max(0, Math.ceil((this.startsAt - this.now) / 1000)) : 0;
-    return { code: this.code, hostId: this.hostId, players, config: { ...this.config }, state: this.state, races: this.races, startsIn };
+    return {
+      code: this.code, hostId: this.hostId, players, config: { ...this.config, tour: [...this.config.tour] }, state: this.state, races: this.races, startsIn,
+      tourIndex: this.tourIndex, tourNames: this.config.tour.map((id) => trackName(id)),
+    };
   }
 
   /** How the room looks in the public room list. */
@@ -258,7 +339,8 @@ export class Room {
     const c = this.config;
     return {
       code: this.code, host: this.member(this.hostId)?.name ?? '', players: this.connectedCount,
-      track: c.track, laps: c.laps, weapons: c.weapons, upgrades: c.upgrades, state: this.state,
+      track: c.track, trackName: trackName(c.track), tour: c.tour.length, tourIndex: Math.min(this.tourIndex, c.tour.length - 1),
+      laps: c.laps, weapons: c.weapons, upgrades: c.upgrades, state: this.state,
     };
   }
 
@@ -309,11 +391,32 @@ export class Room {
   // ------------------------------------------------------------------- race
 
   /** Start a race with everybody connected. Everyone but the host must be ready. */
-  start(id: number, seed: number): 'notHost' | 'busy' | 'bad' | null {
+  start(id: number, seed: number): 'notHost' | 'busy' | 'bad' | 'building' | null {
     if (id !== this.hostId) return 'notHost';
     if (this.race) return 'busy';
     const racers = this.members.filter((m) => m.peer);
     if (racers.some((m) => !m.ready && m.id !== this.hostId)) return 'bad';
+    // Tournament over: the next START begins a new one (public rooms get new tracks).
+    if (this.tourOver) {
+      if (this.config.public) this.setTour(randomTour(this.config.tour.length));
+      this.resetSeason();
+    }
+    // A player track is checked and built in a worker; the race waits for it.
+    const trackId = this.config.track;
+    if (!TRACKS[trackId]) {
+      const own = this.defs.get(trackId);
+      if (!own) {
+        this.startWanted = this.pending.has(trackId);
+        return this.startWanted ? 'building' : 'bad';
+      }
+      registerTrack(own.def);
+      if (!isTrackBuilt(trackId)) {
+        this.startWanted = true;
+        this.needBuild(own.def, own.code);
+        return 'building';
+      }
+    }
+    this.startWanted = false;
     const rnd = makeRng(seed);
     const aiCount = Math.min(this.config.ai, MAX_PLAYERS - racers.length);
     const shop = this.config.upgrades;
@@ -340,8 +443,8 @@ export class Room {
     }
     const spec: RaceSpec = {
       id: raceIds++,
-      track: this.config.track,
-      laps: raceLaps(this.config.track, this.config.laps),
+      track: trackId,
+      laps: raceLaps(trackId, this.config.laps),
       seed: seed & 0x7fffffff,
       countdownTicks: COUNTDOWN_TICKS,
       weapons: this.config.weapons,
@@ -452,6 +555,12 @@ export class Room {
     if (!this.race) return;
     this.settleRace(this.race);
     this.race = null;
+    // On to the tournament's next track.
+    const tour = this.config.tour;
+    if (tour.length > 1) {
+      this.tourIndex++;
+      this.config.track = tour[Math.min(this.tourIndex, tour.length - 1)];
+    }
     for (const m of this.members) {
       m.ready = false;
       m.peer?.send({ t: 'raceOver' });
@@ -495,14 +604,21 @@ export class Room {
   newSeason(id: number): 'notHost' | 'busy' | null {
     if (id !== this.hostId) return 'notHost';
     if (this.race) return 'busy';
+    this.resetSeason();
+    this.broadcastRoom();
+    return null;
+  }
+
+  /** Fresh cars, no points, the tournament from its first track. */
+  private resetSeason(): void {
     this.races = 0;
+    this.tourIndex = 0;
+    this.config.track = this.config.tour[0];
     for (const m of this.members) {
       m.profile = newProfile();
       m.lastPlace = 0;
       m.peer?.send({ t: 'profile', profile: m.profile });
     }
-    this.broadcastRoom();
-    return null;
   }
 
   /** Late-input statistics for diagnostics. */

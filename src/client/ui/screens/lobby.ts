@@ -18,7 +18,18 @@ export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, r
     y += 12;
   }
   y += 2;
-  if (room.races > 0) {
+  const tour = room.config.tour.length;
+  // Standings: most points first once there are any.
+  const players = room.races > 0 ? [...room.players].sort((a, b) => b.points - a.points) : room.players;
+  if (tour > 1 && room.tourIndex >= tour) {
+    const best = players[0];
+    drawText(ctx, `TOURNAMENT OVER - WINNER: ${best?.name ?? '?'} WITH ${best?.points ?? 0} POINTS`, W / 2, y - 4, { color: Math.sin(time * 4) > -0.4 ? '#ffd84a' : '#ff9a1f', align: 'center' });
+    y += 8;
+  } else if (tour > 1) {
+    const next = room.tourNames.slice(room.tourIndex + 1, room.tourIndex + 3).join(', ').toUpperCase();
+    drawText(ctx, `TOURNAMENT: RACE ${room.tourIndex + 1} OF ${tour}${next ? ` - THEN ${next}${room.tourIndex + 3 < tour ? '...' : ''}` : ' - THE LAST ONE'}`, W / 2, y - 4, { color: '#c8d0dc', align: 'center' });
+    y += 8;
+  } else if (room.races > 0) {
     drawText(ctx, `SEASON: ${room.races} RACE${room.races === 1 ? '' : 'S'} RUN`, W / 2, y - 4, { color: '#c8d0dc', align: 'center' });
     y += 8;
   }
@@ -30,7 +41,7 @@ export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, r
   ctx.fillStyle = 'rgba(8,10,24,0.72)';
   ctx.fillRect(x0, y - 4, boxW, boxH);
   for (let i = 0; i < 8; i++) {
-    const p = room.players[i];
+    const p = players[i];
     const ry = y + i * rowH;
     if (!p) {
       drawText(ctx, '- OPEN -', x0 + boxW / 2, ry, { color: '#3c4458', align: 'center', shadow: null });

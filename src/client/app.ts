@@ -75,7 +75,7 @@ import {
 import { buy, CAR_MODELS } from '../shared/game/shop.ts';
 import { DIVISIONS, endSeason, loadCareer, newCareer, saveCareer, type Career } from './game/career.ts';
 import { drawSeasonEnd } from './ui/screens/season.ts';
-import type { RaceSpec, RoomConfig } from '../shared/net/protocol.ts';
+import { TOUR_MAX, type RaceSpec, type RoomInfo } from '../shared/net/protocol.ts';
 import { CATCH_UP, farBehind, leaderDistance } from '../shared/sim/catchUp.ts';
 import { setBoostPadsLit } from './render/boostMesh.ts';
 
@@ -122,6 +122,16 @@ const CAM_HEIGHT_NAMES = ['LOW', 'NORMAL', 'HIGH'];
  * title: main menu; setup: single race settings; page: a sub-menu (options,
  * race settings...); online: connect/join; lobby: in a room; race: a race on screen.
  */
+/** What the lobby shows behind it: the next track (if known here yet) and class. */
+function lobbyKey(room: RoomInfo): string {
+  return `${room.config.track}@${room.config.league}${trackDef(room.config.track) ? '' : '?'}`;
+}
+
+/** The room's tournament has been raced to the end. */
+function tourOver(room: RoomInfo | null): boolean {
+  return !!room && room.config.tour.length > 1 && room.tourIndex >= room.config.tour.length;
+}
+
 /** A saved track's row in My Tracks. */
 function savedLabel(t: SavedTrack): string {
   return `${t.name}${t.source === 'shared' ? ' (LINK)' : t.source === 'published' ? ' (PUBLISHED)' : ''}`;
@@ -231,6 +241,8 @@ export class App {
   /** Navigation that happened inside the editor is not for the menus (the Esc that closed it). */
   private swallowNav = false;
   private aiWorker: Worker | null = null;
+  /** Tracks in a random online tournament. */
+  private randomTracks = 3;
 
   get trackEditor(): TrackEditor | null {
     return this.editor;
@@ -395,12 +407,14 @@ export class App {
         else if (!room && inLobby) {
           this.pages = [];
           this.mode = 'online';
-        } else if (room && inLobby && this.lobbyShows !== `${room.config.track}@${room.config.league}`) {
+        } else if (room && inLobby && this.lobbyShows !== lobbyKey(room)) {
           // The host picked another track or class: show it behind the lobby (and build it now, not at the start).
           const onPage = this.mode === 'page';
           this.toLobby(false);
           if (onPage) this.mode = 'page';
         }
+        // The tournament page lists the room's tracks: keep it current.
+        if (room && this.mode === 'page' && this.pageReturn === 'lobby') this.refreshPage();
       },
       notice: (text) => this.flashMessage(text, 2.5),
     });
@@ -867,11 +881,20 @@ export class App {
         label: () => {
           if (busy()) return 'RACE IN PROGRESS';
           // Public rooms: everybody (the host too) readies up and the race starts by itself.
-          if (o().isHost && !pub()) return everyoneReady() ? 'START RACE' : 'START RACE (WAITING)';
+          const over = tourOver(o().room);
+          if (o().isHost && !pub()) return everyoneReady() ? (over ? 'START A NEW TOURNAMENT' : 'START RACE') : 'START RACE (WAITING)';
           return o().myInfo?.ready ? 'READY: YES' : 'READY: NO';
         },
         disabled: () => busy() || (o().isHost && !pub() && !everyoneReady()),
         select: () => (o().isHost && !pub() ? o().start() : o().setReady(!o().myInfo?.ready)),
+      },
+      {
+        label: () => {
+          const r = o().room;
+          const n = r?.config.tour.length ?? 1;
+          return n > 1 ? `TOURNAMENT: ${n} TRACKS` : `TRACK: ${(r?.tourNames[0] ?? '').toUpperCase()}`;
+        },
+        select: () => this.openPage('TRACKS', () => this.tourItems(), o().isHost ? 'ENTER REMOVES A TRACK   ←→ MOVES IT   ESC BACK' : 'THE HOST CHOOSES THE TRACKS'),
       },
       { label: () => (o().isHost ? 'RACE SETTINGS' : 'RACE SETTINGS (HOST CHOOSES)'), select: () => this.openPage('RACE SETTINGS', this.roomSettingItems()) },
       {
@@ -879,7 +902,11 @@ export class App {
         disabled: () => busy() || o().room?.config.upgrades === false,
         select: () => this.openOnlineShop(),
       },
-      { label: () => 'NEW SEASON', disabled: () => notHost() || busy() || !o().room?.races, select: () => o().newSeason() },
+      {
+        label: () => ((o().room?.config.tour.length ?? 1) > 1 ? 'NEW TOURNAMENT' : 'NEW SEASON'),
+        disabled: () => notHost() || busy() || !o().room?.races,
+        select: () => o().newSeason(),
+      },
       { label: () => 'COPY INVITE LINK', select: () => this.copyInvite() },
       { label: () => 'LEAVE ROOM', select: () => this.leaveRoom() },
     ];
@@ -892,14 +919,6 @@ export class App {
     const notHost = () => !o().isHost;
     const pub = () => !!cfg()?.public;
     return [
-      {
-        label: () => `TRACK: ${trackName(cfg()?.track ?? '?').toUpperCase()}`,
-        disabled: notHost,
-        change: (d: number) => {
-          const i = TRACK_LIST.findIndex((t) => t.id === cfg()?.track);
-          o().configure({ track: TRACK_LIST[cycle(i, TRACK_LIST.length, d)].id });
-        },
-      },
       { label: () => lapsLabel(cfg()?.track ?? '', cfg()?.laps ?? 3), disabled: notHost, change: (d: number) => o().configure({ laps: 1 + cycle((cfg()?.laps ?? 3) - 1, 9, d) }) },
       { label: () => `COMPUTER CARS: ${cfg()?.ai ?? 0}`, disabled: notHost, change: (d: number) => o().configure({ ai: cycle(cfg()?.ai ?? 0, 8, d) }) },
       {
@@ -928,9 +947,69 @@ export class App {
     ];
   }
 
+  /** The tournament page: random or all game tracks, the chosen ones in order, add one. */
+  private tourItems(): MenuItem[] {
+    const o = this.online;
+    const notHost = () => !o.isHost || o.room?.state === 'race';
+    const tour = o.room?.config.tour ?? [];
+    const done = o.room?.tourIndex ?? 0;
+    const games = TRACK_LIST.map((t) => t.id);
+    const items: MenuItem[] = [
+      {
+        label: () => `RANDOM: ${this.randomTracks} GAME TRACK${this.randomTracks === 1 ? '' : 'S'}`,
+        disabled: notHost,
+        change: (d: number) => (this.randomTracks = 1 + cycle(this.randomTracks - 1, games.length, d)),
+        select: () => this.sendTour([...games].sort(() => Math.random() - 0.5).slice(0, this.randomTracks)),
+      },
+      { label: () => 'ALL GAME TRACKS', disabled: notHost, select: () => this.sendTour(games) },
+    ];
+    tour.forEach((id, i) => {
+      const name = (o.room?.tourNames[i] ?? trackName(id)).toUpperCase();
+      const state = tour.length < 2 ? '' : i < done ? ' - DONE' : i === done ? ' - NEXT' : '';
+      items.push({
+        label: () => `${i + 1}. ${name}${state}`,
+        disabled: notHost,
+        change: (d: number) => {
+          const j = i + d;
+          if (j < 0 || j >= tour.length) return;
+          const t = [...tour];
+          [t[i], t[j]] = [t[j], t[i]];
+          this.sendTour(t);
+        },
+        select: () => {
+          if (tour.length > 1) this.sendTour(tour.filter((_, k) => k !== i));
+        },
+      });
+    });
+    items.push({
+      label: () => (tour.length >= TOUR_MAX ? `ADD A TRACK (${TOUR_MAX} AT MOST)` : 'ADD A TRACK'),
+      disabled: () => notHost() || tour.length >= TOUR_MAX,
+      select: () => this.openPage('ADD A TRACK', [...games, ...myTracks().map((t) => t.id).filter(playable)].map((id) => ({
+        label: () => `${trackName(id).toUpperCase()}${isCustomId(id) ? ' (MINE)' : ''}`,
+        select: () => {
+          this.sendTour([...(o.room?.config.tour ?? []), id]);
+          this.closePage();
+        },
+      }))),
+    });
+    return items;
+  }
+
+  /** Host: the tournament's tracks (player tracks go to the server first, to be checked). */
+  private sendTour(tour: string[]): void {
+    const o = this.online;
+    for (const id of new Set(tour)) {
+      if (!isCustomId(id) || o.roomTracks.has(id)) continue;
+      const mine = myTracks().find((t) => t.id === id);
+      if (mine) o.sendTrack(mine.code);
+    }
+    o.configure({ tour: tour.slice(0, TOUR_MAX) });
+  }
+
   /** One line about the room's next race: track, laps, cars, weapons, class. */
-  private raceSummary(c: RoomConfig): string {
-    const track = trackName(c.track).toUpperCase();
+  private raceSummary(room: RoomInfo): string {
+    const c = room.config;
+    const track = (room.tourNames[Math.min(room.tourIndex, c.tour.length - 1)] ?? trackName(c.track)).toUpperCase();
     return `${track}   ${raceLaps(c.track, c.laps)} LAPS   ${c.ai} AI   WEAPONS ${c.weapons === false ? 'OFF' : 'ON'}   ${LEAGUE_NAMES[leagueOf(c.league)]}`;
   }
 
@@ -951,7 +1030,7 @@ export class App {
     if (!rooms) items.push({ label: () => (o.state === 'failed' ? 'SERVER NOT REACHABLE' : 'LOOKING FOR ROOMS...'), select: () => o.list(), disabled: () => true });
     else if (!rooms.length) items.push({ label: () => 'NO PUBLIC ROOMS YET - OPEN ONE', select: () => o.create(true) });
     for (const r of rooms ?? []) {
-      const track = trackName(r.track).toUpperCase();
+      const track = `${r.trackName.toUpperCase()}${r.tour > 1 ? ` ${r.tourIndex + 1}/${r.tour}` : ''}`;
       const state = r.state === 'race' ? 'RACING' : 'WAITING';
       items.push({ label: () => `${track}  ${r.players}/8 PLAYERS  ${state}  - ${r.host}`, select: () => o.join(r.code) });
     }
@@ -1003,9 +1082,11 @@ export class App {
    * first seconds of an online race stutter).
    */
   private toLobby(resetMenu = true): void {
-    const cfg = this.online.room?.config;
-    this.lobbyShows = cfg ? `${cfg.track}@${cfg.league}` : '';
-    this.showAttract('lobby', cfg ? { track: cfg.track, league: leagueOf(cfg.league) } : undefined);
+    const room = this.online.room;
+    const cfg = room?.config;
+    this.lobbyShows = room ? lobbyKey(room) : '';
+    // A player track still being checked isn't here yet: keep what shows until it is.
+    this.showAttract('lobby', cfg && trackDef(cfg.track) ? { track: cfg.track, league: leagueOf(cfg.league) } : undefined);
     if (resetMenu) this.lobbyMenu.index = 0;
   }
 
@@ -2305,7 +2386,7 @@ export class App {
     } else if (this.mode === 'lobby' && this.online.room) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
-      const top = drawLobby(ctx, W, H, this.online.room, this.online.me, this.time, this.raceSummary(this.online.room.config));
+      const top = drawLobby(ctx, W, H, this.online.room, this.online.me, this.time, this.raceSummary(this.online.room));
       // How to drive, readable while waiting for the start.
       const help = this.controlsHelp(this.online.room.config.weapons !== false);
       const helpTop = H - 26 - help.length * 10;

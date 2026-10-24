@@ -43,22 +43,45 @@ interface Prim {
 
 const cache = new Map<string, Track>();
 /** Built player tracks kept at once (each holds a big surface grid). */
-const CUSTOM_CACHE = 6;
+let customCache = 6;
+
+/** How many built player tracks to keep (the server keeps more: many rooms). */
+export function setCustomTrackCache(n: number): void {
+  customCache = Math.max(1, n);
+}
 
 /** Builds (or returns the cached) track. Tracks are immutable once built. */
 export function getTrack(def: TrackDef): Track {
   let t = cache.get(def.id);
-  if (!t || t.def !== def) {
+  // A player track's id is a hash of its content: the same id is the same track.
+  const custom = def.id.startsWith('u-');
+  if (!t || (t.def !== def && !custom)) {
     t = buildTrack(def);
-    cache.set(def.id, t);
-  } else if (def.id.startsWith('u-')) {
+    keep(t);
+  } else if (custom) {
     // Most recently used last.
     cache.delete(def.id);
     cache.set(def.id, t);
   }
-  const custom = [...cache.keys()].filter((id) => id.startsWith('u-'));
-  for (let k = 0; k < custom.length - CUSTOM_CACHE; k++) cache.delete(custom[k]);
   return t;
+}
+
+/** A player track is built and waiting in the cache. */
+export function isTrackBuilt(id: string): boolean {
+  return cache.has(id);
+}
+
+/** Cache a track built elsewhere (in a worker thread). */
+export function adoptTrack(def: TrackDef, track: Track): void {
+  track.def = def;
+  keep(track);
+}
+
+function keep(t: Track): void {
+  cache.delete(t.def.id);
+  cache.set(t.def.id, t);
+  const custom = [...cache.keys()].filter((id) => id.startsWith('u-'));
+  for (let k = 0; k < custom.length - customCache; k++) cache.delete(custom[k]);
 }
 
 /**

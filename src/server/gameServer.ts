@@ -8,7 +8,9 @@ import {
 } from '../shared/net/protocol.ts';
 import { neutralInput } from '../shared/sim/input.ts';
 import { isShopItem } from '../shared/game/shop.ts';
-import { Room, type Peer } from './room.ts';
+import { decodeTrack, MAX_CODE } from '../shared/track/custom.ts';
+import { randomTour, Room, type Peer } from './room.ts';
+import { TrackChecker } from './trackChecker.ts';
 
 export interface Transport {
   sendText(s: string): void;
@@ -58,6 +60,50 @@ export class GameServer {
   log: (msg: string) => void = () => {};
   /** Usage events (a race started in a room), for the usage log. */
   event: (e: Record<string, string | number | boolean>) => void = () => {};
+  /** Checks and builds player tracks in a worker thread. */
+  readonly tracks: TrackChecker;
+
+  constructor(tracks = new TrackChecker()) {
+    this.tracks = tracks;
+  }
+
+  /** The host's START waited for a player track: try again now it is ready. */
+  private retryStart(room: Room): void {
+    if (!room.startWanted || !this.rooms.has(room.code)) return;
+    const err = room.start(room.hostId, this.seed());
+    if (err === null) this.raceStarted(room);
+  }
+
+  /** The host sends a player track for the tournament. */
+  private trackDef(c: Client, code: unknown): void {
+    const room = c.room;
+    if (!room || typeof code !== 'string' || code.length > MAX_CODE) return;
+    if (room.hostId !== c.id) {
+      c.error('notHost', 'Only the host can choose the tracks');
+      return;
+    }
+    const def = decodeTrack(code);
+    if (!def) {
+      c.error('bad', 'That is not a track');
+      return;
+    }
+    if (room.defs.has(def.id) || room.pending.has(def.id)) return;
+    if (room.pending.size >= 4) {
+      c.error('busy', 'Still checking your other tracks');
+      return;
+    }
+    room.trackPending(def.id);
+    void this.tracks.forRoom(code).then((r) => {
+      if (this.rooms.get(room.code) !== room) return;
+      if (r.ok) {
+        room.addTrack(r.def, code);
+        this.retryStart(room);
+      } else {
+        room.dropTrack(def.id);
+        room.member(room.hostId)?.peer?.send({ t: 'error', code: 'bad', msg: `${def.name}: ${r.error}` });
+      }
+    });
+  }
 
   private raceStarted(room: Room): void {
     const spec = room.race?.spec;
@@ -156,10 +202,14 @@ export class GameServer {
         if (err) c.error(err, err === 'notHost' ? 'Only the host can start a new season' : 'Race in progress');
         break;
       }
+      case 'trackDef':
+        this.trackDef(c, msg.code);
+        break;
       case 'start': {
         const err = c.room?.start(c.id, this.seed());
         if (c.room && err === null) this.raceStarted(c.room);
-        if (err === 'bad') c.error('bad', 'Waiting for everybody to be ready');
+        if (err === 'building') c.error('bad', 'Getting the track ready - the race starts in a moment');
+        else if (err === 'bad') c.error('bad', c.room && !c.room.knows(c.room.config.track) ? 'Pick the track again' : 'Waiting for everybody to be ready');
         else if (err) c.error(err, err === 'notHost' ? 'Only the host can start' : 'Race in progress');
         break;
       }
@@ -266,6 +316,14 @@ export class GameServer {
     this.leaveRoom(c);
     const room = new Room(this.newCode());
     room.config.public = isPublic;
+    // Public rooms race a short tournament of random game tracks.
+    if (isPublic) room.setTour(randomTour(3));
+    room.needBuild = (def, code) => {
+      void this.tracks.build(def, code).then((r) => {
+        if (r.ok) this.retryStart(room);
+        else room.dropTrack(def.id);
+      });
+    };
     this.rooms.set(room.code, room);
     this.enter(c, room);
     this.log(`${isPublic ? 'public' : 'private'} room ${room.code} created by ${c.name}`);

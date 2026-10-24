@@ -7,8 +7,8 @@ import type { League } from '../game/leagues.ts';
 import type { Loadout, Profile, ShopItem } from '../game/shop.ts';
 
 /** Bump when messages change incompatibly. Clients and server must match. */
-// The +2: public rooms (room list, quick match, auto start).
-export const PROTOCOL_VERSION = 2 + SIM_VERSION * 100;
+// The +3: tournaments and player tracks in rooms.
+export const PROTOCOL_VERSION = 3 + SIM_VERSION * 100;
 
 export const MsgType = {
   Input: 1,
@@ -55,8 +55,16 @@ export function decodeInput(data: Uint8Array, out: CarInput): number {
 
 // ------------------------------------------------------------------- lobby
 
+/** Most races in one tournament. */
+export const TOUR_MAX = 12;
+/** Player tracks a room keeps at once. */
+export const ROOM_TRACKS_MAX = 12;
+
 export interface RoomConfig {
+  /** The track of the next race (the tournament's current one). */
   track: string;
+  /** The tournament: its tracks in order (one = a single race at a time). */
+  tour: string[];
   laps: number;
   /** Computer cars added to the people. */
   ai: number;
@@ -79,6 +87,11 @@ export interface PublicRoom {
   host: string;
   players: number;
   track: string;
+  /** The track's name (it may be a player track the list doesn't know). */
+  trackName: string;
+  /** Tournament: races in it, and the one that is next (0-based). */
+  tour: number;
+  tourIndex: number;
   laps: number;
   weapons: boolean;
   upgrades: boolean;
@@ -110,6 +123,10 @@ export interface RoomInfo {
   state: 'lobby' | 'race';
   /** Races run this season. */
   races: number;
+  /** Races of the tournament already run (equal to its length when it is over). */
+  tourIndex: number;
+  /** Names of the tournament's tracks (player tracks included). */
+  tourNames: string[];
   /** Public rooms: seconds until the race starts by itself (0 = not counting down). */
   startsIn: number;
 }
@@ -154,7 +171,9 @@ export type ClientMsg =
   | { t: 'config'; config: Partial<RoomConfig> }
   | { t: 'start' }
   | { t: 'buy'; item: ShopItem }
-  | { t: 'newSeason' };
+  | { t: 'newSeason' }
+  /** Host: a player track for the tournament (a share code; checked by the server). */
+  | { t: 'trackDef'; code: string };
 
 export type ServerMsg =
   | { t: 'welcome'; id: number; token: string }
@@ -167,7 +186,9 @@ export type ServerMsg =
   /** The race is over; the room is back in the lobby. */
   | { t: 'raceOver' }
   /** Your own season profile (money, upgrades, ammo, damage). */
-  | { t: 'profile'; profile: Profile };
+  | { t: 'profile'; profile: Profile }
+  /** The room's player tracks (id -> share code), sent before they are used. */
+  | { t: 'trackDefs'; defs: Record<string, string> };
 
 export type ErrorCode = 'version' | 'noRoom' | 'full' | 'busy' | 'notHost' | 'bad' | 'limit';
 

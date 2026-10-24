@@ -9,6 +9,8 @@ import { cleanName, MsgType, type ClientMsg, type PublicRoom, type RoomConfig, t
 import type { CarInput } from '../../shared/sim/input.ts';
 import type { World } from '../../shared/sim/world.ts';
 import type { Track } from '../../shared/track/types.ts';
+import { decodeTrack } from '../../shared/track/custom.ts';
+import { registerTrack } from '../../shared/track/defs/index.ts';
 import { Connection, type ConnState } from '../net/connection.ts';
 import type { GameSession } from './session.ts';
 
@@ -60,6 +62,8 @@ export class Online {
   code = '';
   /** The public room list (null until it arrives). */
   publicRooms: PublicRoom[] | null = null;
+  /** Player tracks the room has (sent by the server before they are used). */
+  readonly roomTracks = new Set<string>();
   private wantList = false;
   private pending: ClientMsg | null = null;
   private readonly events: OnlineEvents;
@@ -179,6 +183,11 @@ export class Online {
     this.conn.send({ t: 'newSeason' });
   }
 
+  /** Host: send a player track for the tournament (the server checks it). */
+  sendTrack(code: string): void {
+    this.conn.send({ t: 'trackDef', code });
+  }
+
   /** Per frame: keep the race clock informed about the round trip. */
   update(): void {
     if (this.race && this.conn.rtt > 0) this.race.net.rttMs = this.conn.rtt;
@@ -197,6 +206,8 @@ export class Online {
   }
 
   private setRoom(room: RoomInfo | null): void {
+    // (A new room's tracks arrive just before its first room message.)
+    if (!room) this.roomTracks.clear();
     this.room = room;
     this.events.room(room);
   }
@@ -240,6 +251,14 @@ export class Online {
         break;
       case 'profile':
         this.profile = msg.profile;
+        break;
+      case 'trackDefs':
+        for (const code of Object.values(msg.defs ?? {})) {
+          const def = typeof code === 'string' ? decodeTrack(code) : null;
+          if (!def) continue;
+          registerTrack(def);
+          this.roomTracks.add(def.id);
+        }
         break;
       case 'error':
         if (msg.code !== 'version') this.events.notice(msg.msg.toUpperCase());
