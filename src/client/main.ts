@@ -1,4 +1,5 @@
 import { App } from './app.ts';
+import { registerMyTracks } from './editor/myTracks.ts';
 import { readParams } from './params.ts';
 
 function fatal(err: unknown): void {
@@ -13,6 +14,8 @@ window.addEventListener('error', (e) => fatal(e.error ?? e.message));
 window.addEventListener('unhandledrejection', (e) => fatal(e.reason));
 
 try {
+  // The player's own tracks can be chosen like the game's (the saved settings may name one).
+  registerMyTracks();
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const app = new App(canvas, readParams());
   app.start();

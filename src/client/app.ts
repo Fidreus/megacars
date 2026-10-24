@@ -58,6 +58,10 @@ import { drawCredits } from './ui/screens/credits.ts';
 import { buildIndustry, type SteamSource } from './render/industry.ts';
 import { themeOf } from './render/theme.ts';
 import { buildTrackView } from './render/trackMesh.ts';
+import { TrackEditor, type EditorHost } from './editor/editor.ts';
+import { addFromCode, deleteTrack, myTracks, playable, saveTrack, savedDef, type SavedTrack } from './editor/myTracks.ts';
+import { canonicalDef, encodeTrack, isCustomId } from '../shared/track/custom.ts';
+import type { TrackDef } from '../shared/track/types.ts';
 import { drawText, LINE_H, textWidth } from './ui/font.ts';
 import { cycle, Menu, type MenuEvents, type MenuItem } from './ui/menu.ts';
 import { drawCountdown, drawPlayerHud, formatTime, Minimap } from './ui/screens/hud.ts';
@@ -118,7 +122,12 @@ const CAM_HEIGHT_NAMES = ['LOW', 'NORMAL', 'HIGH'];
  * title: main menu; setup: single race settings; page: a sub-menu (options,
  * race settings...); online: connect/join; lobby: in a room; race: a race on screen.
  */
-type Mode = 'title' | 'setup' | 'page' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'controls' | 'help' | 'records' | 'rooms' | 'credits';
+/** A saved track's row in My Tracks. */
+function savedLabel(t: SavedTrack): string {
+  return `${t.name}${t.source === 'shared' ? ' (LINK)' : t.source === 'published' ? ' (PUBLISHED)' : ''}`;
+}
+
+type Mode = 'title' | 'setup' | 'page' | 'editor' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'controls' | 'help' | 'records' | 'rooms' | 'credits';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -185,7 +194,7 @@ export class App {
   /** Single race: track, laps, opponents... and start. */
   private readonly setupMenu: Menu;
   /** Sub-menus (options, the room's race settings...): a stack, BACK pops one. */
-  private pages: { title: string; menu: Menu; hint?: string }[] = [];
+  private pages: { title: string; menu: Menu; hint?: string; build?: () => MenuItem[] }[] = [];
   /** The screen the last page goes back to. */
   private pageReturn: Mode = 'title';
   /** The pause menu's options page (null: the pause menu itself). */
@@ -213,6 +222,19 @@ export class App {
   /** A world-board record waits for the player to type a name. */
   private askName = false;
   private madeUpName = '';
+  /** The race is on a player track: personal bests stay on this device. */
+  private localOnly = false;
+  /** The track editor (made when first opened). */
+  private editor: TrackEditor | null = null;
+  /** The current race is the editor's test drive: back to the editor after it. */
+  private testDriving = false;
+  /** Navigation that happened inside the editor is not for the menus (the Esc that closed it). */
+  private swallowNav = false;
+  private aiWorker: Worker | null = null;
+
+  get trackEditor(): TrackEditor | null {
+    return this.editor;
+  }
   private nameMenu!: Menu;
   readonly music: Music;
   private songToast = 0;
@@ -275,6 +297,10 @@ export class App {
     this.settings = loadSettings();
     if (params.mood) this.settings.mood = params.mood;
     if (trackDef(params.track)) this.settings.track = params.track;
+    // A shared track link (?t=): kept in My Tracks and opened there below.
+    const shared = params.trackCode ? addFromCode(params.trackCode, 'shared') : null;
+    if (shared && playable(shared.id)) this.settings.track = shared.id;
+    if (!playable(this.settings.track)) this.settings.track = TRACK_LIST[0].id;
     if (params.laps) this.settings.laps = params.laps;
     if (params.p2) this.settings.players = 2;
     if (params.aiSet) this.settings.opponents = Math.min(8 - this.settings.players, params.ai);
@@ -349,7 +375,7 @@ export class App {
       },
       { label: () => 'SOUND & CAMERA', select: () => this.openPauseOptions() },
       {
-        label: () => (this.netRace ? 'LEAVE ROOM' : 'QUIT TO MENU'),
+        label: () => (this.netRace ? 'LEAVE ROOM' : this.testDriving ? 'BACK TO THE EDITOR' : 'QUIT TO MENU'),
         select: () => (this.netRace ? this.leaveRoom() : this.toTitle()),
       },
     ], { onMove: beep });
@@ -448,6 +474,21 @@ export class App {
     } else if (params.mode === 'quick') this.startRace(this.settings);
     else if (params.mode === 'practice') this.startRace({ ...this.settings, practice: true, opponents: params.aiSet ? params.ai : 0 });
     else this.toTitle();
+    if (params.trackCode && this.mode === 'title') {
+      if (shared) {
+        this.openMyTracks();
+        this.openSavedTrack(shared);
+        this.flashMessage('TRACK ADDED TO MY TRACKS', 3);
+      } else this.flashMessage('THAT TRACK LINK IS BROKEN', 3);
+      // A reload shouldn't add it again.
+      try {
+        const url = new URL(location.href);
+        url.searchParams.delete('t');
+        history.replaceState(null, '', url.toString());
+      } catch {
+        // Fine as it is.
+      }
+    }
     if (params.debug) {
       this.showTelemetry = true;
       if (this.debugView) this.debugView.visible = true;
@@ -536,6 +577,7 @@ export class App {
       { label: () => 'CHAMPIONSHIP', select: () => { this.career = null; this.mode = 'cup'; this.cupMenu.index = loadCup() ? 0 : 1; } },
       { label: () => 'CAREER', select: () => this.toCareer() },
       { label: () => 'PLAY ONLINE', select: () => this.toOnline() },
+      { label: () => 'TRACK EDITOR', select: () => this.openMyTracks() },
       {
         label: () => 'RECORDS',
         select: () => {
@@ -558,8 +600,9 @@ export class App {
       {
         label: () => `TRACK: ${trackName(s.track).toUpperCase()}`,
         change: (d: number) => {
-          const i = TRACK_LIST.findIndex((t) => t.id === s.track);
-          s.track = TRACK_LIST[cycle(i, TRACK_LIST.length, d)].id;
+          // The game's tracks, then the player's own.
+          const ids = [...TRACK_LIST.map((t) => t.id), ...myTracks().map((t) => t.id).filter(playable)];
+          s.track = ids[cycle(Math.max(0, ids.indexOf(s.track)), ids.length, d)];
           changed();
           this.showAttract('setup');
         },
@@ -606,19 +649,165 @@ export class App {
   // ---------------------------------------------------------------- pages
 
   /** Open a sub-menu over the current screen (a BACK row is added). */
-  private openPage(title: string, items: MenuItem[], hint?: string): void {
+  private openPage(title: string, items: MenuItem[] | (() => MenuItem[]), hint?: string): void {
     if (this.mode !== 'page') {
       this.pageReturn = this.mode;
       this.pages = [];
     }
-    this.pages.push({ title, menu: new Menu([...items, { label: () => 'BACK', select: () => this.closePage() }], this.menuEvents), hint });
+    const build = typeof items === 'function' ? items : undefined;
+    this.pages.push({ title, menu: new Menu(this.pageItems(build ? build() : (items as MenuItem[])), this.menuEvents), hint, build });
     this.mode = 'page';
+  }
+
+  private pageItems(items: MenuItem[]): MenuItem[] {
+    return [...items, { label: () => 'BACK', select: () => this.closePage() }];
   }
 
   /** Back one page; from the first one, back to the screen it opened over. */
   private closePage(): void {
     this.pages.pop();
     if (!this.pages.length) this.mode = this.pageReturn;
+    else this.refreshPage();
+  }
+
+  /** Rebuild the top page's rows (a page made from a list that changed). */
+  private refreshPage(): void {
+    const page = this.pages[this.pages.length - 1];
+    if (page?.build) page.menu.items = this.pageItems(page.build());
+  }
+
+  // --------------------------------------------------------- track editor
+
+  /** My Tracks: start a new one, or pick a saved one (its own page). */
+  private openMyTracks(): void {
+    this.openPage('MY TRACKS', () => [
+      { label: () => 'NEW TRACK', select: () => this.openEditor(null, null) },
+      { label: () => 'NEW FROM A GAME TRACK', select: () => this.openTemplates() },
+      ...myTracks().map((t) => ({ label: () => savedLabel(t), select: () => this.openSavedTrack(t) })),
+    ], 'KEPT IN THIS BROWSER - SHARE A LINK TO SEND ONE');
+  }
+
+  /** A copy of a game track to start from (not the ones with bridges). */
+  private openTemplates(): void {
+    this.openPage('START FROM', TRACK_LIST.filter((d) => !d.bridges?.length).map((d) => ({
+      label: () => d.name.toUpperCase(),
+      select: () => this.openEditor({ ...d, name: `${d.name} II` }, null),
+    })));
+  }
+
+  private openSavedTrack(t: SavedTrack): void {
+    const race = (practice: boolean) => {
+      this.settings.track = t.id;
+      saveSettings(this.settings);
+      if (practice) this.startRace({ ...this.settings, practice: true, players: 1, opponents: 0 });
+      else this.toSetup();
+    };
+    this.openPage(t.name, [
+      { label: () => 'EDIT', select: () => this.openEditor(savedDef(t), t.slot) },
+      { label: () => 'RACE', select: () => race(false), disabled: () => !playable(t.id) },
+      { label: () => 'FREE PRACTICE', select: () => race(true), disabled: () => !playable(t.id) },
+      { label: () => 'COPY SHARE LINK', select: () => this.copyTrackLink(t.code) },
+      {
+        label: () => 'DUPLICATE',
+        select: () => {
+          const def = savedDef(t);
+          if (def) saveTrack({ ...def, name: `${def.name.slice(0, 20)} 2` }, null);
+          this.closePage();
+        },
+      },
+      {
+        label: () => 'DELETE',
+        select: () => this.openPage(`DELETE ${t.name}?`, [{
+          label: () => 'YES, DELETE IT',
+          select: () => {
+            deleteTrack(t.slot);
+            if (this.settings.track === t.id) this.settings.track = TRACK_LIST[0].id;
+            saveSettings(this.settings);
+            this.pages.pop();
+            this.closePage();
+          },
+        }]),
+      },
+    ], playable(t.id) ? `${t.source === 'shared' ? 'FROM A LINK - ' : t.source === 'published' ? 'FROM THE PUBLISHED LIST - ' : ''}ENTER SELECT   ESC BACK` : 'NOT FINISHED - EDIT IT TO FIX THE MARKED PROBLEMS');
+    // The track races behind its page.
+    if (playable(t.id)) this.showAttract('page', { track: t.id });
+  }
+
+  private copyTrackLink(code: string): void {
+    const link = `${location.origin}/?t=${code}`;
+    const done = (ok: boolean) => {
+      if (this.mode === 'editor') this.editor?.flash(ok ? 'LINK COPIED - ANYONE WITH IT CAN DRIVE THE TRACK' : 'COULD NOT COPY THE LINK');
+      else this.flashMessage(ok ? 'TRACK LINK COPIED' : 'COULD NOT COPY THE LINK', 2.5);
+      if (!ok) window.prompt('Copy the track link', link);
+    };
+    if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => done(true), () => done(false));
+    else done(false);
+  }
+
+  private openEditor(def: TrackDef | null, slot: string | null): void {
+    this.editor ??= new TrackEditor(this.editorHost());
+    this.paused = false;
+    this.pauseSub = null;
+    this.tuningPanel?.hide();
+    this.touch.setVisible(false);
+    this.mode = 'editor';
+    this.editor.open(def, slot);
+  }
+
+  /** Back from a test drive. */
+  private backToEditor(): void {
+    this.testDriving = false;
+    this.paused = false;
+    this.pauseSub = null;
+    this.tuningPanel?.hide();
+    this.touch.setVisible(false);
+    this.mode = 'editor';
+    this.editor?.resume();
+  }
+
+  private editorHost(): EditorHost {
+    return {
+      testDrive: (def) => {
+        this.startRace({ ...this.settings, track: def.id, practice: true, players: 1, opponents: 0 });
+        this.testDriving = true;
+        this.flashMessage('TEST DRIVE - PAUSE TO GO BACK TO THE EDITOR', 3);
+      },
+      save: (def, slot) => saveTrack(def, slot).slot,
+      share: (def) => this.copyTrackLink(encodeTrack(def)),
+      publish: () => this.editor?.flash('PUBLISHING IS NOT OPEN YET'),
+      aiTest: (def) => this.runAiTest(encodeTrack(def)),
+      exit: () => {
+        this.swallowNav = true;
+        const ed = this.editor!;
+        // The track just made races behind My Tracks (when it can).
+        const id = canonicalDef(ed.def).id;
+        this.showAttract('title', ed.ok && playable(id) ? { track: id } : {});
+        this.openMyTracks();
+      },
+      sound: (kind) => playUi(this.audio, kind),
+    };
+  }
+
+  /** Eight AI cars race the track in a worker; resolves with the verdict. */
+  private runAiTest(code: string): Promise<string> {
+    this.aiWorker ??= new Worker(new URL('./editor/aiWorker.ts', import.meta.url), { type: 'module' });
+    const w = this.aiWorker;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        w.terminate();
+        this.aiWorker = null;
+        reject(new Error('timeout'));
+      }, 60_000);
+      w.onmessage = (e: MessageEvent<{ text: string }>) => {
+        clearTimeout(timer);
+        resolve(e.data.text);
+      };
+      w.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error('worker'));
+      };
+      w.postMessage({ code });
+    });
   }
 
   private openOptions(): void {
@@ -1053,15 +1242,20 @@ export class App {
 
   /** What the music should be doing for the current screen. */
   private musicScene(): MusicScene {
-    const titleish: Mode[] = ['title', 'setup', 'controls', 'help', 'records', 'credits'];
+    const titleish: Mode[] = ['title', 'setup', 'editor', 'controls', 'help', 'records', 'credits'];
     if (titleish.includes(this.mode) || (this.mode === 'page' && this.pageReturn === 'title')) return { kind: 'title' };
     if (this.mode === 'seasonEnd' || this.mode === 'standings' || this.showingResults) return { kind: 'results' };
-    if (this.mode === 'race') return { kind: 'race', track: this.session.track.def.id };
+    if (this.mode === 'race') {
+      // A player track plays the song of a game track with its theme.
+      const def = this.session.track.def;
+      return { kind: 'race', track: isCustomId(def.id) ? (TRACK_LIST.find((t) => t.theme === def.theme)?.id ?? def.id) : def.id };
+    }
     return { kind: 'menu' };
   }
 
   /** Back to the title screen with an all-AI race running behind the menu. */
   toTitle(): void {
+    if (this.testDriving) return this.backToEditor();
     this.showAttract('title');
   }
 
@@ -1093,7 +1287,11 @@ export class App {
     this.setSession(new RaceSession({ ...settings }, practice ? this.tuning : cloneTuning(DEFAULT_TUNING), spec?.seed, spec));
     // Quick races and practice with one person and a stock car can set verified records.
     const rs = this.session as RaceSession;
-    this.replay = !spec && rs.playerCars.length === 1 && specProblem(rs.spec) === null ? new ReplayRecorder() : null;
+    // Player tracks have no world boards: their bests are kept here, with a stock car.
+    this.localOnly = isCustomId(rs.track.def.id);
+    const checked = specProblem(this.localOnly ? { ...rs.spec, track: TRACK_LIST[0].id } : rs.spec) === null;
+    const fair = !this.localOnly || !(practice && isTuned(this.tuning));
+    this.replay = !spec && rs.playerCars.length === 1 && checked && fair ? new ReplayRecorder() : null;
     this.recordPending = false;
     this.recordNote = '';
     trackRace({
@@ -1327,6 +1525,14 @@ export class App {
     const dt = Math.min(0.1, realDt);
     this.last = now;
     this.time += dt;
+    if (this.mode === 'editor' && this.editor) {
+      // The editor draws on its own canvas; the game waits behind it.
+      this.editor.frame(dt);
+      this.updateAudio();
+      if (this.audio.ctx) this.music.play(this.musicScene());
+      this.input.keyboard.endFrame();
+      return;
+    }
     this.touch.tick(dt);
     this.handleKeys(dt);
     const net = this.netRace;
@@ -1394,6 +1600,10 @@ export class App {
     this.audio.setSilent(this.silentHere);
     this.nav.textMode = this.activeMenu?.typing ?? false;
     const nav = this.nav.poll(dt);
+    if (this.swallowNav) {
+      this.swallowNav = false;
+      return;
+    }
     this.updateTouch(nav);
     if (this.nav.textMode || (this.mode === 'controls' && this.controlsScreen.capturing)) {
       // Letters and digits go into the text field.
@@ -1710,7 +1920,7 @@ export class App {
         const car = w.cars[e.car];
         const best = car.bestLapTicks === e.value;
         const record = !!this.replay && !this.replay.spoiled && noteLap(this.localRecords, this.recordKey(), e.value);
-        if (record) this.recordPending = true;
+        if (record && !this.localOnly) this.recordPending = true;
         if (record) {
           this.flashMessage(`NEW LAP RECORD ${formatTime(e.value * DT)}`, 3);
           playUi(this.audio, 'buy');
@@ -1728,7 +1938,9 @@ export class App {
             this.recordNote = `NEW BEST RACE TIME ${formatTime((car.finishTick - w.race.startTick) * DT)}`;
           }
           // A record for the world board: first ask who set it (once, like an arcade).
-          if (this.recordPending && !this.online.nameChosen) {
+          if (this.localOnly) {
+            // Kept on this device only.
+          } else if (this.recordPending && !this.online.nameChosen) {
             this.askName = true;
             this.nameMenu.index = 0;
             // Start from an empty field rather than the made-up name.

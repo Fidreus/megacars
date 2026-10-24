@@ -20,6 +20,8 @@ export interface Params {
   mood: string | null;
   /** Online room code to join straight away (invite links). */
   room: string | null;
+  /** A shared player track (?t=, the track editor's share link). */
+  trackCode: string | null;
 }
 
 export function readParams(search: string = location.search): Params {
@@ -46,6 +48,7 @@ export function readParams(search: string = location.search): Params {
     scanlines: flag('scanlines'),
     mute: flag('mute'),
     mood: q.get('mood'),
+    trackCode: q.get('t') || null,
     room: q.get('room') ? q.get('room')!.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4) || null : null,
   };
 }

@@ -50,6 +50,10 @@ export function installDebugApi(app: App): void {
         })),
       };
     },
+    /** The track editor's state (null when it isn't open). */
+    editor() {
+      return app.trackEditor?.active ? app.trackEditor.debugState() : null;
+    },
     /** Hold an input on the player car for `ticks` simulation ticks. */
     drive(input: { steer?: number; throttle?: number; brake?: number }, ticks = 60) {
       const i = neutralInput();
