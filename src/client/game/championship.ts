@@ -13,6 +13,7 @@ import { COUNTDOWN_TICKS, type World } from '../../shared/sim/world.ts';
 import { TRACK_LIST, raceLaps } from '../../shared/track/defs/index.ts';
 import type { StandingsRow } from '../ui/screens/shop.ts';
 import type { RaceSettings } from './settings.ts';
+import { driverNotes } from './rival.ts';
 
 const KEY = 'megacars.cup.v1';
 
@@ -54,7 +55,7 @@ export function newChampionship(s: RaceSettings): Championship {
       name: names[k % names.length],
       color: CAR_COLORS[(2 + k) % CAR_COLORS.length],
       player: -1,
-      skill: AI_SKILL[s.difficulty] + (rnd() - 0.5) * 0.06,
+      skill: AI_SKILL[s.difficulty],
       profile: newProfile(),
       lastPlace: 0,
     });
@@ -139,6 +140,7 @@ export function standingsRows(c: Championship): StandingsRow[] {
     earned: d.profile.lastEarned,
     racePlace: d.lastPlace,
     human: d.player >= 0,
+    ...driverNotes(d),
   }));
 }
 

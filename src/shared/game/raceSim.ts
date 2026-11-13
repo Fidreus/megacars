@@ -8,6 +8,8 @@ import type { TrackDef } from '../track/types.ts';
 import { Ev } from '../sim/events.ts';
 import { stepWorld } from '../sim/step.ts';
 import { createWorld, RacePhase, standings, type World } from '../sim/world.ts';
+import { PERSONAS } from '../ai/persona.ts';
+import { setPersona } from './personaSetup.ts';
 
 export interface SimRaceResult {
   seed: number;
@@ -25,7 +27,7 @@ export interface SimRaceResult {
   order: number[];
 }
 
-export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number; laps?: number; tuning?: CarTuning; weapons?: boolean } = {}): SimRaceResult {
+export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number; laps?: number; tuning?: CarTuning; weapons?: boolean; personas?: boolean } = {}): SimRaceResult {
   const track = getTrack(def);
   const carCount = opts.cars ?? 8;
   const world: World = createWorld(track, carCount, seed, { laps: opts.laps ?? 3, countdownTicks: 1, weapons: opts.weapons });
@@ -33,6 +35,8 @@ export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number;
   for (const c of world.cars) {
     c.aiDriven = 1;
     c.aiSkill = 0.88 + rnd() * 0.12;
+    // A different mix of personalities for every seed (off: all drive alike).
+    if (opts.personas !== false) setPersona(c, (seed * 3 + c.id) % PERSONAS.length);
   }
   const tunings = [opts.tuning ?? DEFAULT_TUNING];
   let wallHits = 0;

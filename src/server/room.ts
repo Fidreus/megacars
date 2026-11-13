@@ -431,7 +431,7 @@ export class Room {
         name: names[k % names.length],
         color: CAR_COLORS[free[k % free.length]],
         playerId: -1,
-        skill: AI_SKILL[this.config.difficulty] + (rnd() - 0.5) * 0.06,
+        skill: AI_SKILL[this.config.difficulty],
         loadout: shop ? aiLoadout(level, this.config.difficulty, rnd) : undefined,
       });
     }

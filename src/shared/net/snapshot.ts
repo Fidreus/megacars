@@ -19,6 +19,7 @@ const F64: readonly CarKey[] = [
 /** Counters, flags and indices. */
 const I32: readonly CarKey[] = [
   'sliding', 'modeTicks', 'spinTicks', 'spinCool', 'airborne', 'prevButtons', 'brakeTicks', 'liftTicks',
+  'aiPersona', 'aiFoe', 'aiAware', 'aiReact',
   'driftArm', 'aiDriven', 'aiMode', 'aiReverseTicks', 'human', 'trackIdx', 'lap', 'nextCp', 'lapStartTick',
   'lastLapTicks', 'bestLapTicks', 'wrongWayTicks', 'finished', 'finishTick', 'place', 'stuckTicks', 'ghostTicks',
   'respawns', 'surfFront', 'surfRear', 'missiles', 'mines', 'turbos', 'turboTicks', 'fireCool', 'mineCool',
