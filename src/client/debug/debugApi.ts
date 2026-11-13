@@ -145,6 +145,10 @@ export function installDebugApi(app: App): void {
         return res.ok ? res.text() : `failed: ${res.status}`;
       },
     },
+    /** Show a banner like the medal and achievement ones (unlocks nothing). */
+    banner(title = 'UNLOCKED: DEMOLITION DERBY', text = 'WRECK 3 CARS IN ONE RACE', color?: string) {
+      app.showBanner(title, text, color);
+    },
     /** Freeze or resume the simulation (rendering continues). */
     pause(on = true) {
       app.paused = on;

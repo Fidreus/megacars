@@ -46,6 +46,10 @@ import { loadMedals, medalTotals, noteMedalLap } from './game/medals.ts';
 import { Achievements } from './game/achievements.ts';
 import type { AchInput, RaceSummary } from './game/achievementRules.ts';
 import { AchievementsScreen } from './ui/screens/achievements.ts';
+import { CAR_COLORS } from '../shared/game/roster.ts';
+import { isUnlocked, loadPaintChoice, paintById, savePaintChoice, setActivePaint } from './game/paints.ts';
+import { PaintShopScreen } from './ui/screens/paintShop.ts';
+import { Showroom } from './render/showroom.ts';
 import { MEDAL_COLORS, MEDAL_NAMES, medalTimes } from '../shared/game/medals.ts';
 import { BannerQueue } from './ui/banners.ts';
 import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
@@ -151,7 +155,7 @@ function savedLabel(t: SavedTrack): string {
   return `${t.name}${t.source === 'shared' ? ' (LINK)' : t.source === 'published' ? ' (PUBLISHED)' : ''}`;
 }
 
-type Mode = 'title' | 'setup' | 'page' | 'editor' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'controls' | 'help' | 'records' | 'rooms' | 'credits' | 'achievements';
+type Mode = 'title' | 'setup' | 'page' | 'editor' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'controls' | 'help' | 'records' | 'rooms' | 'credits' | 'achievements' | 'paints';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -244,6 +248,11 @@ export class App {
   /** What the player has unlocked (saved in the browser). */
   private readonly ach = new Achievements();
   private readonly achievementsScreen: AchievementsScreen;
+  /** The paint shop, its stage, and the paint job in use (offline races). */
+  private readonly paintShop: PaintShopScreen;
+  private showroom: Showroom | null = null;
+  private showroomBloom = 0;
+  private paintId = 'stock';
   /** Debug tools were used in this race: it unlocks nothing. */
   private achSpoiled = false;
   /** The end-of-race summary has been sent for this race. */
@@ -498,6 +507,22 @@ export class App {
     this.music.onSong = () => (this.songToast = 4);
     this.recordsScreen = new RecordsScreen(() => this.toTitle(), () => playUi(this.audio, 'move'));
     this.achievementsScreen = new AchievementsScreen(this.ach, () => this.toTitle(), () => playUi(this.audio, 'move'));
+    this.paintId = loadPaintChoice();
+    if (!isUnlocked(paintById(this.paintId), this.paintUnlocks())) this.paintId = 'stock';
+    setActivePaint(paintById(this.paintId));
+    this.paintShop = new PaintShopScreen({
+      unlockState: () => this.paintUnlocks(),
+      achievementText: (id) => this.ach.rules.find((r) => r.id === id)?.desc ?? id,
+      chosen: () => this.paintId,
+      choose: (id) => {
+        this.paintId = id;
+        setActivePaint(paintById(id));
+        savePaintChoice(id);
+      },
+      look: (p) => this.showroom?.setPaint(p.body ?? CAR_COLORS[0], p.body === null ? undefined : { accent: p.accent, pattern: p.pattern }),
+      onBack: () => this.toTitle(),
+      sound: (k) => playUi(this.audio, k),
+    });
     this.ach.onUnlock = (r) => {
       this.banners.push({ title: `UNLOCKED: ${r.name}`, text: r.desc, color: '#9cff9c' });
       playUi(this.audio, 'buy');
@@ -660,6 +685,7 @@ export class App {
           this.achievementsScreen.open();
         },
       },
+      { label: () => 'PAINT SHOP', select: () => this.openPaints() },
       { label: () => 'OPTIONS', select: () => this.openOptions() },
       { label: () => 'HOW TO PLAY', select: () => (this.mode = 'help') },
     ];
@@ -1480,7 +1506,7 @@ export class App {
 
   /** What the music should be doing for the current screen. */
   private musicScene(): MusicScene {
-    const titleish: Mode[] = ['title', 'setup', 'editor', 'controls', 'help', 'records', 'achievements', 'credits'];
+    const titleish: Mode[] = ['title', 'setup', 'editor', 'controls', 'help', 'records', 'achievements', 'paints', 'credits'];
     if (titleish.includes(this.mode) || (this.mode === 'page' && this.pageReturn === 'title')) return { kind: 'title' };
     if (this.mode === 'seasonEnd' || this.mode === 'standings' || this.showingResults) return { kind: 'results' };
     if (this.mode === 'race') {
@@ -1634,6 +1660,7 @@ export class App {
     this.shake = 0;
     this.slowmo.reset();
     this.endPodium();
+    this.endShowroom();
     this.podiumDone = false;
     const split = this.mode === 'race' && session.playerCars.length === 2;
     this.renderer.setSplit(split);
@@ -1991,6 +2018,10 @@ export class App {
       this.achievementsScreen.handle(nav);
       return;
     }
+    if (this.mode === 'paints') {
+      this.paintShop.handle(nav);
+      return;
+    }
     if (this.mode === 'rooms') {
       if (nav.back) this.mode = 'online';
       else this.roomsMenu.handle(nav);
@@ -2112,6 +2143,29 @@ export class App {
     });
   }
 
+  /** What unlocks paint jobs: achievements and the medals won. */
+  private paintUnlocks() {
+    return { achieved: (id: string) => this.ach.isUnlocked(id), medals: medalTotals(this.medals).atLeast };
+  }
+
+  /** The paint shop: the three cars on a stage over the start straight. */
+  private openPaints(): void {
+    this.showAttract('paints');
+    this.view.show(false);
+    this.showroom = new Showroom(this.scene, this.track, this.settings.league);
+    // Glossy paint and headlights would bloom into big blobs at this zoom.
+    this.showroomBloom = this.renderer.grade.bloom;
+    this.renderer.grade.bloom = 0;
+    this.paintShop.open();
+  }
+
+  private endShowroom(): void {
+    if (!this.showroom) return;
+    this.showroom.dispose();
+    this.showroom = null;
+    this.renderer.grade.bloom = this.showroomBloom;
+  }
+
   /** The local player's race is over: tell the achievements how it went. */
   private achRaceSummary(place: number, car: CarState, online: boolean): void {
     if (this.achSummarySent || this.achSpoiled) return;
@@ -2152,6 +2206,11 @@ export class App {
     this.banners.push({ title: `${MEDAL_NAMES[r.medal]} MEDAL!`, text: `${s.track.def.name.toUpperCase()} ${formatTime(ticks * DT)}`, color: MEDAL_COLORS[r.medal] });
     playUi(this.audio, 'buy');
     this.ach.feed({ kind: 'medal', track: s.track.def.id, league: leagueOf(s.spec.league), medal: r.medal, totals: medalTotals(this.medals) });
+  }
+
+  /** A banner at the top (for looking at them: it unlocks nothing). */
+  showBanner(title: string, text: string, color = '#9cff9c'): void {
+    this.banners.push({ title, text, color });
   }
 
   /** Debug tools were used: this race unlocks nothing. */
@@ -2323,7 +2382,7 @@ export class App {
     const order = standings(this.world).slice(0, 3);
     if (order.length === 0) return;
     const entries: PodiumEntry[] = order.map((id) => ({
-      id, name: s.names[id] ?? `CAR ${id + 1}`, color: s.colors[id] ?? '#ffffff', model: s.models[id] ?? -1, local: s.playerCars.includes(id),
+      id, name: s.names[id] ?? `CAR ${id + 1}`, color: s.colors[id] ?? '#ffffff', model: s.models[id] ?? -1, local: s.playerCars.includes(id), look: s.looks?.[id],
     }));
     this.podium = new Podium(this.scene, this.track, entries, s.league, false, 0);
     this.view.show(false);
@@ -2443,6 +2502,12 @@ export class App {
     const views = this.renderer.viewCount;
     for (let v = 0; v < views; v++) this.updateCamera(v, dt);
     const cam0 = this.renderer.viewports[0].cam;
+    if (this.showroom) {
+      const vp = this.renderer.viewports[0];
+      this.showroom.aim(cam0, vp.w, vp.h);
+      this.camTargets[0].copy(this.showroom.center());
+      this.showroom.update(dt);
+    }
     if (this.podium) {
       const vp = this.renderer.viewports[0];
       this.podium.aim(cam0, vp.w, vp.h);
@@ -2700,6 +2765,8 @@ export class App {
       this.recordsScreen.draw(ctx, W, H);
     } else if (this.mode === 'achievements') {
       this.achievementsScreen.draw(ctx, W, H);
+    } else if (this.mode === 'paints') {
+      this.paintShop.draw(ctx, W, H);
     } else if (this.mode === 'controls') {
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(0, 0, W, H);
@@ -2775,7 +2842,7 @@ export class App {
   private drawTouchExtras(ctx: CanvasRenderingContext2D, W: number, H: number): void {
     this.backRect = null;
     if (!this.touch.enabled) return;
-    const backModes: Mode[] = ['setup', 'page', 'online', 'rooms', 'cup', 'shop', 'controls', 'help', 'records', 'achievements', 'credits', 'career'];
+    const backModes: Mode[] = ['setup', 'page', 'online', 'rooms', 'cup', 'shop', 'controls', 'help', 'records', 'achievements', 'paints', 'credits', 'career'];
     if (backModes.includes(this.mode) && !(this.mode === 'controls' && this.controlsScreen.capturing)) {
       const r = { x: 4, y: 4, w: 52, h: 20 };
       ctx.fillStyle = 'rgba(10,12,26,0.75)';

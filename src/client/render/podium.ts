@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import type { League } from '../../shared/game/leagues.ts';
 import type { Track } from '../../shared/track/types.ts';
 import { CarView, MODEL_STYLE } from './carMesh.ts';
+import type { PaintLook } from '../game/paints.ts';
 import { toon } from './materials.ts';
 import type { PixelCamera } from './pixelCamera.ts';
 import { Particles } from './particles.ts';
@@ -21,6 +22,8 @@ export interface PodiumEntry {
   model: number;
   /** A person at this screen (not a computer driver or somebody online). */
   local: boolean;
+  /** The pattern of a paint job, if any. */
+  look?: PaintLook;
 }
 
 /** Where the podium stands: this many samples (about metres) past the start line. */
@@ -89,7 +92,7 @@ export class Podium {
       this.group.add(step);
       this.steps.push(step);
       const style = e.model >= 0 ? MODEL_STYLE[e.model] : undefined;
-      const car = new CarView(e.color, e.id + 1, style, league);
+      const car = new CarView(e.color, e.id + 1, style, league, e.look);
       car.setLights(lightsOn, headlight);
       this.group.add(car.root);
       this.cars.push(car);

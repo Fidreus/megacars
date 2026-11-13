@@ -288,6 +288,29 @@ aldrig med felsökningsverktyg (`?debug`, `__megacars.drive/autopilot/reset/
 setTuning`, flyttad bil, ändrad fysik i träning). Enhetstester finns i
 `achievements.test.ts`.
 
+## Lackeringar
+
+Medaljer och prestationer låser upp lackeringar till spelarens bil. En
+lackering är en kroppsfärg plus ett djärvt mönster i en andra färg (slätt,
+racingrand, dubbla ränder, tvåfärgad huv och tak, halvor, band, rutigt – de
+ligger på bilens översida så att de syns även när bilen är några pixlar
+stor) och fungerar på alla tre karosser och i alla ligor. 15 stycken: fyra
+gratis (STOCK, ICE WHITE, SUNSHINE, BRITISH GREEN), resten kopplade till en
+prestation (t.ex. TANGERINE: köra klart ett race, HAZARD: vraka tre bilar i
+ett race, CHAMPION: MEGACARS CHAMPION) eller till antal medaljer (3 av
+någon färg, 5 silver eller bättre, 3 guld). De snyggaste är svårast: MIDAS
+kräver guld på varje bana i alla tre ligor.
+
+**PAINT SHOP** i titelmenyn visar de tre bilarna på en scen över startrakan i
+vald lackering (liganhörande utseende), med en ruta per lackering; låsta
+visar vad som krävs. Vänster/höger bläddrar, ENTER väljer (sparas som
+`megacars.paint.v1`). Valet gäller bil 1 i alla offlineslägen (snabbrace,
+mästerskap, karriär, träning, delad skärm för spelare 1) och syns i
+minikartan, resultattabellen och på pallen; STOCK ger kortets egen färg
+som förut. Datorbilar som skulle bli nästan lika färgade som spelarens byter
+färg i det racet. Själva racespecen (och därmed rekordkontrollen) ändras
+inte. Online ger servern färgerna som förut.
+
 ## Grafik och prestanda
 
 **OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM eller LOW. AUTO börjar på HIGH och
