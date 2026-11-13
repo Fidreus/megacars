@@ -30,6 +30,12 @@ const ground = makeGround();
 
 /** Stopped this long while trying to move: put the car back on the track. */
 const STUCK_RESPAWN_TICKS = 240;
+/**
+ * A computer car that already had to back out counts as free again only once
+ * it gets going properly: one caught nosing into the same obstacle over and
+ * over (a pit lane island) still adds up to a respawn.
+ */
+const AI_STUCK_ESCAPE = { after: 40, speed: 25 };
 /** AI facing the wrong way this long: put it back on the track. */
 const AI_WRONG_WAY_TICKS = 150;
 /** After the first car finishes, everybody else gets this long. */
@@ -154,7 +160,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     // People may park in the box; a computer car standing there is stuck (nose in a wall) and backs out.
     const parked = inPit && !car.aiDriven;
     if (speed < 1.2 && trying && race.phase === RacePhase.Racing && !parked) car.stuckTicks++;
-    else if (parked || car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading) > 4) car.stuckTicks = 0;
+    else if (parked || car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading) > (car.aiDriven && car.stuckTicks >= AI_STUCK_ESCAPE.after ? AI_STUCK_ESCAPE.speed : 4)) car.stuckTicks = 0;
     if (car.ghostTicks > 0) car.ghostTicks--;
   }
   if (race.weapons) stepShots(w.shots, cars, track, tunings, DT, w.events);
