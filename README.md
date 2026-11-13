@@ -37,6 +37,23 @@ ingen drift. I sladden orkar däcken mycket mer sidokraft, så rätt timing tar
 dig genom skarpa kurvor mycket fortare. Gas ökar sladdvinkeln, släpp gasen
 eller motstyr för att räta upp. Is, olja och snö sladdar av sig själva.
 
+**Driftboost:** en sladd genom en kurva laddar en boost i tre nivåer, efter
+ungefär 0,6, 1,3 och 2,2 sekunders drift (mätaren bredvid hastigheten, gnistor
+från bakhjulen i blått, orange och lila). När bilen greppar igen får den en
+kort knuff framåt: nivå 1 är en liten puff, nivå 3 (en lång hårnål på Cigar
+Circuit) ungefär som en turbo. Det räknas bara när bilen verkligen svänger,
+i en kurva och strax efter den; att sladda eller slingra nerför en raka ger
+ingen laddning och ingen reparation. Is, olja och snö laddar inget, en hård
+smäll i en vägg eller en bil eller en snurr tar bort laddningen, och broms
+håller tillbaka boosten. Datorförarna laddar och får boost på samma sätt.
+
+**Draft:** ligger du tätt bakom en annan bil (från några meter till ungefär
+24 m bakom, i samma riktning och i fart) dras du med: upp till 6 % högre
+toppfart och lite mer acceleration. Effekten byggs upp på 0,7 s och släpper
+på 0,3 s. DRAFT lyser bredvid hastigheten, luften strömmar förbi bilen och
+det börjar vina. Gäller inte under nedräkningen, och inte bakom vrak eller
+spöklika bilar efter en återställning.
+
 Nio banor: **Green Valley** (bred landsbygdsbana), **Dust Bowl** (öken,
 smal och teknisk, grus, oljefläckar och ett hopp över en torr flodfåra),
 **Frost Ring** (vinter, snabba svep med is och packad snö), **Meltdown

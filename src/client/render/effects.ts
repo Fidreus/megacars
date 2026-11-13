@@ -10,6 +10,7 @@ import { ShotKind } from '../../shared/sim/weapons.ts';
 import type { World } from '../../shared/sim/world.ts';
 import type { Particles } from './particles.ts';
 import type { SteamSource } from './industry.ts';
+import { driftBoostBurst, driveFx } from './driveFx.ts';
 
 const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
 const R = Math.random;
@@ -94,6 +95,7 @@ export class Effects {
           );
         }
       }
+      driveFx(p, car, s, fx, fz, rx, rz);
       // A burning wreck, or smoke from a badly damaged engine.
       if (car.wreckTicks > 0) {
         p.spawn(car.x + (R() - 0.5), car.y + 1, car.z + (R() - 0.5), (R() - 0.5) * 1.5, 3 + R() * 2, (R() - 0.5) * 1.5,
@@ -147,6 +149,7 @@ export class Effects {
         this.explosion(e.x, e.z, e.kind === Ev.Wreck ? 1.6 : e.value === 3 ? 0.7 : 1, who?.y ?? 0);
         continue;
       }
+      if (e.kind === Ev.DriftBoost && world.cars[e.car]) driftBoostBurst(p, world.cars[e.car], e.value);
       if ((e.kind === Ev.WallHit || e.kind === Ev.CarHit) && e.value > 2.5) {
         const car = world.cars[e.car];
         const n = Math.min(26, Math.round(e.value * 2));

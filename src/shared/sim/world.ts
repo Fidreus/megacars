@@ -7,6 +7,7 @@ import { createCar, type CarState } from './car.ts';
 import { makeEventBuffer, type EventBuffer } from './events.ts';
 import { resetProgress } from './race.ts';
 import { giveStartAmmo, type Shot } from './weapons.ts';
+import { clearDriftBoost } from './driftBoost.ts';
 
 export const RacePhase = { Countdown: 0, Racing: 1, Finished: 2 } as const;
 
@@ -119,4 +120,6 @@ export function respawnCar(car: CarState, track: Track, s: number): void {
   car.aiReverseTicks = 0;
   car.wrongWayTicks = 0;
   car.ghostTicks = 90;
+  clearDriftBoost(car);
+  car.draft = 0;
 }

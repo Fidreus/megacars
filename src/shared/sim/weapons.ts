@@ -10,6 +10,7 @@ import type { CarState } from './car.ts';
 import { Ev, pushEvent, type EventBuffer } from './events.ts';
 import { Btn, type CarInput } from './input.ts';
 import { inPitArea } from '../track/pit.ts';
+import { stepDriftBoost } from './driftBoost.ts';
 
 export const ShotKind = { None: 0, Missile: 1, Mine: 2 } as const;
 
@@ -155,6 +156,7 @@ export function stepBoostAndAir(
       }
     }
   }
+  stepDriftBoost(car, t, dt);
   if (car.airborne) {
     car.vy -= t.gravity * dt;
     car.y += car.vy * dt;

@@ -20,6 +20,12 @@ export const Ev = {
   Land: 13,
   /** Repaired in the pit box; `value` = damage left. */
   Repair: 14,
+  /** A drift charge reached a level; `value` = level 1-3. */
+  DriftLevel: 15,
+  /** A drift charge was paid out as a boost; `value` = level. */
+  DriftBoost: 16,
+  /** A drift charge was lost (hard hit or spin); `value` = level it had. */
+  DriftLost: 17,
 } as const;
 
 export interface SimEvent {

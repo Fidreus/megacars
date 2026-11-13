@@ -18,6 +18,8 @@ import { RacePhase, respawnCar, standings, type World } from './world.ts';
 import { fellOff, groundUnder, makeGround, safeRespawnS, stepRamps } from './ramps.ts';
 import { inPitArea, inPitBox, pitRepair } from '../track/pit.ts';
 import { leaderDistance, stepBoostPads } from './catchUp.ts';
+import { breakDriftCharge, isCornering, stepDriftCharge } from './driftBoost.ts';
+import { applySlipstream, stepSlipstream } from './slipstream.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
@@ -66,6 +68,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
   const armed = race.weapons === 1 && race.phase === RacePhase.Racing && w.tick >= race.startTick + WEAPON.startGrace;
   // Catch-up pads work for cars far behind whoever leads at the start of this tick.
   const leader = cars.length > 1 && race.phase === RacePhase.Racing ? leaderDistance(cars) : -Infinity;
+  stepSlipstream(cars);
   for (let i = 0; i < cars.length; i++) {
     const car = cars[i];
     const t = tunings[i] ?? tunings[0];
@@ -91,6 +94,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     sampleCarSurface(car, track, t);
     mixSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, surfMix);
     applyDamage(surfMix, car.damage, t);
+    applySlipstream(surfMix, car.draft);
     if (car.aiDriven) {
       aiDrive(car, track, t, surfMix, cars, w.tick, aiInput);
       if (armed) aiWeapons(car, cars, track, w.tick, t.vTop, aiInput);
@@ -128,8 +132,10 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     // Stuck: nearly stopped while trying to drive.
     const speed = Math.hypot(car.vx, car.vz);
     const trying = (car.aiDriven || inp.throttle > 0.3 || inp.brake > 0.3) && !car.airborne;
-    // Drifting mends the car a little.
-    if (car.sliding && !car.airborne && speed > 8 && car.damage > 0) car.damage = Math.max(0, car.damage - WEAPON.driftRepair * DT);
+    // Drifting through a corner mends the car a little (sliding down a straight does not).
+    const cornering = car.sliding === 1 && isCornering(car, track);
+    if (cornering && !car.airborne && speed > 8 && car.damage > 0) car.damage = Math.max(0, car.damage - WEAPON.driftRepair * DT);
+    stepDriftCharge(car, surfMix, speed, cornering, w.events);
     // Pit box, between the first and last line: driving through mends a fixed
     // share, and time spent there mends more (standing still is allowed).
     const pit = track.pit;
@@ -163,6 +169,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
       collideCars(cars[i], cars[j], tunings[i] ?? tunings[0], tunings[j] ?? tunings[0], w.events);
     }
   }
+  breakDriftCharge(cars, w.events, knocks);
   if (race.weapons && race.phase === RacePhase.Racing) {
     applyImpactDamage(cars, tunings, w.events, knocks);
     for (const car of cars) checkWreck(car, cars, w.events);

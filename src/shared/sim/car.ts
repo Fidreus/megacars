@@ -53,6 +53,12 @@ export interface CarState {
   pitTicks: number;
   /** Who hit this car last (-1 = nobody), credited if it is wrecked. */
   lastHitBy: number;
+  /** Drift boost (driftBoost.ts): seconds of drift charged, ticks and level of a boost running. */
+  driftCharge: number;
+  driftBoostTicks: number;
+  driftBoostLevel: number;
+  /** Slipstream strength 0-1 (slipstream.ts). */
+  draft: number;
   // Control
   prevButtons: number;
   /** Ticks the brake has been held (drift tap detection). */
@@ -105,6 +111,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
     lapStartTick: 0, lastLapTicks: 0, bestLapTicks: 0, wrongWayTicks: 0, finished: 0,
     finishTick: 0, place: id + 1, stuckTicks: 0, ghostTicks: 0, respawns: 0,
     slip: 0, latAccel: 0, longAccel: 0, surfFront: 0, surfRear: 0,
+    driftCharge: 0, driftBoostTicks: 0, driftBoostLevel: 0, draft: 0,
   };
 }
 

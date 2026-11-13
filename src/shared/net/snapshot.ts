@@ -14,6 +14,7 @@ type CarKey = keyof CarState;
 const F64: readonly CarKey[] = [
   'x', 'z', 'y', 'vx', 'vz', 'vy', 'heading', 'angVel', 'steer', 'damage', 'aiSkill', 'trackS', 'raceDist',
   'slip', 'latAccel', 'longAccel',
+  'driftCharge', 'draft',
 ];
 
 /** Counters, flags and indices. */
@@ -23,6 +24,7 @@ const I32: readonly CarKey[] = [
   'lastLapTicks', 'bestLapTicks', 'wrongWayTicks', 'finished', 'finishTick', 'place', 'stuckTicks', 'ghostTicks',
   'respawns', 'surfFront', 'surfRear', 'missiles', 'mines', 'turbos', 'turboTicks', 'fireCool', 'mineCool',
   'wreckTicks', 'hits', 'kills', 'wrecks', 'pitTicks', 'lastHitBy',
+  'driftBoostTicks', 'driftBoostLevel',
 ];
 
 /** Every CarState key except `id` must be listed above (checked by tests). */
