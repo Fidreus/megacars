@@ -40,6 +40,10 @@ export interface RaceSettings {
   touchRev?: number;
   /** Bumped when the default volumes change, so saved settings pick them up once. */
   audioRev?: number;
+  /** Gamepad and phone vibration on big moments. */
+  vibration?: boolean;
+  /** A slow-motion beat when a car is wrecked (offline races). */
+  slowMotion?: boolean;
 }
 
 /** Current default-volume revision (2: music starts on the second lowest step). */
@@ -66,6 +70,8 @@ export const DEFAULT_SETTINGS: RaceSettings = {
   touchSteer: 'point',
   touchRev: TOUCH_REV,
   audioRev: AUDIO_REV,
+  vibration: true,
+  slowMotion: true,
 };
 
 const KEY = 'megacars.settings.v1';
@@ -103,6 +109,8 @@ export function loadSettings(): RaceSettings {
   s.camera = s.camera === 'follow' ? 'follow' : 'classic';
   s.camHeight = [0, 1, 2].includes(s.camHeight) ? s.camHeight : 1;
   s.league = leagueOf(s.league);
+  s.vibration = s.vibration !== false;
+  s.slowMotion = s.slowMotion !== false;
   return s;
 }
 

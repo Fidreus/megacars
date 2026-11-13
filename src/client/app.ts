@@ -31,6 +31,8 @@ import { DIFFICULTIES, loadSettings, saveSettings, type RaceSettings } from './g
 import { keysLabel, loadControls, type KeyBinding } from './input/bindings.ts';
 import { ControlsScreen } from './ui/screens/controls.ts';
 import { TouchControls } from './input/touch.ts';
+import { Haptics, PULSE } from './input/haptics.ts';
+import { feelItems } from './game/feelOptions.ts';
 import { TextBridge } from './input/textBridge.ts';
 import { drawHelp } from './ui/screens/help.ts';
 import { RecordsScreen } from './ui/screens/records.ts';
@@ -285,6 +287,12 @@ export class App {
   private flashTime = 0;
   private showTelemetry = false;
   private padIndex = -1;
+  /** Gamepad and phone vibration; each pad only feels its own player's car. */
+  private readonly haptics = new Haptics({
+    players: () => (this.mode === 'race' ? this.session.playerCars : []),
+    pad: (p) => (this.session.playerCars.length === 2 ? p : p === 0 ? this.padIndex : -1),
+    phone: () => this.touch.enabled,
+  });
   private lastLights = 0;
   private firstRace = true;
   /** The "go to the pits" tip was shown this race. */
@@ -314,6 +322,7 @@ export class App {
     this.tuning = cloneTuning(DEFAULT_TUNING);
     loadSavedTuning(this.tuning);
     this.settings = loadSettings();
+    this.haptics.enabled = this.settings.vibration !== false;
     if (params.mood) this.settings.mood = params.mood;
     if (trackDef(params.track)) this.settings.track = params.track;
     // A shared track link (?t=): kept in My Tracks and opened there below.
@@ -925,7 +934,14 @@ export class App {
       { label: () => 'GRAPHICS & CAMERA', select: () => this.openPage('GRAPHICS & CAMERA', this.displayItems(), 'M TIME OF DAY   3 CRT   4 COLOURS') },
       { label: () => 'CONTROLS', select: () => this.openPage('CONTROLS', this.controlItems()) },
       { label: () => 'PLAYER', select: () => this.openPage('PLAYER', this.playerItems(), 'YOUR NAME IN ONLINE ROOMS AND ON THE RECORD BOARDS') },
+      { label: () => 'GAME FEEL', select: () => this.openPage('GAME FEEL', feelItems(this.settings, () => saveSettings(this.settings), (on) => this.setVibration(on)), 'VIBRATION: GAMEPADS AND PHONES (NOT IPHONES)   SLOW MOTION: A SHORT BEAT WHEN A CAR IS WRECKED') },
     ]);
+  }
+
+  private setVibration(on: boolean): void {
+    this.haptics.enabled = on;
+    if (on) this.haptics.play(0, PULSE.go);
+    else this.haptics.stop();
   }
 
   /** The pause menu's own page: sound and camera without leaving the race. */
@@ -1985,6 +2001,7 @@ export class App {
     }
     if (nav.pause) {
       this.paused = true;
+      this.haptics.stop();
       this.pauseSub = null;
       this.pauseMenu.index = 0;
     }
@@ -2081,6 +2098,7 @@ export class App {
     }
     for (let k = 0; k < ev.count; k++) {
       const e = ev.list[k];
+      this.haptics.event(e);
       if ((e.kind === Ev.WallHit || e.kind === Ev.CarHit) && this.audio.ready) {
         const dx = e.x - me.x;
         const dist = Math.hypot(dx, e.z - me.z);
@@ -2158,7 +2176,10 @@ export class App {
     // Countdown beeps as the start lights come on.
     if (this.mode === 'race' && w.race.phase === RacePhase.Countdown) {
       const lit = lightsOn(w.tick, w.race.startTick);
-      if (lit > this.lastLights) playStartBeep(this.audio, false);
+      if (lit > this.lastLights) {
+        playStartBeep(this.audio, false);
+        this.haptics.all(PULSE.light);
+      }
       this.lastLights = lit;
     }
   }
