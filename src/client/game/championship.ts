@@ -13,7 +13,7 @@ import { COUNTDOWN_TICKS, type World } from '../../shared/sim/world.ts';
 import { TRACK_LIST, raceLaps } from '../../shared/track/defs/index.ts';
 import type { StandingsRow } from '../ui/screens/shop.ts';
 import type { RaceSettings } from './settings.ts';
-import { driverNotes } from './rival.ts';
+import { driverNotes, recordDuel, type Duel } from './rival.ts';
 
 const KEY = 'megacars.cup.v1';
 
@@ -42,6 +42,9 @@ export interface Championship {
   drivers: CupDriver[];
   /** Driver index for each car of the race being run. */
   grid: number[];
+  /** Career: driver index of the season's rival, and the head-to-head so far. */
+  rival?: number;
+  duel?: Duel;
 }
 
 export function newChampionship(s: RaceSettings): Championship {
@@ -102,7 +105,9 @@ export function nextRaceSpec(c: Championship): RaceSpec {
   const entrants: Entrant[] = order.map((i) => {
     const d = c.drivers[i];
     const loadout = d.player >= 0 ? loadoutOf(d.profile) : aiLoadout(level, c.difficulty, rnd);
-    return { name: d.name, color: d.color, playerId: d.player, skill: d.skill, loadout };
+    // The rival goes for player 1 a little harder.
+    const rival = i === c.rival ? { rival: 0 } : {};
+    return { name: d.name, color: d.color, playerId: d.player, skill: d.skill, loadout, ...rival };
   });
   return {
     id: c.race + 1,
@@ -129,6 +134,7 @@ export function settleRace(c: Championship, world: World): void {
       if (r.place === 1) d.profile.wins++;
     }
   }
+  recordDuel(c);
   c.race++;
 }
 
@@ -141,6 +147,7 @@ export function standingsRows(c: Championship): StandingsRow[] {
     racePlace: d.lastPlace,
     human: d.player >= 0,
     ...driverNotes(d),
+    rival: c.rival !== undefined && c.drivers[c.rival] === d,
   }));
 }
 

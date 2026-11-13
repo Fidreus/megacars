@@ -32,7 +32,7 @@ describe('career', () => {
     expect(c.division).toBe(2);
     expect(c.cup.difficulty).toBe(1);
     // Money carries over with the bonus; points start from zero.
-    expect(humanDrivers(c.cup)[0].profile.money).toBe(money + r.bonus);
+    expect(humanDrivers(c.cup)[0].profile.money).toBe(money + r.bonus + (r.rival?.bonus ?? 0));
     expect(humanDrivers(c.cup)[0].profile.points).toBe(0);
   });
 

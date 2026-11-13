@@ -6,6 +6,7 @@
 import { newProfile, type Profile } from '../../shared/game/shop.ts';
 import { humanDrivers, newChampionship, type Championship } from './championship.ts';
 import type { RaceSettings } from './settings.ts';
+import { duelResult, pickRival, rivalOf, setRival, type DuelResult } from './rival.ts';
 
 const KEY = 'megacars.career.v1';
 
@@ -23,6 +24,8 @@ export interface SeasonResult {
   place: number;
   bonus: number;
   outcome: SeasonOutcome;
+  /** The season's rival duel (older saves: none). */
+  rival?: DuelResult | null;
 }
 
 export interface Career {
@@ -60,10 +63,12 @@ function seasonSettings(division: number): RaceSettings {
   };
 }
 
-function startSeason(c: Career): void {
+/** `last`: the season just run in the same division (its standings pick the rival). */
+function startSeason(c: Career, last: Championship | null = null, avoid?: string): void {
   c.cup = newChampionship(seasonSettings(c.division));
   const me = humanDrivers(c.cup)[0];
   me.profile = { ...c.profile, points: 0, lastEarned: 0 };
+  setRival(c.cup, pickRival(c.cup, last, avoid));
 }
 
 export function newCareer(): Career {
@@ -83,7 +88,11 @@ export function endSeason(c: Career): SeasonResult {
   const me = humanDrivers(c.cup)[0];
   const place = seasonPlace(c);
   const bonus = Math.round((SEASON_BONUS[place - 1] ?? 0) * DIVISION_FACTOR[c.division]);
-  c.profile = { ...me.profile, money: me.profile.money + bonus, points: 0, lastEarned: 0 };
+  // Beating the rival pays on top.
+  const rival = duelResult(c.cup, DIVISION_FACTOR[c.division]);
+  const old = c.cup;
+  const division = c.division;
+  c.profile = { ...me.profile, money: me.profile.money + bonus + (rival?.bonus ?? 0), points: 0, lastEarned: 0 };
   let outcome: SeasonOutcome;
   if (c.division === 1) {
     if (place === 1) {
@@ -98,9 +107,10 @@ export function endSeason(c: Career): SeasonResult {
   } else {
     outcome = 'stayed';
   }
-  c.last = { division: outcome === 'promoted' ? c.division + 1 : c.division, place, bonus, outcome };
+  c.last = { division: outcome === 'promoted' ? c.division + 1 : c.division, place, bonus, outcome, rival };
   c.season++;
-  startSeason(c);
+  // Same division: a grudge match with whoever was just ahead. New division: a new face.
+  startSeason(c, c.division === division ? old : null, rivalOf(old)?.name);
   return c.last;
 }
 
@@ -119,6 +129,8 @@ export function loadCareer(): Career | null {
     if (!raw) return null;
     const c = JSON.parse(raw) as Career;
     if (c.version !== 1 || !c.cup || !c.profile) return null;
+    // Saves from before rivals: give the season in progress one.
+    if (rivalOf(c.cup) === null) setRival(c.cup, pickRival(c.cup, null));
     return c;
   } catch {
     return null;

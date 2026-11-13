@@ -112,6 +112,17 @@ försvara sedan titeln. Varje säsong ger en bonus efter slutplacering (mer i
 högre divisioner). Pengar, uppgraderingar, bil, ammunition och skada följer
 med mellan säsongerna, och karriären sparas efter varje lopp (CONTINUE).
 
+**Rival:** varje säsong får du en datorförare som **RIVAL**. Första
+säsongen, och i en ny division, är det en av de snabbaste i fältet (en ny
+varje gång du flyttas upp); stannar du kvar i divisionen blir det den som
+slutade närmast före dig (eller tvåan, om du vann). Rivalen har en röd
+skylt över bilen och en röd ruta på minikartan, och siktar på dig med
+missiler och minor lite oftare än på andra. Tabellen och karriärsidan visar
+hur många lopp var och en slutat före och poängskillnaden. Har du fler poäng
+än rivalen när säsongen är slut får du en rivalbonus utöver säsongsbonusen
+($1000 i division 3, $1500 i 2, $2000 i 1), och säsongsavslutet säger vem
+som vann duellen. Äldre sparade karriärer får en rival när de laddas.
+
 **Bilar:** INTERCEPTOR (startbil), **VIPER** ($4000: +7 % acceleration,
 +4 % toppfart, +5 % grepp) och **BRUTE** ($9000: +15 % acceleration, +8 %
 toppfart, +8 % grepp, −15 % skada). Köps i butiken i alla lägen (även

@@ -180,13 +180,14 @@ function noteFor(rows: StandingsRow[], maxW: number): (r: StandingsRow) => strin
 /** Championship table: overall points, with this race's place and earnings. */
 export function drawStandings(
   g: CanvasRenderingContext2D, W: number, H: number, title: string, subtitle: string, rows: StandingsRow[], time: number, footer: string,
+  extra = '',
 ): void {
   const sorted = [...rows].sort((a, b) => b.points - a.points);
   const rowH = 12;
   const note = noteFor(rows, W - 20);
   const noteW = Math.max(0, ...rows.map((r) => textWidth(note(r))));
   const boxW = Math.min(W - 20, 320 + Math.max(0, noteW - NOTE_GAP));
-  const boxH = 58 + sorted.length * rowH + 22;
+  const boxH = 58 + sorted.length * rowH + 22 + (extra ? 12 : 0);
   const x0 = Math.round(W / 2 - boxW / 2);
   const y0 = Math.round(H / 2 - boxH / 2);
   g.fillStyle = 'rgba(8,10,24,0.88)';
@@ -216,5 +217,6 @@ export function drawStandings(
     drawText(g, r.human ? (r.earned < 0 ? `-$${-r.earned}` : `$${r.earned}`) : '', x0 + boxW - 60, y, { align: 'right', color: '#9cff9c' });
     drawText(g, String(r.points), x0 + boxW - 10, y, { align: 'right', color: '#ffffff' });
   });
+  if (extra) drawText(g, extra, W / 2, y0 + boxH - 26, { color: '#ff9a8a', align: 'center' });
   if (Math.sin(time * 5) > -0.2) drawText(g, footer, W / 2, y0 + boxH - 14, { color: '#c8d0dc', align: 'center' });
 }

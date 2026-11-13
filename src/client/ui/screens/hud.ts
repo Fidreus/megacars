@@ -173,7 +173,8 @@ export class Minimap {
   private ox = 0;
   private oz = 0;
 
-  draw(ctx: CanvasRenderingContext2D, track: Track, world: World, colors: readonly string[], players: readonly number[], x: number, y: number, w: number, h: number): void {
+  /** `marked`: a car to ring in red (the career rival), -1 for none. */
+  draw(ctx: CanvasRenderingContext2D, track: Track, world: World, colors: readonly string[], players: readonly number[], x: number, y: number, w: number, h: number, marked = -1): void {
     const key = `${track.def.id}:${w}x${h}`;
     if (key !== this.key) this.build(track, w, h, key);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
@@ -188,6 +189,13 @@ export class Minimap {
       ctx.fillStyle = colors[id];
       ctx.fillRect(px, py, size, size);
     };
+    if (marked >= 0 && world.cars[marked]) {
+      const c = world.cars[marked];
+      const px = Math.round(x + (c.x - this.ox) * this.scale);
+      const py = Math.round(y + (c.z - this.oz) * this.scale);
+      ctx.fillStyle = '#ff2b1c';
+      ctx.fillRect(px - 4, py - 4, 8, 8);
+    }
     for (const c of world.cars) if (!players.includes(c.id)) plot(c.id, 2);
     for (const id of players) plot(id, 4);
   }
