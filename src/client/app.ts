@@ -30,6 +30,7 @@ import { lightsOn, RaceView } from './game/raceView.ts';
 import { DIFFICULTIES, loadSettings, saveSettings, type RaceSettings } from './game/settings.ts';
 import { keysLabel, loadControls, type KeyBinding } from './input/bindings.ts';
 import { ControlsScreen } from './ui/screens/controls.ts';
+import { DriveAudio } from './audio/driveSfx.ts';
 import { TouchControls } from './input/touch.ts';
 import { Haptics, PULSE } from './input/haptics.ts';
 import { feelItems } from './game/feelOptions.ts';
@@ -187,6 +188,7 @@ export class App {
   private lampPools: THREE.MeshBasicMaterial | null = null;
   private engines: EngineSound[] = [];
   private tyres: TyreSound[] = [];
+  private readonly driveAudio = new DriveAudio();
   private farEngines: EngineSound[] = [];
   private crowd: Crowd | null = null;
   /** Airborne flag of each player car last tick (for the take-off whoosh). */
@@ -2251,6 +2253,7 @@ export class App {
         this.crowd?.cheer(0.7, 2.6);
       }
     }
+    this.driveAudio.events(this.audio, ev, players, this.mode === 'race');
     // Taking off from a ramp.
     players.forEach((id, p) => {
       const car = w.cars[id];
@@ -2538,6 +2541,7 @@ export class App {
       engine.update(countdown ? throttle * 0.6 : speed01, throttle, 1, pan, now, this.slowmo.pitch, car.turboTicks > 0, slide);
       tyres.update(slide, Math.min(1, speed01), TYRE_SURFACE[car.surfRear] ?? TyreSurface.Paved, car.airborne > 0, now);
     });
+    this.driveAudio.update(this.audio, this.world, players, this.vTop(this.viewCar[0]), now);
     // The nearest opponents: quieter engines with stereo position and doppler.
     const me = players.length ? this.world.cars[players[0]] : null;
     const near: { car: CarState; d: number }[] = [];

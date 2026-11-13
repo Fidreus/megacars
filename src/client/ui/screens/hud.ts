@@ -7,6 +7,7 @@ import type { World } from '../../../shared/sim/world.ts';
 import { RacePhase } from '../../../shared/sim/world.ts';
 import { lightsOn } from '../../game/raceView.ts';
 import { drawText, textWidth } from '../font.ts';
+import { drawDriveMeter } from './driveHud.ts';
 
 export function ordinal(n: number): string {
   const s = n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] ?? 'TH';
@@ -75,6 +76,7 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   const sy = touch ? (race.weapons ? top + 14 : top - 10) : r.h - 22;
   drawText(ctx, `${kmh}`, sx, sy, { scale: 2 });
   drawText(ctx, 'KM/H', sx + 4 + String(kmh).length * 12, sy + 7, { color: '#c0c0c0' });
+  drawDriveMeter(ctx, sx + 10 + 3 * 12 + textWidth('KM/H'), sy + 3, car, world.tick);
 
   const cx = r.x + r.w / 2;
   if (car.finished) {

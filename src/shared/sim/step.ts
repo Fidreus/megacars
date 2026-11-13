@@ -18,6 +18,8 @@ import { RacePhase, respawnCar, standings, type World } from './world.ts';
 import { fellOff, groundUnder, makeGround, safeRespawnS, stepRamps } from './ramps.ts';
 import { inPitArea, inPitBox, pitRepair } from '../track/pit.ts';
 import { leaderDistance, stepBoostPads } from './catchUp.ts';
+import { breakDriftCharge, isCornering, stepDriftCharge } from './driftBoost.ts';
+import { applySlipstream, stepSlipstream } from './slipstream.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
@@ -28,6 +30,12 @@ const ground = makeGround();
 
 /** Stopped this long while trying to move: put the car back on the track. */
 const STUCK_RESPAWN_TICKS = 240;
+/**
+ * A computer car that already had to back out counts as free again only once
+ * it gets going properly: one caught nosing into the same obstacle over and
+ * over (a pit lane island) still adds up to a respawn.
+ */
+const AI_STUCK_ESCAPE = { after: 40, speed: 25 };
 /** AI facing the wrong way this long: put it back on the track. */
 const AI_WRONG_WAY_TICKS = 150;
 /** After the first car finishes, everybody else gets this long. */
@@ -66,6 +74,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
   const armed = race.weapons === 1 && race.phase === RacePhase.Racing && w.tick >= race.startTick + WEAPON.startGrace;
   // Catch-up pads work for cars far behind whoever leads at the start of this tick.
   const leader = cars.length > 1 && race.phase === RacePhase.Racing ? leaderDistance(cars) : -Infinity;
+  stepSlipstream(cars);
   for (let i = 0; i < cars.length; i++) {
     const car = cars[i];
     const t = tunings[i] ?? tunings[0];
@@ -91,6 +100,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     sampleCarSurface(car, track, t);
     mixSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, surfMix);
     applyDamage(surfMix, car.damage, t);
+    applySlipstream(surfMix, car.draft);
     if (car.aiDriven) {
       aiDrive(car, track, t, surfMix, cars, w.tick, aiInput);
       if (armed) aiWeapons(car, cars, track, w.tick, t.vTop, aiInput, race.laps);
@@ -128,8 +138,10 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     // Stuck: nearly stopped while trying to drive.
     const speed = Math.hypot(car.vx, car.vz);
     const trying = (car.aiDriven || inp.throttle > 0.3 || inp.brake > 0.3) && !car.airborne;
-    // Drifting mends the car a little.
-    if (car.sliding && !car.airborne && speed > 8 && car.damage > 0) car.damage = Math.max(0, car.damage - WEAPON.driftRepair * DT);
+    // Drifting through a corner mends the car a little (sliding down a straight does not).
+    const cornering = car.sliding === 1 && isCornering(car, track);
+    if (cornering && !car.airborne && speed > 8 && car.damage > 0) car.damage = Math.max(0, car.damage - WEAPON.driftRepair * DT);
+    stepDriftCharge(car, surfMix, speed, cornering, w.events);
     // Pit box, between the first and last line: driving through mends a fixed
     // share, and time spent there mends more (standing still is allowed).
     const pit = track.pit;
@@ -148,7 +160,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     // People may park in the box; a computer car standing there is stuck (nose in a wall) and backs out.
     const parked = inPit && !car.aiDriven;
     if (speed < 1.2 && trying && race.phase === RacePhase.Racing && !parked) car.stuckTicks++;
-    else if (parked || car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading) > 4) car.stuckTicks = 0;
+    else if (parked || car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading) > (car.aiDriven && car.stuckTicks >= AI_STUCK_ESCAPE.after ? AI_STUCK_ESCAPE.speed : 4)) car.stuckTicks = 0;
     if (car.ghostTicks > 0) car.ghostTicks--;
   }
   if (race.weapons) stepShots(w.shots, cars, track, tunings, DT, w.events);
@@ -163,6 +175,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
       collideCars(cars[i], cars[j], tunings[i] ?? tunings[0], tunings[j] ?? tunings[0], w.events);
     }
   }
+  breakDriftCharge(cars, w.events, knocks);
   if (race.weapons && race.phase === RacePhase.Racing) {
     applyImpactDamage(cars, tunings, w.events, knocks);
     for (const car of cars) checkWreck(car, cars, w.events);
