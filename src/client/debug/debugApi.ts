@@ -62,6 +62,7 @@ export function installDebugApi(app: App): void {
     },
     /** Hold an input on the player car for `ticks` simulation ticks. */
     drive(input: { steer?: number; throttle?: number; brake?: number }, ticks = 60) {
+      app.spoilAchievements();
       const i = neutralInput();
       Object.assign(i, input);
       app.input.override = i;
@@ -80,6 +81,7 @@ export function installDebugApi(app: App): void {
       split: () => app.toggleSplit(),
       /** Put the first player's car at (x, z), standing still (for looking at a spot). */
       place(x: number, z: number) {
+        app.spoilAchievements();
         const car = app.world.cars[app.session.playerCars[0]];
         if (!car) return;
         car.x = x;
@@ -148,15 +150,21 @@ export function installDebugApi(app: App): void {
         return res.ok ? res.text() : `failed: ${res.status}`;
       },
     },
+    /** Show a banner like the medal and achievement ones (unlocks nothing). */
+    banner(title = 'UNLOCKED: DEMOLITION DERBY', text = 'WRECK 3 CARS IN ONE RACE', color?: string) {
+      app.showBanner(title, text, color);
+    },
     /** Freeze or resume the simulation (rendering continues). */
     pause(on = true) {
       app.paused = on;
     },
     /** Let the AI drive the player car (demo / testing). */
     autopilot(on = true) {
+      app.spoilAchievements();
       app.player.aiDriven = on ? 1 : 0;
     },
     reset() {
+      app.spoilAchievements();
       app.resetCar(app.session.playerCars[0]);
     },
     /** Music: what is playing and how loud it is right now. */
@@ -299,9 +307,11 @@ export function installDebugApi(app: App): void {
       app.toTitle();
     },
     tuning(): CarTuning {
+      app.spoilAchievements();
       return app.tuning;
     },
     setTuning(values: Partial<CarTuning>) {
+      app.spoilAchievements();
       Object.assign(app.tuning, values);
     },
   };

@@ -352,6 +352,72 @@ som på listan, annars visas det inte. Det sparas, ett per bana och klass.
 I **RECORDS** väljer ↑↓ (eller ett tryck) en plats på världslistan och
 ENTER (eller ett tryck till) startar en tidskörning mot just den.
 
+## Medaljer
+
+Varje inbyggd bana har en BRONS-, SILVER- och GULDtid per liga (STANDARD,
+SUPERCARS, MEGACARS). Tiderna räknas fram av datorförarna: brons efter den
+LÄTTA förarens bästa ensamvarv (+2 %), silver efter MEDEL och guld en
+aning (1,5 %) snabbare än den SVÅRA förarens bästa varv. Tabellen ligger
+incheckad i `src/shared/game/medalTimes.ts` så att spelet inte simulerar
+något vid körning. När fysiken eller banorna ändras skriver `npm run medals`
+om tabellen (deterministiskt, några sekunder); `medals.test.ts` kollar att
+varje bana och liga finns med och att brons > silver > guld.
+
+En medalj vinns med ett personbästa-varv under tiden, under samma villkor som
+personliga rekord (snabbrace och träning med en person, ingen felsökningshjälp;
+spelarbanor har inga medaljer). Medaljerna sparas för sig i webbläsaren
+(`megacars.medals.v1`, per bana och liga) och försvinner aldrig. De syns på
+RECORDS-skärmen (de tre måltiderna, vunna medaljer tända), på bankortet i
+SINGLE RACE och som en kort banderoll ("GOLD MEDAL!") när en vinns.
+
+## Prestationer
+
+**ACHIEVEMENTS** i titelmenyn listar 25 prestationer, från sådant man gör de
+första tio minuterna (köra klart ett race, vinna, vraka en bil, hoppa 40 m,
+hålla en drift i 4 s, åka i mörker) via några kvällar (tio pallplatser,
+vinna från sista plats, vinna utan att skjuta, avsluta med under 5 %
+skada, brons-silver-guld, befordran i karriären, publicera en bana, vinna
+online) till veckor (vinna på varje bana, 25 vinster, 50 vrak, MEGACARS
+CHAMPION, försvara titeln, guld på varje bana i en liga och i alla). Låsta
+är dämpade, räknande har framsteg ("7/10") och överst står summan. När en
+låses upp glider en liten banderoll in högst upp i mitten (aldrig över
+vägen); flera på en gång visas efter varandra. Läget sparas i webbläsaren
+(`megacars.achievements.v1`).
+
+Reglerna är en tabell i `src/client/game/achievementRules.ts`: varje post har
+id, namn, en rad text, ev. mål och en `feed`-funktion som får det klienten ser
+(simuleringshändelser och bilens tillstånd varje tick, en sammanfattning när
+racet är slut, en vunnen medalj, ett avslutat säsongsår, en publicerad bana)
+och flyttar sin egen mätare. En ny prestation för en ny funktion är en post i
+tabellen (och vid behov en ny ingångstyp). Räknas bara för en person vid
+skärmen offline (online ses bara slutresultatet, delad skärm räknar inte), och
+aldrig med felsökningsverktyg (`?debug`, `__megacars.drive/autopilot/reset/
+setTuning`, flyttad bil, ändrad fysik i träning). Enhetstester finns i
+`achievements.test.ts`.
+
+## Lackeringar
+
+Medaljer och prestationer låser upp lackeringar till spelarens bil. En
+lackering är en kroppsfärg plus ett djärvt mönster i en andra färg (slätt,
+racingrand, dubbla ränder, tvåfärgad huv och tak, halvor, band, rutigt – de
+ligger på bilens översida så att de syns även när bilen är några pixlar
+stor) och fungerar på alla tre karosser och i alla ligor. 15 stycken: fyra
+gratis (STOCK, ICE WHITE, SUNSHINE, BRITISH GREEN), resten kopplade till en
+prestation (t.ex. TANGERINE: köra klart ett race, HAZARD: vraka tre bilar i
+ett race, CHAMPION: MEGACARS CHAMPION) eller till antal medaljer (3 av
+någon färg, 5 silver eller bättre, 3 guld). De snyggaste är svårast: MIDAS
+kräver guld på varje bana i alla tre ligor.
+
+**PAINT SHOP** i titelmenyn visar de tre bilarna på en scen över startrakan i
+vald lackering (liganhörande utseende), med en ruta per lackering; låsta
+visar vad som krävs. Vänster/höger bläddrar, ENTER väljer (sparas som
+`megacars.paint.v1`). Valet gäller bil 1 i alla offlineslägen (snabbrace,
+mästerskap, karriär, träning, delad skärm för spelare 1) och syns i
+minikartan, resultattabellen och på pallen; STOCK ger kortets egen färg
+som förut. Datorbilar som skulle bli nästan lika färgade som spelarens byter
+färg i det racet. Själva racespecen (och därmed rekordkontrollen) ändras
+inte. Online ger servern färgerna som förut.
+
 ## Grafik och prestanda
 
 **OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM eller LOW. AUTO börjar på HIGH och

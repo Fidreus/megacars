@@ -12,6 +12,7 @@ import type { Track } from '../../shared/track/types.ts';
 import { neutralInput, type CarInput } from '../../shared/sim/input.ts';
 import { stepWorld } from '../../shared/sim/step.ts';
 import { COUNTDOWN_TICKS, type World } from '../../shared/sim/world.ts';
+import { activePaint, paintGrid, type PaintLook } from './paints.ts';
 import type { GameSession } from './session.ts';
 import type { RaceSettings } from './settings.ts';
 import { raceLaps } from '../../shared/track/defs/index.ts';
@@ -27,6 +28,8 @@ export class RaceSession implements GameSession {
   readonly playerCars: number[];
   readonly names: string[];
   readonly colors: string[];
+  /** The pattern of the player's paint job (undefined for the others). */
+  readonly looks: (PaintLook | undefined)[];
   readonly models: number[];
   readonly league: League;
 
@@ -34,7 +37,7 @@ export class RaceSession implements GameSession {
    * A race from menu settings, or from a ready-made spec (championships).
    * Local players have playerId 0 and 1 in the spec.
    */
-  constructor(settings: RaceSettings, baseTuning: CarTuning, seed = Date.now() & 0xffff, spec?: RaceSpec) {
+  constructor(settings: RaceSettings, baseTuning: CarTuning, seed = Date.now() & 0xffff, spec?: RaceSpec, usePaint = true) {
     this.settings = settings;
     this.spec = spec ?? specFromSettings(settings, seed);
     const built = createRaceWorld(this.spec, baseTuning);
@@ -51,6 +54,13 @@ export class RaceSession implements GameSession {
     }
     this.names = this.spec.entrants.map((e) => e.name);
     this.colors = this.spec.entrants.map((e) => e.color);
+    this.looks = this.colors.map(() => undefined);
+    // The first player's car in the chosen paint job (the spec, and so the record check, keep the slot colour).
+    if (usePaint && this.playerCars.length) {
+      const painted = paintGrid(this.colors, this.playerCars[0], activePaint());
+      this.colors = painted.colors;
+      this.looks = painted.looks;
+    }
     this.models = this.spec.entrants.map((e) => e.loadout?.car ?? -1);
     this.league = leagueOf(this.spec.league);
   }
@@ -92,7 +102,7 @@ function specFromSettings(settings: RaceSettings, seed: number): RaceSpec {
 
 /** An all-AI practice session for the title screen. */
 export function attractSession(settings: RaceSettings, tuning: CarTuning): RaceSession {
-  const s = new RaceSession({ ...settings, players: 1, opponents: 7, practice: true }, cloneTuning(tuning), 7);
+  const s = new RaceSession({ ...settings, players: 1, opponents: 7, practice: true }, cloneTuning(tuning), 7, undefined, false);
   for (const car of s.world.cars) {
     car.human = 0;
     car.aiDriven = 1;

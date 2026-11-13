@@ -5,10 +5,12 @@
 
 import { DT } from '../../../shared/config/constants.ts';
 import { boardKey, LEAGUE_NAMES, type League } from '../../../shared/game/leagues.ts';
+import { MEDAL_COLORS, MEDAL_NAMES, medalTimes } from '../../../shared/game/medals.ts';
 import type { Boards, RecordEntry } from '../../../shared/game/records.ts';
 import { TRACK_LIST } from '../../../shared/track/defs/index.ts';
 import type { NavState } from '../../input/nav.ts';
 import { fetchBoards, loadLocalRecords, trackRecords } from '../../game/records.ts';
+import { loadMedals, medalOf } from '../../game/medals.ts';
 import { drawText, textWidth } from '../font.ts';
 import { formatTime } from './hud.ts';
 
@@ -112,6 +114,23 @@ export class RecordsScreen {
     drawText(ctx, `←  ${def.name.toUpperCase()}  →`, W / 2, y, { scale: 2, color: '#ffffff', align: 'center' });
     y += short ? 22 : 28;
 
+    // The medal laps of this track and league, the ones you have won lit up.
+    const times = medalTimes(def.id, this.league);
+    const won = medalOf(loadMedals(), def.id, this.league);
+    if (times) {
+      const parts = ([3, 2, 1] as const).map((m) => {
+        const ticks = m === 3 ? times.gold : m === 2 ? times.silver : times.bronze;
+        return { m, text: `${won >= m ? '■' : '□'} ${MEDAL_NAMES[m]} ${formatTime(ticks * DT)}` };
+      });
+      const gap = 14 * k;
+      let x = Math.round(W / 2 - (parts.reduce((a, p) => a + textWidth(p.text, k), 0) + gap * 2) / 2);
+      for (const p of parts) {
+        drawText(ctx, p.text, x, y, { color: won >= p.m ? MEDAL_COLORS[p.m] : '#6a7488', scale: k });
+        x += textWidth(p.text, k) + gap;
+      }
+      y += short ? 13 : 10 * k + 8;
+    }
+
     // Your records.
     const key = boardKey(def.id, this.league);
     const mine = trackRecords(loadLocalRecords(), key);
@@ -121,6 +140,7 @@ export class RecordsScreen {
     drawText(ctx, 'WORLD TOP 10 - BEST LAP', right, y, { color: '#9fd8ff', scale: k });
     let ly = y + line + 3;
     drawText(ctx, `LAP   ${mine.lap ? formatTime(mine.lap * DT) : '-'}`, left, ly, { color: '#ffffff', scale: k });
+    if (won) drawText(ctx, MEDAL_NAMES[won], left + textWidth('LAP   0:00.00  ', k), ly, { color: MEDAL_COLORS[won], scale: k });
     ly += line;
     const races = Object.keys(mine.race).map(Number).sort((a, b) => a - b);
     for (const laps of races) {

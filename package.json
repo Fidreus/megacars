@@ -19,6 +19,7 @@
     "sim": "node scripts/simRace.ts",
     "soak": "node scripts/netSoak.ts",
     "track": "node scripts/checkTrack.ts",
+    "medals": "node scripts/medals.ts",
     "stats": "node scripts/usageStats.ts"
   },
   "dependencies": {

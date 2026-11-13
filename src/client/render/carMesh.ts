@@ -9,6 +9,7 @@ import type { League } from '../../shared/game/leagues.ts';
 import { toon } from './materials.ts';
 import { mergeByMaterial } from './batch.ts';
 import { drawText } from '../ui/font.ts';
+import type { PaintLook, PaintPattern } from '../game/paints.ts';
 
 type Line = [number, number][];
 
@@ -98,6 +99,90 @@ function alongLine(line: Line, width: number, thick: number, x: number, from = 0
     g.rotateX(-Math.atan2(y1 - y0, z1 - z0));
     g.translate(x, (y0 + y1) / 2 + thick / 2, (z0 + z1) / 2);
     out.push(g);
+  }
+  return out;
+}
+
+/** A patch of paint on the top of the body: z along the car (front negative), x across. */
+interface Patch {
+  z0: number;
+  z1: number;
+  xc: number;
+  w: number;
+}
+
+/**
+ * Thin patches laid over the bonnet, roof and deck (the painted tops, not
+ * the glass between them): bold shapes that read when the car is a few pixels.
+ */
+function patternPatches(st: Style, pattern: PaintPattern): Patch[] {
+  const front = st.top[0][0];
+  const rear = st.top[st.top.length - 1][0];
+  const cab = st.cabin;
+  const roof0 = cab[1][0];
+  const roof1 = cab[2][0];
+  const whole = (xc: number, w: number): Patch => ({ z0: front, z1: rear, xc, w });
+  switch (pattern) {
+    case 'plain':
+      return [];
+    case 'stripe':
+      return [whole(0, 0.5)];
+    case 'dual':
+      return [whole(-0.34, 0.3), whole(0.34, 0.3)];
+    case 'twotone':
+      return [{ z0: front, z1: cab[0][0], xc: 0, w: 1.7 }, { z0: roof0, z1: roof1, xc: 0, w: 1.4 }];
+    case 'halves':
+      return [whole(-0.5, 1.0)];
+    case 'bands': {
+      const mid = (roof0 + roof1) / 2;
+      return [
+        { z0: front + 0.45, z1: front + 0.9, xc: 0, w: 2 }, { z0: front + 1.3, z1: front + 1.75, xc: 0, w: 2 },
+        { z0: mid - 0.22, z1: mid + 0.22, xc: 0, w: 2 }, { z0: rear - 0.95, z1: rear - 0.5, xc: 0, w: 2 },
+      ];
+    }
+    case 'chequer': {
+      const out: Patch[] = [];
+      const cell = 0.32;
+      const rows = Math.floor((rear - front) / cell);
+      for (let r = 0; r < rows; r++) {
+        for (let c = -1; c <= 1; c++) if ((r + c) % 2 === 0) out.push({ z0: front + r * cell, z1: front + (r + 1) * cell, xc: c * cell, w: cell });
+      }
+      return out;
+    }
+  }
+}
+
+/** The patches as thin boxes following the body's top line. */
+function patchGeometry(st: Style, patches: Patch[]): THREE.BufferGeometry[] {
+  const cab = st.cabin;
+  const roofStart = st.top.findIndex((p) => p[0] === cab[0][0]);
+  const roofEnd = st.top.findIndex((p) => p[0] === cab[cab.length - 1][0]);
+  // The painted tops: bonnet, roof skin, deck (line, first and last segment, thickness, half width).
+  const pieces: [Line, number, number, number, number][] = [
+    [st.top, 0, roofStart, 0.03, BODY_W / 2 - 0.05],
+    [cab, 1, 2, 0.05, (st.cabinWidth - 0.16) / 2],
+    [st.top, roofEnd, st.top.length - 1, 0.03, BODY_W / 2 - 0.05],
+  ];
+  const out: THREE.BufferGeometry[] = [];
+  for (const [line, from, to, thick, half] of pieces) {
+    for (const p of patches) {
+      const x0 = Math.max(p.xc - p.w / 2, -half);
+      const x1 = Math.min(p.xc + p.w / 2, half);
+      if (x1 - x0 < 0.05) continue;
+      for (let i = from; i < to; i++) {
+        const [za, ya] = line[i];
+        const [zb, yb] = line[i + 1];
+        const a = Math.max(za, p.z0);
+        const b = Math.min(zb, p.z1);
+        if (b - a < 0.04) continue;
+        const ay = ya + ((yb - ya) * (a - za)) / (zb - za);
+        const by = ya + ((yb - ya) * (b - za)) / (zb - za);
+        const g = new THREE.BoxGeometry(x1 - x0, thick, Math.hypot(b - a, by - ay));
+        g.rotateX(-Math.atan2(by - ay, b - a));
+        g.translate((x0 + x1) / 2, (ay + by) / 2 + thick / 2, (a + b) / 2);
+        out.push(g);
+      }
+    }
   }
   return out;
 }
@@ -228,11 +313,14 @@ export class CarView {
   private wrecked = false;
   private readonly paints: { mat: THREE.MeshPhongMaterial; color: THREE.Color }[] = [];
 
-  /** `league`: Supercars and Megacars each get their own racier kit. */
-  constructor(color: string, number: number, style = number % STYLES.length, league: League = 'standard') {
+  /**
+   * `league`: Supercars and Megacars each get their own racier kit. `look`: the
+   * second colour and pattern of a paint job (default: a racing stripe in a contrast colour).
+   */
+  constructor(color: string, number: number, style = number % STYLES.length, league: League = 'standard', look?: PaintLook) {
     const st = STYLES[style];
     const paint = new THREE.MeshPhongMaterial({ color, specular: '#5a5a5a', shininess: 45 });
-    const stripeHex = stripeColor(color);
+    const stripeHex = look?.accent ?? stripeColor(color);
     const stripe = new THREE.MeshPhongMaterial({ color: stripeHex, specular: '#5a5a5a', shininess: 45 });
     for (const mat of [paint, stripe]) this.paints.push({ mat, color: mat.color.clone() });
     const add = (geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D = this.body) => {
@@ -269,15 +357,9 @@ export class CarView {
     for (const x of [-0.45, 0, 0.45]) aero.push(new THREE.BoxGeometry(0.05, 0.2, 0.3).translate(x, BOTTOM + 0.1, rear - 0.05));
     add(merge(aero), carbon);
 
-    // One bold racing stripe over bonnet, roof and deck (reads at low resolution).
-    const roofStart = st.top.findIndex((p) => p[0] === cab[0][0]);
-    const roofEnd = st.top.findIndex((p) => p[0] === cab[cab.length - 1][0]);
-    const stripes = [
-      ...alongLine(st.top, 0.5, 0.03, 0, 0, roofStart),
-      ...alongLine(cab, 0.5, 0.05, 0, 1, 2),
-      ...alongLine(st.top, 0.5, 0.03, 0, roofEnd, st.top.length - 1),
-    ];
-    add(merge(stripes), stripe);
+    // The pattern (by default one bold racing stripe over bonnet, roof and deck).
+    const patches = patternPatches(st, look?.pattern ?? 'stripe');
+    if (patches.length) add(merge(patchGeometry(st, patches)), stripe);
 
     // Wing or ducktail spoiler (Supercars and Megacars get their own, below).
     if (league === 'mega') {
