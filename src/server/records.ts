@@ -3,19 +3,24 @@
 // persistent volume in production). A new version starts empty boards in a
 // new folder; older folders and the pre-versioning DATA_DIR/records.json are
 // never read, written or deleted. Submissions are replayed in a worker
-// thread, one at a time, and the server's own lap times go on the board.
+// thread, one at a time, and the server's own lap times go on the board. The
+// race of every entry is kept beside the board (replays/<id>.json) so others
+// can race its ghost.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { SIM_VERSION } from '../shared/config/constants.ts';
 import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
 import { boardKey } from '../shared/game/leagues.ts';
-import { insertRecord, specProblem, type Boards, type RecordEntry, type RecordSubmission } from '../shared/game/records.ts';
+import { insertRecord, REPLAY_ID, specProblem, type Boards, type RecordEntry, type RecordSubmission, type StoredReplay } from '../shared/game/records.ts';
 import { TRACKS } from '../shared/track/defs/index.ts';
 
 const JOB_TIMEOUT_MS = 15_000;
 const MAX_QUEUE = 8;
+/** Largest replay file served (a submission is at most 400 kB). */
+export const MAX_REPLAY_FILE = 1_000_000;
 
 export interface SubmitResult {
   ok: boolean;
@@ -39,7 +44,10 @@ export class RecordStore {
   private readonly file: string;
   /** The board file could not be read or moved aside: don't save over it. */
   private readOnly = false;
+  private readonly replayDir: string;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Replays of entries that left a board: deleted once the board is saved. */
+  private dropped: string[] = [];
   private worker: Worker | null = null;
   private readonly queue: Job[] = [];
   private running: Job | null = null;
@@ -49,12 +57,15 @@ export class RecordStore {
   constructor(dataDir: string, version = SIM_VERSION) {
     this.dir = join(dataDir, 'records', `v${version}`);
     this.file = join(this.dir, 'records.json');
-    mkdirSync(this.dir, { recursive: true });
+    this.replayDir = join(this.dir, 'replays');
+    mkdirSync(this.replayDir, { recursive: true });
+    let readable = true;
     if (existsSync(this.file)) {
       try {
         this.boards = parseBoards(readFileSync(this.file, 'utf8'));
       } catch (e) {
         // Never overwrite a board we could not read: move it aside first.
+        readable = false;
         const aside = `${this.file}.bad-${Date.now()}`;
         console.warn('records: could not read', this.file, e, '- kept as', aside);
         try {
@@ -65,6 +76,7 @@ export class RecordStore {
         }
       }
     }
+    if (readable) this.removeOrphans();
     const n = Object.values(this.boards).reduce((k, b) => k + b.length, 0);
     console.log(`records: ${n} entries in ${this.file}`);
   }
@@ -74,6 +86,18 @@ export class RecordStore {
     const out: Boards = {};
     for (const [key, board] of Object.entries(this.boards)) if (TRACKS[key.split('@')[0]]) out[key] = board;
     return out;
+  }
+
+  /** The stored race of a board entry, as JSON text, or null. */
+  replayText(id: string): string | null {
+    if (!REPLAY_ID.test(id)) return null;
+    const file = join(this.replayDir, `${id}.json`);
+    try {
+      if (statSync(file).size > MAX_REPLAY_FILE) return null;
+      return readFileSync(file, 'utf8');
+    } catch {
+      return null;
+    }
   }
 
   /** Queue a submission for checking; resolves when it is done. */
@@ -140,11 +164,25 @@ export class RecordStore {
     this.pump();
   }
 
-  /** Put a checked lap on its board. */
+  /** Put a checked lap on its board, with its race kept beside it. */
   private place(sub: RecordSubmission, best: number): SubmitResult {
-    const board = (this.boards[boardKey(sub.spec.track, sub.spec.league)] ??= []);
-    const rank = insertRecord(board, { name: cleanName(sub.name) || 'DRIVER', ticks: best, at: Date.now() });
-    if (rank > 0) this.scheduleSave();
+    const key = boardKey(sub.spec.track, sub.spec.league);
+    const board = (this.boards[key] ??= []);
+    const entry: RecordEntry = { name: cleanName(sub.name) || 'DRIVER', ticks: best, at: Date.now(), id: randomBytes(8).toString('hex') };
+    const next = board.slice();
+    const rank = insertRecord(next, entry);
+    if (rank === 0) return { ok: true, best, rank };
+    const stored: StoredReplay = { v: SIM_VERSION, key, name: entry.name, ticks: best, at: entry.at, spec: sub.spec, replay: sub.replay };
+    try {
+      writeAtomic(join(this.replayDir, `${entry.id}.json`), JSON.stringify(stored));
+    } catch (e) {
+      console.warn('records: could not keep the replay', e);
+      return { ok: false, error: 'server error' };
+    }
+    const kept = new Set(next.map((e) => e.id));
+    for (const e of board) if (e.id && !kept.has(e.id)) this.dropped.push(e.id);
+    board.splice(0, board.length, ...next);
+    this.scheduleSave();
     return { ok: true, best, rank };
   }
 
@@ -162,6 +200,25 @@ export class RecordStore {
       writeAtomic(this.file, JSON.stringify(this.boards));
     } catch (e) {
       console.warn('records: could not save', e);
+      return;
+    }
+    // Only now that no saved entry points at them.
+    for (const id of this.dropped.splice(0)) removeQuietly(join(this.replayDir, `${id}.json`));
+  }
+
+  /** Replays no entry points at (left by a crash between the two writes). */
+  private removeOrphans(): void {
+    const used = new Set<string>();
+    for (const board of Object.values(this.boards)) for (const e of board) if (e.id) used.add(e.id);
+    let files: string[] = [];
+    try {
+      files = readdirSync(this.replayDir);
+    } catch {
+      return;
+    }
+    for (const f of files) {
+      const id = f.replace(/\.json$/, '');
+      if (f.endsWith('.json') && REPLAY_ID.test(id) && !used.has(id)) removeQuietly(join(this.replayDir, f));
     }
   }
 }
@@ -182,4 +239,12 @@ function writeAtomic(file: string, text: string): void {
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, text);
   renameSync(tmp, file);
+}
+
+function removeQuietly(file: string): void {
+  try {
+    unlinkSync(file);
+  } catch {
+    // Already gone.
+  }
 }

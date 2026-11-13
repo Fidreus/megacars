@@ -26,6 +26,9 @@ const records = new RecordStore(DATA_DIR);
 /** Record submissions per address per minute. */
 const SUBMIT_LIMIT = 6;
 const submits = new Map<string, number[]>();
+/** Board replays fetched per address per minute. */
+const REPLAY_LIMIT = 30;
+const replayCalls = new Map<string, number[]>();
 /**
  * Usage log: hashed address, country, page loads, time on the page, tracks
  * raced. Off with ANALYTICS=0; not written by `npm run dev` unless ANALYTICS=1.
@@ -104,6 +107,10 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   }
   if (url.pathname === '/api/records') {
     handleRecords(req, res);
+    return;
+  }
+  if (url.pathname.startsWith('/api/records/replay/')) {
+    handleReplay(req, res, url.pathname.slice('/api/records/replay/'.length));
     return;
   }
   if (url.pathname === '/api/tracks' || url.pathname.startsWith('/api/tracks/')) {
@@ -239,6 +246,46 @@ function handleRecords(req: IncomingMessage, res: ServerResponse): void {
   });
 }
 
+/**
+ * GET /api/records/replay/<id>: the race of a board entry (spec and inputs),
+ * for racing its ghost. An id's race never changes, so it may be cached for good.
+ */
+function handleReplay(req: IncomingMessage, res: ServerResponse, id: string): void {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    json(res, 405, { ok: false, error: 'method' });
+    return;
+  }
+  const ip = networkOf(clientIp(req));
+  const now = Date.now();
+  const recent = (replayCalls.get(ip) ?? []).filter((t) => now - t < 60_000);
+  recent.push(now);
+  replayCalls.set(ip, recent);
+  if (replayCalls.size > 10_000) replayCalls.clear();
+  if (recent.length > REPLAY_LIMIT) {
+    json(res, 429, { ok: false, error: 'slow down' });
+    return;
+  }
+  const tag = `"${id}"`;
+  const headers: Record<string, string> = { 'content-type': 'application/json', 'cache-control': 'public, max-age=31536000, immutable', etag: tag, vary: 'accept-encoding' };
+  const text = records.replayText(id);
+  if (text === null) {
+    json(res, 404, { ok: false, error: 'no such replay' });
+    return;
+  }
+  if (req.headers['if-none-match'] === tag) {
+    res.writeHead(304, headers);
+    res.end();
+    return;
+  }
+  let body = Buffer.from(text, 'utf8');
+  if (/\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) {
+    body = gzipSync(body, { level: 6 });
+    headers['content-encoding'] = 'gzip';
+  }
+  headers['content-length'] = String(body.length);
+  res.writeHead(200, headers);
+  res.end(req.method === 'HEAD' ? undefined : body);
+}
 
 /** A token from `Authorization: Bearer ...` matches `secret` (never when there is none). */
 function tokenOk(req: IncomingMessage, url: URL, secret: string): boolean {

@@ -249,7 +249,15 @@ Topplistorna hör till en simuleringsversion (`SIM_VERSION`): när fysiken
 ändras börjar listorna om i en ny mapp, och gamla tider ligger kvar orörda
 på disk men visas inte. Tiderna från före version 25 ligger kvar i
 `$DATA_DIR/records.json`. En lista som inte går att läsa flyttas undan
-(`records.json.bad-<tid>`) i stället för att skrivas över. Dina egna rekord
+(`records.json.bad-<tid>`) i stället för att skrivas över.
+
+För varje plats på en lista sparar servern det kontrollerade racet (racets
+uppsättning och inmatningen) som en egen fil bredvid listan,
+`records/v<version>/replays/<id>.json` (30–50 kB, packas till ~10 kB), så att
+andra kan köra mot det som spöke. Filen tas bort när platsen faller ur
+listan. `GET /api/records/replay/<id>` hämtar det (id står på platsen i
+`GET /api/records`); ett id:s race ändras aldrig, så svaret får cachas för
+evigt. Högst 30 hämtningar per minut och adress. Dina egna rekord
 i webbläsaren sparas också per version (`megacars.records.v1.sim<version>`);
 de gamla finns kvar i localStorage men visas inte.
 
