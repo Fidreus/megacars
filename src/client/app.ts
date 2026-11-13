@@ -81,6 +81,7 @@ import {
 import { buy, CAR_MODELS } from '../shared/game/shop.ts';
 import { DIVISIONS, endSeason, loadCareer, newCareer, saveCareer, type Career } from './game/career.ts';
 import { drawSeasonEnd } from './ui/screens/season.ts';
+import { duelText, rivalCar, rivalLine } from './game/rival.ts';
 import { TOUR_MAX, type RaceSpec, type RoomInfo } from '../shared/net/protocol.ts';
 import { CATCH_UP, farBehind, leaderDistance } from '../shared/sim/catchUp.ts';
 import { setBoostPadsLit } from './render/boostMesh.ts';
@@ -2614,7 +2615,7 @@ export class App {
       const head = this.career ? `DIVISION ${this.career.division}` : 'CHAMPIONSHIP';
       const title = over ? `${leader(cup).name === 'YOU' ? 'YOU WIN' : `${leader(cup).name} WINS`} ${head}!` : head;
       const sub = over ? 'FINAL STANDINGS' : `AFTER RACE ${cup.race} OF ${cup.tracks.length}${this.career ? ` - SEASON ${this.career.season}` : ''}`;
-      drawStandings(ctx, W, H, title, sub, standingsRows(cup), this.time, over ? 'PRESS ENTER' : 'PRESS ENTER FOR THE SHOP');
+      drawStandings(ctx, W, H, title, sub, standingsRows(cup), this.time, over ? 'PRESS ENTER' : 'PRESS ENTER FOR THE SHOP', rivalLine(cup));
     } else if (this.mode === 'lobby' && this.online.room) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
@@ -2708,7 +2709,9 @@ export class App {
     // Room for the touch pause button in the corner.
     const mx = split ? Math.round(W / 2 - mw / 2) : W - mw - 8 - (this.touch.enabled ? 30 : 0);
     const my = split ? H - mh - 8 : 8;
-    this.minimap.draw(ctx, s.track, w, s.colors, s.playerCars, mx, my, mw, mh);
+    const rival = s instanceof RaceSession && this.cupRace ? rivalCar(s.spec.entrants) : -1;
+    this.minimap.draw(ctx, s.track, w, s.colors, s.playerCars, mx, my, mw, mh, rival);
+    if (rival >= 0) this.drawRivalTag(ctx, rival);
     drawCountdown(ctx, W, w);
     if (this.touch.enabled && !split) {
       const me = w.cars[s.playerCars[0]];
@@ -2822,6 +2825,15 @@ export class App {
       drawText(ctx, `DIVISION ${c.division} ${stars}   SEASON ${c.season}   TITLES ${c.titles}`, W / 2, y, { color: '#ffd84a', align: 'center' });
       y += 12;
       drawText(ctx, `$${p.money}   ${CAR_MODELS[p.car ?? 0].name}   ENGINE ${p.engine} TYRES ${p.tyres} ARMOUR ${p.armour}   ${p.points} PTS`, W / 2, y, { color: '#9cff9c', align: 'center' });
+      const rl = rivalLine(c.cup, true);
+      if (rl) {
+        y += 12;
+        drawText(ctx, rl, W / 2, y, { color: '#ff9a8a', align: 'center' });
+        if (c.cup.race > 0) {
+          y += 10;
+          drawText(ctx, `HEAD TO HEAD ${duelText(c.cup)}`, W / 2, y, { color: '#c8d0dc', align: 'center' });
+        }
+      }
     } else {
       drawText(ctx, 'START IN DIVISION 3 - TOP 3 OF A SEASON MOVES YOU UP', W / 2, y, { color: '#9fd8ff', align: 'center' });
       y += 12;
@@ -2830,6 +2842,23 @@ export class App {
     y += 22;
     this.careerMenu.draw(ctx, W / 2, y, fitScale(this.careerMenu, y, H - 24), dt, true, H - 24);
     drawText(ctx, 'MONEY, UPGRADES AND YOUR CAR STAY WITH YOU FROM SEASON TO SEASON', W / 2, H - 14, { color: '#8090a8', align: 'center' });
+  }
+
+  /** "RIVAL" over the career rival's car (P1's view). */
+  private drawRivalTag(ctx: CanvasRenderingContext2D, car: number): void {
+    const vp = this.renderer.viewports[0];
+    const view = this.view.cars[car];
+    if (!view || this.world.cars[car].finished) return;
+    const p = this.tagPos;
+    p.copy(view.root.position);
+    p.y += 2.4;
+    p.project(vp.cam.camera);
+    if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1 || p.z > 1) return;
+    const [kx, ky] = this.renderer.uiPerLow;
+    const x = (vp.x + ((p.x + 1) / 2) * vp.w) * kx;
+    const y = ((1 - p.y) / 2) * vp.h * ky - 10;
+    drawText(ctx, `RIVAL ${this.session.names[car]}`, x, y, { align: 'center', color: '#ff6b5e' });
+    drawText(ctx, '▼', x, y + 8, { align: 'center', color: '#ff6b5e' });
   }
 
   /** Name tags over other people's cars, ping, connection trouble. */

@@ -93,7 +93,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     applyDamage(surfMix, car.damage, t);
     if (car.aiDriven) {
       aiDrive(car, track, t, surfMix, cars, w.tick, aiInput);
-      if (armed) aiWeapons(car, cars, track, w.tick, t.vTop, aiInput);
+      if (armed) aiWeapons(car, cars, track, w.tick, t.vTop, aiInput, race.laps);
       inp = aiInput;
     } else if (inp.buttons & Btn.Reset && !(car.prevButtons & Btn.Reset) && race.phase === RacePhase.Racing && !car.finished) {
       // The driver asked to be put back on the track.

@@ -3,6 +3,25 @@
 import type { Career } from '../../game/career.ts';
 import { drawText } from '../font.ts';
 import { ordinal } from './hud.ts';
+import { driverNotes, rivalOf } from '../../game/rival.ts';
+
+/** The rival duel just decided, and who to beat next season. */
+function drawDuel(g: CanvasRenderingContext2D, W: number, y: number, c: Career): number {
+  const d = c.last?.rival;
+  if (d) {
+    const score = `${d.ahead}-${d.behind} IN RACES, ${d.gap === 0 ? 'LEVEL ON POINTS' : `${Math.abs(d.gap)} PTS ${d.gap > 0 ? 'AHEAD' : 'BEHIND'}`}`;
+    drawText(g, d.won ? `YOU BEAT YOUR RIVAL ${d.name}!` : `${d.name} WON THE RIVAL DUEL`, W / 2, y, { color: d.won ? '#9cff9c' : '#ff6b5e', align: 'center' });
+    y += 11;
+    drawText(g, d.won ? `${score} - RIVAL BONUS $${d.bonus}` : score, W / 2, y, { color: '#c8d0dc', align: 'center' });
+    y += 14;
+  }
+  const next = rivalOf(c.cup);
+  if (next) {
+    drawText(g, `NEXT RIVAL: ${next.name} - ${driverNotes(next).blurb ?? ''}`, W / 2, y, { color: '#ff9a8a', align: 'center' });
+    y += 12;
+  }
+  return y + 4;
+}
 
 const HEADLINES = {
   promoted: (d: number) => [`PROMOTED TO DIVISION ${d}!`, '#9cff9c'],
@@ -28,7 +47,8 @@ export function drawSeasonEnd(g: CanvasRenderingContext2D, W: number, H: number,
   drawText(g, `YOU FINISHED ${ordinal(r.place)}`, W / 2, y, { scale: 2, align: 'center' });
   y += 24;
   if (r.bonus > 0) drawText(g, `SEASON BONUS $${r.bonus}`, W / 2, y, { scale: 2, color: '#9cff9c', align: 'center' });
-  y += 30;
+  y += 22;
+  y = drawDuel(g, W, y, c);
   const next = r.outcome === 'champion' || r.outcome === 'defended'
     ? `TITLES: ${c.titles}. DEFEND IT IN DIVISION 1!`
     : `NEXT: DIVISION ${c.division}${c.division > 1 ? ' - FINISH TOP 3 TO MOVE UP' : ' - WIN IT TO BE CHAMPION'}`;

@@ -9,6 +9,7 @@ import type { Track } from '../track/types.ts';
 import { createWorld, type World } from '../sim/world.ts';
 import { leagueTuning } from './leagues.ts';
 import { defaultLoadout, tuningFor } from './shop.ts';
+import { applyPersona } from './personaSetup.ts';
 
 export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING): { track: Track; world: World; tunings: CarTuning[] } {
   const def = trackDef(spec.track);
@@ -36,6 +37,7 @@ export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING
       car.turbos = l.turbos;
       car.damage = l.damage;
     }
+    applyPersona(car, e, spec.entrants);
   });
   return { track, world, tunings };
 }

@@ -66,6 +66,14 @@ export interface CarState {
   aiSkill: number;
   /** Ticks left of an AI reverse manoeuvre (getting unstuck). */
   aiReverseTicks: number;
+  /** Personality of a computer driver (index into PERSONAS, -1 = none). */
+  aiPersona: number;
+  /** Car this computer driver races hardest (its career rival), -1 = nobody. */
+  aiFoe: number;
+  /** Computer driver: situations it has noticed (bits of Sense in ai/reaction.ts). */
+  aiAware: number;
+  /** Computer driver: ticks left before it reacts, 5 bits per Sense. */
+  aiReact: number;
   /** 1 for cars driven by people (race end, respawn rules). */
   human: number;
   // Race progress
@@ -100,7 +108,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
     id, x, z, y: 0, vx: 0, vz: 0, vy: 0, heading, angVel: 0, steer: 0,
     sliding: 0, modeTicks: 0, spinTicks: 0, spinCool: 0, airborne: 0,
     damage: 0, missiles: 0, mines: 0, turbos: 0, turboTicks: 0, fireCool: 0, mineCool: 0, wreckTicks: 0, hits: 0, kills: 0, wrecks: 0, pitTicks: 0, lastHitBy: -1,
-    prevButtons: 0, brakeTicks: 0, liftTicks: 60, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1, aiReverseTicks: 0, human: 0,
+    prevButtons: 0, brakeTicks: 0, liftTicks: 60, driftArm: 0, aiDriven: 0, aiMode: 1, aiSkill: 1, aiReverseTicks: 0, aiPersona: -1, aiFoe: -1, aiAware: 0, aiReact: 0, human: 0,
     trackIdx: 0, trackS: 0, raceDist: 0, lap: 0, nextCp: 0,
     lapStartTick: 0, lastLapTicks: 0, bestLapTicks: 0, wrongWayTicks: 0, finished: 0,
     finishTick: 0, place: id + 1, stuckTicks: 0, ghostTicks: 0, respawns: 0,

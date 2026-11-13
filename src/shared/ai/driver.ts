@@ -14,6 +14,8 @@ import type { CarTuning } from '../config/tuning.ts';
 import type { Track } from '../track/types.ts';
 import { gripBudget, gripOmegaMax, powerOversteer, slideOmegaMax, type CarState } from '../sim/car.ts';
 import { Btn, type CarInput } from '../sim/input.ts';
+import { effectiveSkill, personaOf } from './persona.ts';
+import { expect, notice, PLANNED_SLIDE, Sense } from './reaction.ts';
 
 export const AiMode = { Grip: 0, Drift: 1 } as const;
 
@@ -34,7 +36,12 @@ export const AI_PARAMS = {
   planAhead: 200,
   /** Tap the brake to drift when the corner needs this share of the grip budget. */
   tapRatio: 0.97,
-  tapTicks: 4,
+  /** Shortest drift tap; each tap is held up to 3 ticks longer (nobody taps frame-perfect). */
+  tapTicks: 3,
+  /** No bend tighter than this radius (m) within 80 m: a straight, drive it straight. */
+  straightR: 150,
+  /** Share of the grip budget steering may use on a straight. */
+  straightGrip: 0.8,
 };
 
 /** Skill shortfall (0 = flawless, the old default) that each knob scales with. */
@@ -51,7 +58,7 @@ export const SKILL_PARAMS = {
 
 /** When computer drivers take the pit lane, and how fast they drive in it. */
 export const AI_PIT = {
-  /** Damage that sends a car in. */
+  /** Damage that sends a car in (personalities shift it). */
   damage: 0.5,
   /** Distance before the lane where it lines up for the entry. */
   approach: 70,
@@ -98,6 +105,19 @@ export function plannedSpeed(track: Track, from: number, aLat: number, aBrake: n
   return vAllowed;
 }
 
+/** True if the racing line within the next 80 m bends tighter than radius r. */
+function tightAhead(track: Track, from: number, r: number): boolean {
+  const kap = 1 / r;
+  let dist = 0;
+  let k = from;
+  while (dist < 80) {
+    if (Math.abs(track.line.curv[k]) > kap) return true;
+    dist += lineStep(track, k);
+    k = k + 1 === track.n ? 0 : k + 1;
+  }
+  return false;
+}
+
 export function aiDrive(
   car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, cars: readonly CarState[], tick: number, out: CarInput,
 ): void {
@@ -107,8 +127,12 @@ export function aiDrive(
   const fx = Math.sin(car.heading);
   const fz = -Math.cos(car.heading);
   const fwd = car.vx * fx + car.vz * fz;
-  const drift = car.aiMode === AiMode.Drift;
-  const skill = car.aiSkill;
+  const persona = personaOf(car.aiPersona);
+  // Grip lovers only slide the corners tighter than their limit.
+  const drift = car.aiMode === AiMode.Drift && (persona.gripR === 0 || car.sliding > 0 || tightAhead(track, car.trackIdx, persona.gripR));
+  const skill = effectiveSkill(car, persona);
+  // On a straight a slide is never wanted: no flicks, and a slide is caught.
+  const calm = !tightAhead(track, car.trackIdx, AI_PARAMS.straightR);
   // Weaker drivers corner slower, brake earlier, hold less top speed and wander off the line.
   const lack = clamp(1 - skill, 0, 1);
   const rx = Math.cos(car.heading);
@@ -130,20 +154,33 @@ export function aiDrive(
   // --- Traffic: slide over to pass a slower car close ahead; brake if about to hit it.
   let dodge = 0;
   let vTraffic = Infinity;
+  // Somebody near enough to keep an eye on: a car seen coming is anticipated,
+  // one that suddenly turns up close is reacted to a moment later.
+  let near = false;
   if (car.ghostTicks === 0) {
     for (const o of cars) {
       if (o === car || o.ghostTicks > 0 || Math.abs(o.y - car.y) > 1.5) continue;
       const dx = o.x - car.x;
       const dz = o.z - car.z;
       const ahead = dx * fx + dz * fz;
-      if (ahead < 1 || ahead > 16) continue;
       const side = dx * rx + dz * rz;
+      if (ahead > -12 && ahead < 45 && Math.abs(side) < 8) near = true;
       if (Math.abs(side) > 3.4) continue;
       const theirs = o.vx * fx + o.vz * fz;
+      if (persona.block > 0 && ahead < -2 && ahead > -12 && theirs - fwd > 0.5) {
+        // Hard to pass: drift across toward a faster car close behind.
+        dodge += (side > 0 ? 1 : -1) * persona.block * (1 + ahead / 12);
+        continue;
+      }
+      if (ahead < 1 || ahead > 16) continue;
       if (fwd - theirs <= 0.5) continue;
-      dodge += (side > 0 ? -1 : 1) * (1 - ahead / 16) * 4;
-      if (ahead < 8) vTraffic = Math.min(vTraffic, theirs + ahead * 0.8);
+      dodge += (side > 0 ? -1 : 1) * (1 - ahead / 16) * 4 * persona.give;
+      if (ahead < 8 * Math.min(1, persona.give)) vTraffic = Math.min(vTraffic, theirs + ahead * 0.8);
     }
+  }
+  if (!notice(car, persona, Sense.Traffic, near, tick)) {
+    dodge = 0;
+    vTraffic = Infinity;
   }
 
   // --- Pit stop: a battered car takes the pit lane, and once off the road it stays in it.
@@ -156,7 +193,7 @@ export function aiDrive(
     if (uTrack >= pit.a - AI_PIT.approach && uTrack <= pit.b + 10) {
       pitLocal(pit, car.x, car.z, pitLoc);
       const inLane = pitLoc.u >= pit.a && pitLoc.u <= pit.b && pitLoc.lat > pit.barrier && pitLoc.lat <= pitWallOffset(pit, pitLoc.u) + 1;
-      pitting = inLane || (car.damage >= AI_PIT.damage && uTrack <= pit.a + pit.ramp * 0.5);
+      pitting = inLane || (car.damage >= AI_PIT.damage + persona.pitShift && uTrack <= pit.a + pit.ramp * 0.5);
     }
   }
 
@@ -164,7 +201,7 @@ export function aiDrive(
   const aLat = (drift ? t.aSlide * AI_PARAMS.latSlide : t.aGrip * AI_PARAMS.latGrip) * skill;
   let vAllowed = Math.min(
     vTraffic,
-    plannedSpeed(track, car.trackIdx, aLat, t.brakeDecel * AI_PARAMS.brakeUse * (1 - lack * SKILL_PARAMS.brake), t.vTop * 1.5),
+    plannedSpeed(track, car.trackIdx, aLat, t.brakeDecel * AI_PARAMS.brakeUse * persona.brake * (1 - lack * SKILL_PARAMS.brake), t.vTop * 1.5),
   );
   let throttle = 1;
   let brake = 0;
@@ -181,6 +218,10 @@ export function aiDrive(
   }
   // Weaker drivers ease off below top speed (rolling, never braking for it).
   if (lack > 0 && s > t.vTop * (1 - lack * SKILL_PARAMS.straight)) throttle = Math.min(throttle, 0.3);
+  // Standing still (the start, after a tow): it takes a moment to get going.
+  if (!notice(car, persona, Sense.Go, s < 3 && throttle > 0, tick) && s < 0.5) throttle = 0;
+  // A lazy starter gets going gently on the first lap.
+  if (persona.launch < 1 && car.lap <= 1 && s < 20) throttle = Math.min(throttle, persona.launch);
 
   // --- Steering: pure pursuit toward a point ahead on the racing line.
   const look = clamp(AI_PARAMS.lookBase + AI_PARAMS.lookTime * s, AI_PARAMS.lookMin, AI_PARAMS.lookMax);
@@ -193,7 +234,8 @@ export function aiDrive(
   // Pursue the racing line, shifted sideways when dodging traffic.
   const lim = track.hw[j] - 1.6;
   // The wander never takes the car closer than half the road to the edge.
-  const stray = lack > 0 ? clamp(wander(car.id, tick) * lack * SKILL_PARAMS.wander, -lim / 2, lim / 2) : 0;
+  const loose = lack * SKILL_PARAMS.wander + persona.wander;
+  const stray = loose > 0 ? clamp(wander(car.id, tick) * loose, -lim / 2, lim / 2) : 0;
   const off = dodge + stray;
   const shift = clamp(line.off[j] + off, -lim, lim) - line.off[j];
   let dx = line.x[j] + track.nx[j] * shift - car.x;
@@ -221,7 +263,8 @@ export function aiDrive(
     // needs only scrubs speed.
     const capRate = t.aSlide / Math.max(s, 1);
     const maxB = Math.min(AI_PARAMS.maxBetaDeg * DEG, (capRate / t.kAlign) * 1.15);
-    const betaDes = clamp(turnRate / t.kAlign, -maxB, maxB);
+    // A slide on a straight that it did not go for: straighten out, steer back with grip.
+    const betaDes = calm && !(car.aiAware & PLANNED_SLIDE) ? 0 : clamp(turnRate / t.kAlign, -maxB, maxB);
     const velRate = (beta > 0 ? 1 : -1) * Math.min(t.kAlign * Math.abs(beta), capRate);
     omegaDes = velRate + AI_PARAMS.kSlip * (betaDes - beta);
   } else {
@@ -236,6 +279,9 @@ export function aiDrive(
   let omegaMax: number;
   let extra = 0;
   if (!car.sliding) {
+    // On a straight never ask the tyres for more than they give (weaving round
+    // traffic, ice): that is what tips a gripping car into a slide.
+    if (calm && s > 5) omegaDes = clamp(omegaDes, (-budget * AI_PARAMS.straightGrip) / s, (budget * AI_PARAMS.straightGrip) / s);
     omegaMax = gripOmegaMax(t, s, budget, surf.slippery > 0);
   } else {
     omegaMax = slideOmegaMax(t, s);
@@ -243,7 +289,21 @@ export function aiDrive(
     extra = powerOversteer(t, beta, car.steer * (fwd >= 0 ? 1 : -1), throttle) - t.assistPad * beta;
   }
   const dirSign = fwd >= 0 ? 1 : -1;
-  const steer = omegaMax > 1e-3 ? clamp(((omegaDes - extra) / omegaMax) * dirSign, -1, 1) : 0;
+  let steer = omegaMax > 1e-3 ? clamp(((omegaDes - extra) / omegaMax) * dirSign, -1, 1) : 0;
+
+  // A slide it went for in a bend is expected; any other one (a knock, a bump)
+  // is caught only after the reaction time, until then the wheel stays put.
+  if (car.sliding && drift && !calm) {
+    expect(car, Sense.Slide);
+    car.aiAware |= PLANNED_SLIDE;
+  } else if (!car.sliding) {
+    car.aiAware &= ~PLANNED_SLIDE;
+  }
+  const caught = notice(car, persona, Sense.Slide, car.sliding === 1, tick);
+  if (car.sliding && calm && caught && !(car.aiAware & PLANNED_SLIDE) && Math.abs(beta) > t.slipExitDeg * DEG) {
+    // Off the power until it straightens, or the throttle keeps it sideways.
+    throttle = Math.min(throttle, 0.4);
+  }
 
   // Traction control while gripping: hard acceleration eats lateral grip, so
   // ease off (but stay above the lift threshold) when the corner needs most of it.
@@ -263,18 +323,34 @@ export function aiDrive(
   }
   // Weaker drivers never flick into a slide by lifting off and back on.
   if (drift && lack > 0 && brake === 0 && car.liftTicks > 0 && car.liftTicks <= t.liftTapTicks && throttle > 0.5) throttle = 0.5;
+  // On a straight a pedal blip must not throw it sideways: keep the wheel under the flick threshold.
+  if (calm && !car.sliding) {
+    const arming = car.driftArm > 0
+      || (car.liftTicks > 0 && car.liftTicks <= t.liftTapTicks && throttle > 0.5)
+      || (car.brakeTicks > 0 && car.brakeTicks <= t.driftTapTicks && brake <= 0.5);
+    const cap = t.driftMinSteer - 0.02;
+    if (arming) steer = clamp(steer, -cap, cap);
+  }
 
   // Drift entry: when the corner needs more grip than the tyres have, tap the
   // brake while steering (press a few ticks, release) like a player would.
-  if (drift && !car.sliding && fwd > t.driftMinSpeed && Math.abs(steer) >= t.driftMinSteer) {
+  if (drift && !calm && !car.sliding && fwd > t.driftMinSpeed && Math.abs(steer) >= t.driftMinSteer) {
     if (Math.abs(turnRate) * s > budget * AI_PARAMS.tapRatio) {
-      if (car.brakeTicks < AI_PARAMS.tapTicks) {
+      // The press started at tick - brakeTicks; its length is fixed when it starts.
+      const tap = AI_PARAMS.tapTicks + Math.floor(hash3(car.id, tick - car.brakeTicks, 17) * 4);
+      if (car.brakeTicks < tap) {
         brake = 1;
         throttle = 0;
       } else {
         brake = 0;
       }
     }
+  }
+
+  if (car.sliding && !caught) {
+    // Not reacted yet: hands and feet as they were.
+    steer = car.steer;
+    brake = 0;
   }
 
   out.steer = steer;

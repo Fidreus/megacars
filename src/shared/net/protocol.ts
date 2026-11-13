@@ -140,6 +140,8 @@ export interface Entrant {
   skill: number;
   /** Upgrades, ammo and damage (default: stock car, standard ammo). */
   loadout?: Loadout;
+  /** Computer driver only: the player id it races hardest (its career rival). */
+  rival?: number;
 }
 
 /** Everything needed to build the same starting world everywhere. */

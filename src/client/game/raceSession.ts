@@ -72,7 +72,7 @@ function specFromSettings(settings: RaceSettings, seed: number): RaceSpec {
       name: names[k % names.length],
       color: CAR_COLORS[(2 + k) % CAR_COLORS.length],
       playerId: -1,
-      skill: AI_SKILL[settings.difficulty] + (rnd() - 0.5) * 0.06,
+      skill: AI_SKILL[settings.difficulty],
     });
   }
   for (let p = 0; p < humans; p++) {

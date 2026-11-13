@@ -66,6 +66,42 @@ Vapnen låses upp tre sekunder efter start. Krockar och träffar ger skada;
 en stund och kommer tillbaka lappad (30 % skada). Datorförarna använder också
 vapen – oftare ju svårare de är.
 
+## Datorförarna
+
+De tio datorförarna har var sin personlighet som syns i hur de kör. Inom en
+svårighetsgrad skiljer det ungefär ±1,5 % i varvtid mellan dem (snittet är
+detsamma som förut; på HARD kan ingen bli snabbare än den felfria föraren,
+så där är spridningen mest åt det långsamma hållet).
+
+| Förare | Typ | Hur |
+| --- | --- | --- |
+| BLITZ | HOTHEAD | bromsar sent, skjuter gärna, viker inte undan, kör på trots skada |
+| NITRO NINA | TURBO ADDICT | en extra turbo, bränner dem direkt på kortare raksträckor |
+| TURBO TOM | TURBO HOARDER | en extra turbo, sparar alla till slutet av loppet |
+| VIXEN | MINE LAYER | lägger minor när någon ligger tätt bakom |
+| DIESEL DAN | ROADBLOCK | seg i starten, glider över mot den som försöker gå om |
+| ROXY | CLEAN RACER | greppkörare som bara driftar de snäva kurvorna, skjuter sällan, depåar tidigt |
+| MAX POWER | GUNSLINGER | massor av missiler |
+| ACE | THE PRO | snabbast, exakt, kall i huvudet |
+| SPARKY | NERVOUS ROOKIE | bromsar tidigt, viker undan, depåar vid första skrapan, reagerar långsamt |
+| LUCKY LOU | WILD CARD | slarvig linje och olika fart från varv till varv |
+
+Personligheten väljs av förarens namn i loppets spec, så servern och alla
+klienter kör dem lika. En människa som tappar anslutningen och tas över av
+datorn får ingen personlighet. Mästerskapstabellen visar en rad om varje
+förare (på smala skärmar bara typen).
+
+Datorförarna har också **reaktionstid** som en människa: något nytt (en sladd
+de inte bett om, en bil som plötsligt dyker upp, ett mål som kommer i
+siktet, grönt ljus) hanteras först efter ca 0,25–0,35 s på EASY, 0,15–0,25 s
+på MEDIUM och 0,08–0,15 s på HARD, olika från gång till gång och per förare.
+Att följa linjen och bromsa för en kurva de ser komma är förutseende och sker
+direkt. Bromstrycken för att drifta är olika långa. På raksträckor kör de
+rakt: inga driftstarter, inte mer styrning än däcken klarar, och en sladd
+efter en smäll rätas upp i stället för att hållas. Andelen tid de glider på
+raksträckor av egen vilja gick från 6,5 % (8,6 % med skada) till 1,1 %
+(1,9 %); `node scripts/personaLaps.ts` mäter varvtiderna per personlighet.
+
 ## Karriär
 
 **CAREER** i titelmenyn: börja i **Division 3** och kör säsonger – ett
@@ -75,6 +111,17 @@ bättre utrustade. Vinn **Division 1** för att bli **MEGACARS CHAMPION**, och
 försvara sedan titeln. Varje säsong ger en bonus efter slutplacering (mer i
 högre divisioner). Pengar, uppgraderingar, bil, ammunition och skada följer
 med mellan säsongerna, och karriären sparas efter varje lopp (CONTINUE).
+
+**Rival:** varje säsong får du en datorförare som **RIVAL**. Första
+säsongen, och i en ny division, är det en av de snabbaste i fältet (en ny
+varje gång du flyttas upp); stannar du kvar i divisionen blir det den som
+slutade närmast före dig (eller tvåan, om du vann). Rivalen har en röd
+skylt över bilen och en röd ruta på minikartan, och siktar på dig med
+missiler och minor lite oftare än på andra. Tabellen och karriärsidan visar
+hur många lopp var och en slutat före och poängskillnaden. Har du fler poäng
+än rivalen när säsongen är slut får du en rivalbonus utöver säsongsbonusen
+($1000 i division 3, $1500 i 2, $2000 i 1), och säsongsavslutet säger vem
+som vann duellen. Äldre sparade karriärer får en rival när de laddas.
 
 **Bilar:** INTERCEPTOR (startbil), **VIPER** ($4000: +7 % acceleration,
 +4 % toppfart, +5 % grepp) och **BRUTE** ($9000: +15 % acceleration, +8 %
