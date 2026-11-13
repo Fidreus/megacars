@@ -30,7 +30,8 @@ const YELLOW = '#ffd84a';
 
 /** Position, lap, times and speed for one player's viewport. */
 /** `touch`: on-screen controls fill the bottom corners, so speed and arsenal go to the top. */
-export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: World, carId: number, label: string | null, touch = false): void {
+/** `title`: what a session without laps is called (PRACTICE). */
+export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: World, carId: number, label: string | null, touch = false, title = 'PRACTICE'): void {
   const car = world.cars[carId];
   const race = world.race;
   const x = r.x + 6;
@@ -44,7 +45,7 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
     const lap = Math.max(1, Math.min(race.laps, car.lap));
     drawText(ctx, `LAP ${lap}/${race.laps}`, x, 40, { scale: 2 });
   } else {
-    drawText(ctx, 'PRACTICE', x, 6, { scale: 2, color: YELLOW });
+    drawText(ctx, title, x, 6, { scale: 2, color: YELLOW });
     drawText(ctx, car.lap > 0 ? `LAP ${car.lap}` : 'START', x, 24, { scale: 2 });
   }
   const lapTime = car.lap > 0 && !car.finished ? (world.tick - car.lapStartTick) * DT : 0;

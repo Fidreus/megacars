@@ -1,13 +1,15 @@
 // Records: per track, your own best lap and race times, and the world's top
-// ten verified laps. Left/right (or a tap on either side) switches track.
+// ten verified laps. Left/right (or a tap on either side) switches track;
+// up/down picks a lap on the world board and ENTER (or a tap on it) races
+// its ghost in a time trial.
 
 import { DT } from '../../../shared/config/constants.ts';
 import { boardKey, LEAGUE_NAMES, type League } from '../../../shared/game/leagues.ts';
-import type { Boards } from '../../../shared/game/records.ts';
+import type { Boards, RecordEntry } from '../../../shared/game/records.ts';
 import { TRACK_LIST } from '../../../shared/track/defs/index.ts';
 import type { NavState } from '../../input/nav.ts';
 import { fetchBoards, loadLocalRecords, trackRecords } from '../../game/records.ts';
-import { drawText } from '../font.ts';
+import { drawText, textWidth } from '../font.ts';
 import { formatTime } from './hud.ts';
 
 export class RecordsScreen {
@@ -19,6 +21,12 @@ export class RecordsScreen {
   me = '';
   /** Boards of this league. */
   league: League = 'standard';
+  /** Race the ghost of a board entry (time trial). */
+  onRace: ((track: string, league: League, entry: RecordEntry, rank: number) => void) | null = null;
+  /** Chosen entry on the world board. */
+  private sel = 0;
+  /** Where the world board's rows were drawn (UI pixels). */
+  private rows: { y: number; h: number; x: number; w: number }[] = [];
   private readonly onBack: () => void;
   private readonly onMove: () => void;
   private W = 1;
@@ -31,6 +39,7 @@ export class RecordsScreen {
   /** Open on a track and fetch the latest boards. */
   open(track: string, league: League = 'standard'): void {
     this.league = league;
+    this.sel = 0;
     this.index = Math.max(0, TRACK_LIST.findIndex((t) => t.id === track));
     this.loading = true;
     this.failed = false;
@@ -46,13 +55,46 @@ export class RecordsScreen {
       this.onBack();
       return;
     }
+    const board = this.board();
+    const racing = !!this.onRace && board.length > 0;
+    if (racing && (nav.up || nav.down)) {
+      this.sel = (this.sel + (nav.up ? -1 : 1) + board.length) % board.length;
+      this.onMove();
+      return;
+    }
+    if (racing && nav.click) {
+      const row = this.rows.findIndex((r) => nav.pointerX >= r.x && nav.pointerX < r.x + r.w && nav.pointerY >= r.y && nav.pointerY < r.y + r.h);
+      if (row >= 0 && row !== this.sel) {
+        this.sel = row;
+        this.onMove();
+        return;
+      }
+      if (row >= 0) {
+        this.race(board);
+        return;
+      }
+    }
+    if (racing && nav.confirm && board[this.sel]?.id) {
+      this.race(board);
+      return;
+    }
     let d = nav.left || nav.up ? -1 : nav.right || nav.down ? 1 : 0;
     if (nav.click) d = nav.pointerX < this.W / 2 ? -1 : 1;
     if (nav.confirm) d = 1;
     if (d) {
       this.index = (this.index + d + TRACK_LIST.length) % TRACK_LIST.length;
+      this.sel = 0;
       this.onMove();
     }
+  }
+
+  private board(): RecordEntry[] {
+    return this.boards?.[boardKey(TRACK_LIST[this.index].id, this.league)] ?? [];
+  }
+
+  private race(board: RecordEntry[]): void {
+    const e = board[this.sel];
+    if (e?.id) this.onRace?.(TRACK_LIST[this.index].id, this.league, e, this.sel + 1);
   }
 
   draw(ctx: CanvasRenderingContext2D, W: number, H: number): void {
@@ -93,14 +135,26 @@ export class RecordsScreen {
     if (this.loading && !this.boards) drawText(ctx, 'LOADING...', right, wy, { color: '#8090a8', scale: k });
     else if (this.failed && !this.boards) drawText(ctx, 'CANNOT REACH THE SERVER', right, wy, { color: '#ff6b5e', scale: k });
     else if (!board.length) drawText(ctx, 'NO RECORDS YET - BE THE FIRST!', right, wy, { color: '#8090a8', scale: k });
+    this.sel = Math.min(this.sel, Math.max(0, board.length - 1));
+    this.rows = [];
+    const rowH = short ? 10 : line;
+    const racing = !!this.onRace && board.length > 0;
     board.forEach((e, i) => {
       const you = e.name === this.me;
       const color = you ? '#ffd84a' : i === 0 ? '#ffffff' : '#c8d0dc';
-      drawText(ctx, `${String(i + 1).padStart(2)}. ${e.name.padEnd(12)} ${formatTime(e.ticks * DT)}`, right, wy, { color, scale: k });
-      wy += short ? 10 : line;
+      const text = `${String(i + 1).padStart(2)}. ${e.name.padEnd(12)} ${formatTime(e.ticks * DT)}`;
+      if (racing && i === this.sel) {
+        ctx.fillStyle = 'rgba(255,216,74,0.18)';
+        ctx.fillRect(right - 3, wy - 2, textWidth(text, k) + 6, rowH);
+        drawText(ctx, '>', right - 4 - 6 * k, wy, { color: '#ffd84a', scale: k });
+      }
+      drawText(ctx, text, right, wy, { color, scale: k });
+      this.rows.push({ x: right - 4, y: wy - 2, w: textWidth(text, k) + 8, h: rowH });
+      wy += rowH;
     });
 
-    drawText(ctx, 'LAPS FROM QUICK RACES AND PRACTICE, CHECKED BY THE SERVER - BEAT YOUR BEST TO SEND IT', W / 2, H - 22, { color: '#8090a8', align: 'center' });
-    drawText(ctx, '←→ TRACK   ESC BACK', W / 2, H - 11, { color: '#8090a8', align: 'center' });
+    drawText(ctx, 'LAPS FROM QUICK RACES, PRACTICE AND TIME TRIALS, CHECKED BY THE SERVER - BEAT YOUR BEST TO SEND IT', W / 2, H - 22, { color: '#8090a8', align: 'center' });
+    const keys = racing ? '←→ TRACK   ↑↓ PICK A LAP   ENTER RACE ITS GHOST   ESC BACK' : '←→ TRACK   ESC BACK';
+    drawText(ctx, keys, W / 2, H - 11, { color: '#8090a8', align: 'center' });
   }
 }

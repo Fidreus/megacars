@@ -15,6 +15,8 @@ export interface RaceSettings {
   mood: string;
   /** Free practice: no laps to finish, no countdown. */
   practice: boolean;
+  /** Time trial: practice alone with a stock car, against a ghost (never saved). */
+  timeTrial?: boolean;
   /** Missiles, mines, turbo and damage. */
   weapons: boolean;
   /** 0 a song per track, 1 shuffle, 2 off. */
