@@ -33,6 +33,7 @@ import { ControlsScreen } from './ui/screens/controls.ts';
 import { TouchControls } from './input/touch.ts';
 import { Haptics, PULSE } from './input/haptics.ts';
 import { feelItems } from './game/feelOptions.ts';
+import { SlowMotion } from './game/slowMotion.ts';
 import { TextBridge } from './input/textBridge.ts';
 import { drawHelp } from './ui/screens/help.ts';
 import { RecordsScreen } from './ui/screens/records.ts';
@@ -287,6 +288,8 @@ export class App {
   private flashTime = 0;
   private showTelemetry = false;
   private padIndex = -1;
+  /** The slow-motion beat on wrecks (offline: slows the game; online and split: camera only). */
+  readonly slowmo = new SlowMotion();
   /** Gamepad and phone vibration; each pad only feels its own player's car. */
   private readonly haptics = new Haptics({
     players: () => (this.mode === 'race' ? this.session.playerCars : []),
@@ -1582,6 +1585,7 @@ export class App {
     this.view.effects.steam = this.steam;
     this.fireworks = 0;
     this.shake = 0;
+    this.slowmo.reset();
     const split = this.mode === 'race' && session.playerCars.length === 2;
     this.renderer.setSplit(split);
     for (const vp of this.renderer.viewports) {
@@ -1740,7 +1744,8 @@ export class App {
       net.net.update(realDt, this.netHooks);
       alpha = net.net.alpha;
     } else {
-      this.acc = this.paused ? 0 : this.acc + dt;
+      if (!this.paused) this.slowmo.update(dt);
+      this.acc = this.paused ? 0 : this.acc + dt * this.slowmo.timeScale;
       let steps = 0;
       while (this.acc >= DT && steps < 6) {
         this.fixedStep();
@@ -2184,6 +2189,19 @@ export class App {
     }
   }
 
+  /** A local player's car was wrecked, or a local player wrecked a car in view: a slow-motion beat. */
+  private wreckBeat(car: number, other: number, dist: number): void {
+    const players = this.session.playerCars;
+    const w = this.world;
+    if (w.race.phase !== RacePhase.Racing) return;
+    let p = players.indexOf(car);
+    if (p < 0 && dist < 45) p = players.indexOf(other);
+    if (p < 0) return;
+    this.slowmo.enabled = this.settings.slowMotion !== false;
+    // The clock is the server's online, and two people share it in split screen.
+    this.slowmo.trigger(p, !this.netRace && players.length === 1);
+  }
+
   /** Sounds and messages for weapons, louder close to the (first) player. */
   private weaponEvent(kind: number, car: number, other: number, value: number, x: number, z: number): void {
     const me = this.player;
@@ -2213,6 +2231,7 @@ export class App {
       }
     }
     if (this.mode !== 'race') return;
+    if (kind === Ev.Wreck) this.wreckBeat(car, other, dist);
     if (kind === Ev.Wreck && mine) this.flashMessage('WRECKED!', 2);
     else if (kind === Ev.Explosion && value !== 3 && players.includes(other) && !mine) this.flashMessage(value === 2 ? 'MINED!' : 'DIRECT HIT!', 1.2);
   }
@@ -2262,6 +2281,7 @@ export class App {
     const follow = this.settings.camera === 'follow' && this.mode === 'race' && this.session.playerCars.includes(idx);
     // Zoom: the player's camera height, wider in split screen and behind the car.
     cam.viewHeight = VIEW_HEIGHT * CAM_HEIGHTS[this.settings.camHeight] * (this.renderer.isSplit ? 1.25 : 1) * (follow ? FOLLOW_ZOOM : 1) * this.debugZoom;
+    cam.viewHeight *= 1 - 0.1 * this.slowmo.push(v, this.renderer.isSplit);
     cam.follow = follow;
     cam.tilt = (follow ? FOLLOW_TILT : 57) * (Math.PI / 180);
     if (follow) {
@@ -2359,7 +2379,7 @@ export class App {
       if ((car.sliding || car.spinTicks > 0) && speed > 5) slide = Math.min(1, (slipDeg - 3) / 22) * Math.min(1, speed / 18);
       if (car.longAccel < -12 && speed > 8) slide = Math.max(slide, 0.55);
       slide = Math.max(0, slide);
-      engine.update(countdown ? throttle * 0.6 : speed01, throttle, 1, pan, now, 1, car.turboTicks > 0, slide);
+      engine.update(countdown ? throttle * 0.6 : speed01, throttle, 1, pan, now, this.slowmo.pitch, car.turboTicks > 0, slide);
       tyres.update(slide, Math.min(1, speed01), TYRE_SURFACE[car.surfRear] ?? TyreSurface.Paved, car.airborne > 0, now);
     });
     // The nearest opponents: quieter engines with stereo position and doppler.
@@ -2390,7 +2410,7 @@ export class App {
       const speed01 = Math.hypot(car.vx, car.vz) / this.vTop(car.id);
       // On the grid: a slow blip of the throttle, different for each car.
       const grid = 0.08 + 0.08 * (0.5 + 0.5 * Math.sin(this.time * 2.3 + car.id * 1.7));
-      engine.update(countdown ? grid : speed01, countdown ? 0.3 : throttle, fall * fall * 0.8, dx / 25, now, doppler);
+      engine.update(countdown ? grid : speed01, countdown ? 0.3 : throttle, fall * fall * 0.8, dx / 25, now, doppler * this.slowmo.pitch);
     });
     this.crowd.update(me ? this.crowdCloseness(me) : 0, now);
   }

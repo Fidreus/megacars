@@ -257,6 +257,27 @@ Servern komprimerar (brotli/gzip) och skickar ETag, så återbesök laddar
 nästan ingenting. Spelet kan installeras som app (PWA) och startar offline
 för spel mot datorn.
 
+## Spelkänsla
+
+**Vibration:** handkontroller (dual-rumble, där webbläsaren och kontrollen
+stöder det) och Android-mobiler (`navigator.vibrate`; iPhone saknar det och
+får ingenting) ger korta pulser för vägg- och bilkrockar, träffar av missil
+och mina, att bli totalad, hårda landningar, turbo som startar samt
+startljusen och GO. Styrkan följer hur hårt det small. I delad skärm känner
+varje kontroll bara sin egen bil (kontroll 1 = spelare 1, kontroll 2 =
+spelare 2). Nya händelser får en vibration med en rad i `RULES` i
+`src/client/input/haptics.ts`. Av/på under **OPTIONS → GAME FEEL → VIBRATION**
+(på som standard, sparas med övriga inställningar).
+
+**Slow motion:** när din bil blir totalad, eller du totalar en bil i bild,
+går spelet på ungefär en tredjedels fart i ca 0,8 s (verklig tid) och
+mjukas tillbaka, kameran zoomar in lite och motorljuden går ner i tonhöjd.
+Högst en gång var fjärde sekund. Bara klientens tid in i den fasta
+simuleringssteget skalas – simuleringen är orörd och varje tick körs och spelas
+in exakt en gång, så lap-rekord kan fortfarande kontrolleras. Online styr
+servern klockan, och i delad skärm delar två spelare på den: där blir det bara
+kamerarörelsen. Av/på under **OPTIONS → GAME FEEL → SLOW MOTION ON WRECKS**.
+
 ## Musik
 
 Trackermusik (MOD/XM) spelas med libopenmpt i en Web Worker; en liten AudioWorklet spelar upp det renderade ljudet, så ljudtråden aldrig blockeras.
