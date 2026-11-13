@@ -42,6 +42,9 @@ import { RecordsScreen } from './ui/screens/records.ts';
 import { ReplayRecorder, specProblem } from '../shared/game/records.ts';
 import { trackRace } from './analytics.ts';
 import { loadLocalRecords, noteLap, noteRace, submitRecord } from './game/records.ts';
+import { loadMedals, noteMedalLap } from './game/medals.ts';
+import { MEDAL_COLORS, MEDAL_NAMES, medalTimes } from '../shared/game/medals.ts';
+import { BannerQueue } from './ui/banners.ts';
 import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
 import { VERSION } from './version.ts';
 import { UpdateCheck } from './net/update.ts';
@@ -231,6 +234,10 @@ export class App {
   readonly update = new UpdateCheck();
   private updateOffered = false;
   private readonly localRecords = loadLocalRecords();
+  /** Medals won (kept apart from the records). */
+  private readonly medals = loadMedals();
+  /** Banners that slide in at the top: medals won, achievements unlocked. */
+  private readonly banners = new BannerQueue();
   /** The player's inputs this race, for a verified lap record (stock single-player races). */
   private replay: ReplayRecorder | null = null;
   /** A new personal best lap this race that hasn't been sent yet. */
@@ -2069,6 +2076,16 @@ export class App {
     });
   }
 
+  /** A clean lap (one that counts for personal records): a medal if it is a personal best under a medal time. */
+  private noteMedal(ticks: number): void {
+    const s = this.session;
+    if (!(s instanceof RaceSession) || isCustomId(s.track.def.id)) return;
+    const r = noteMedalLap(this.medals, s.track.def.id, s.spec.league, ticks);
+    if (!r.won) return;
+    this.banners.push({ title: `${MEDAL_NAMES[r.medal]} MEDAL!`, text: `${s.track.def.name.toUpperCase()} ${formatTime(ticks * DT)}`, color: MEDAL_COLORS[r.medal] });
+    playUi(this.audio, 'buy');
+  }
+
   /** Put a local player's car back on the track. */
   resetCar(id: number | undefined): void {
     if (id === undefined || this.world.race.phase === RacePhase.Countdown) return;
@@ -2141,6 +2158,7 @@ export class App {
         const best = car.bestLapTicks === e.value;
         const record = !!this.replay && !this.replay.spoiled && noteLap(this.localRecords, this.recordKey(), e.value);
         if (record && !this.localOnly) this.recordPending = true;
+        if (!!this.replay && !this.replay.spoiled) this.noteMedal(e.value);
         if (record) {
           this.flashMessage(`NEW LAP RECORD ${formatTime(e.value * DT)}`, 3);
           playUi(this.audio, 'buy');
@@ -2659,6 +2677,8 @@ export class App {
         color: '#9cff9c', align: 'right',
       });
     }
+    this.banners.update(dt);
+    this.banners.draw(ctx, W, Math.max(150, W - 250));
     this.drawTouchExtras(ctx, W, H);
     ui.end();
   }
@@ -2777,7 +2797,7 @@ export class App {
     const h = Math.round(w * 0.8);
     const x0 = Math.round(cx - w / 2);
     ctx.fillStyle = 'rgba(8,10,24,0.72)';
-    ctx.fillRect(x0, top - 6, w, h + 52);
+    ctx.fillRect(x0, top - 6, w, h + 63);
     ctx.fillStyle = '#ffd84a';
     ctx.fillRect(x0, top - 6, w, 1);
     const b = track.bounds;
@@ -2807,6 +2827,14 @@ export class App {
     y += 11;
     const best = this.localRecords[boardKey(track.def.id, this.settings.league)]?.lap ?? 0;
     drawText(ctx, best ? `YOUR BEST LAP ${formatTime(best * DT)}` : 'NO LAP TIME YET', cx, y, { color: '#8090a8', align: 'center' });
+    // The medal won, and what the next one takes.
+    const times = medalTimes(track.def.id, this.settings.league);
+    if (times) {
+      const got = this.medals[boardKey(track.def.id, this.settings.league)]?.medal ?? 0;
+      const targets = [times.bronze, times.silver, times.gold];
+      const text = got < 3 ? `${got ? `${MEDAL_NAMES[got]} - ` : ''}${MEDAL_NAMES[got + 1]} AT ${formatTime(targets[got] * DT)}` : 'GOLD MEDAL!';
+      drawText(ctx, text, cx, y + 11, { color: MEDAL_COLORS[got || 1], align: 'center' });
+    }
   }
 
   private drawCareer(ctx: CanvasRenderingContext2D, W: number, H: number, dt: number): void {

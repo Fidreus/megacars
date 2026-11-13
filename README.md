@@ -245,6 +245,24 @@ varven själv – en påhittad tid kan alltså inte komma in. Topplistan sparas 
 `$DATA_DIR/records.json` (standard `./data`); i produktion bör `DATA_DIR`
 peka på en beständig volym.
 
+## Medaljer
+
+Varje inbyggd bana har en BRONS-, SILVER- och GULDtid per liga (STANDARD,
+SUPERCARS, MEGACARS). Tiderna räknas fram av datorförarna: brons efter den
+LÄTTA förarens bästa ensamvarv (+2 %), silver efter MEDEL och guld en
+aning (1,5 %) snabbare än den SVÅRA förarens bästa varv. Tabellen ligger
+incheckad i `src/shared/game/medalTimes.ts` så att spelet inte simulerar
+något vid körning. När fysiken eller banorna ändras skriver `npm run medals`
+om tabellen (deterministiskt, några sekunder); `medals.test.ts` kollar att
+varje bana och liga finns med och att brons > silver > guld.
+
+En medalj vinns med ett personbästa-varv under tiden, under samma villkor som
+personliga rekord (snabbrace och träning med en person, ingen felsökningshjälp;
+spelarbanor har inga medaljer). Medaljerna sparas för sig i webbläsaren
+(`megacars.medals.v1`, per bana och liga) och försvinner aldrig. De syns på
+RECORDS-skärmen (de tre måltiderna, vunna medaljer tända), på bankortet i
+SINGLE RACE och som en kort banderoll ("GOLD MEDAL!") när en vinns.
+
 ## Grafik och prestanda
 
 **OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM eller LOW. AUTO börjar på HIGH och
