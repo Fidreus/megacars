@@ -42,7 +42,10 @@ import { RecordsScreen } from './ui/screens/records.ts';
 import { ReplayRecorder, specProblem } from '../shared/game/records.ts';
 import { trackRace } from './analytics.ts';
 import { loadLocalRecords, noteLap, noteRace, submitRecord } from './game/records.ts';
-import { loadMedals, noteMedalLap } from './game/medals.ts';
+import { loadMedals, medalTotals, noteMedalLap } from './game/medals.ts';
+import { Achievements } from './game/achievements.ts';
+import type { AchInput, RaceSummary } from './game/achievementRules.ts';
+import { AchievementsScreen } from './ui/screens/achievements.ts';
 import { MEDAL_COLORS, MEDAL_NAMES, medalTimes } from '../shared/game/medals.ts';
 import { BannerQueue } from './ui/banners.ts';
 import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
@@ -148,7 +151,7 @@ function savedLabel(t: SavedTrack): string {
   return `${t.name}${t.source === 'shared' ? ' (LINK)' : t.source === 'published' ? ' (PUBLISHED)' : ''}`;
 }
 
-type Mode = 'title' | 'setup' | 'page' | 'editor' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'controls' | 'help' | 'records' | 'rooms' | 'credits';
+type Mode = 'title' | 'setup' | 'page' | 'editor' | 'online' | 'lobby' | 'race' | 'cup' | 'shop' | 'standings' | 'career' | 'seasonEnd' | 'controls' | 'help' | 'records' | 'rooms' | 'credits' | 'achievements';
 
 export class App {
   readonly renderer: RetroRenderer;
@@ -238,6 +241,15 @@ export class App {
   private readonly medals = loadMedals();
   /** Banners that slide in at the top: medals won, achievements unlocked. */
   private readonly banners = new BannerQueue();
+  /** What the player has unlocked (saved in the browser). */
+  private readonly ach = new Achievements();
+  private readonly achievementsScreen: AchievementsScreen;
+  /** Debug tools were used in this race: it unlocks nothing. */
+  private achSpoiled = false;
+  /** The end-of-race summary has been sent for this race. */
+  private achSummarySent = false;
+  /** The same tick input every tick (no allocation). */
+  private readonly achTick = { kind: 'tick', w: null, me: null, track: null } as unknown as Extract<AchInput, { kind: 'tick' }>;
   /** The player's inputs this race, for a verified lap record (stock single-player races). */
   private replay: ReplayRecorder | null = null;
   /** A new personal best lap this race that hasn't been sent yet. */
@@ -485,6 +497,11 @@ export class App {
     this.audio.volume = (this.settings.soundVolume / 10) * 0.9;
     this.music.onSong = () => (this.songToast = 4);
     this.recordsScreen = new RecordsScreen(() => this.toTitle(), () => playUi(this.audio, 'move'));
+    this.achievementsScreen = new AchievementsScreen(this.ach, () => this.toTitle(), () => playUi(this.audio, 'move'));
+    this.ach.onUnlock = (r) => {
+      this.banners.push({ title: `UNLOCKED: ${r.name}`, text: r.desc, color: '#9cff9c' });
+      playUi(this.audio, 'buy');
+    };
     this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'page'), (k) => playUi(this.audio, k));
     this.pauseAll = this.pauseMenu.items;
     this.tuneItem = this.pauseAll[1];
@@ -634,6 +651,13 @@ export class App {
           this.mode = 'records';
           this.recordsScreen.me = cleanName(this.online.name);
           this.recordsScreen.open(this.settings.track, this.settings.league);
+        },
+      },
+      {
+        label: () => `ACHIEVEMENTS ${this.ach.total.done}/${this.ach.total.all}`,
+        select: () => {
+          this.mode = 'achievements';
+          this.achievementsScreen.open();
         },
       },
       { label: () => 'OPTIONS', select: () => this.openOptions() },
@@ -819,7 +843,10 @@ export class App {
     if (!window.confirm(`Publish "${def.name}" for everybody to see and race, by ${this.online.name}?`)) return;
     ed.flash('PUBLISHING - THE SERVER TEST DRIVES IT FIRST...');
     void publishTrack(encodeTrack(def), this.online.name).then((r) => {
-      if (r.ok) ed.flash(r.existed ? 'IT IS ALREADY PUBLISHED' : 'PUBLISHED - FIND IT UNDER PUBLISHED TRACKS');
+      if (r.ok) {
+        ed.flash(r.existed ? 'IT IS ALREADY PUBLISHED' : 'PUBLISHED - FIND IT UNDER PUBLISHED TRACKS');
+        if (!r.existed && !this.params.debug) this.ach.feed({ kind: 'publish' });
+      }
       else ed.flash(r.error === 'offline' ? 'CANNOT REACH THE SERVER' : `NOT PUBLISHED: ${(r.error ?? '').toUpperCase()}`);
     });
   }
@@ -1453,7 +1480,7 @@ export class App {
 
   /** What the music should be doing for the current screen. */
   private musicScene(): MusicScene {
-    const titleish: Mode[] = ['title', 'setup', 'editor', 'controls', 'help', 'records', 'credits'];
+    const titleish: Mode[] = ['title', 'setup', 'editor', 'controls', 'help', 'records', 'achievements', 'credits'];
     if (titleish.includes(this.mode) || (this.mode === 'page' && this.pageReturn === 'title')) return { kind: 'title' };
     if (this.mode === 'seasonEnd' || this.mode === 'standings' || this.showingResults) return { kind: 'results' };
     if (this.mode === 'race') {
@@ -1510,6 +1537,10 @@ export class App {
     this.replay = !spec && rs.playerCars.length === 1 && checked && fair ? new ReplayRecorder() : null;
     this.recordPending = false;
     this.recordNote = '';
+    // Achievements: a fresh race, and nothing counts if debug tools are in play.
+    this.ach.startRace();
+    this.achSummarySent = false;
+    this.achSpoiled = this.params.debug || (practice && isTuned(this.tuning));
     trackRace({
       track: rs.track.def.id,
       mode: this.cupRace ? (this.career ? 'career' : 'cup') : practice ? 'practice' : 'quick',
@@ -1956,6 +1987,10 @@ export class App {
       this.recordsScreen.handle(nav);
       return;
     }
+    if (this.mode === 'achievements') {
+      this.achievementsScreen.handle(nav);
+      return;
+    }
     if (this.mode === 'rooms') {
       if (nav.back) this.mode = 'online';
       else this.roomsMenu.handle(nav);
@@ -1983,7 +2018,8 @@ export class App {
         const cup = this.cup!;
         if (isOver(cup) && this.career) {
           // Season over: bonus, promotion, and the next season set up.
-          endSeason(this.career);
+          const season = endSeason(this.career);
+          if (!this.params.debug) this.ach.feed({ kind: 'season', outcome: season.outcome });
           this.cup = this.career.cup;
           saveCareer(this.career);
           this.mode = 'seasonEnd';
@@ -2076,6 +2112,37 @@ export class App {
     });
   }
 
+  /** The local player's race is over: tell the achievements how it went. */
+  private achRaceSummary(place: number, car: CarState, online: boolean): void {
+    if (this.achSummarySent || this.achSpoiled) return;
+    this.achSummarySent = true;
+    const s = this.session;
+    const r: RaceSummary = {
+      track: s.track.def.id,
+      league: s.league ?? 'standard',
+      mode: online ? 'online' : this.cupRace ? (this.career ? 'career' : 'cup') : 'quick',
+      cars: s.world.cars.length,
+      place,
+      laps: s.world.race.laps,
+      weapons: !!s.world.race.weapons,
+      night: this.mood.lights,
+      kills: car.kills,
+      damage: car.damage,
+      live: !online,
+    };
+    this.ach.feed({ kind: 'race', r });
+  }
+
+  /** Online, once the results show (the race was predicted until then): did this player place? */
+  private achOnlineResult(): void {
+    const net = this.netRace?.net;
+    if (!net || this.achSummarySent || !this.showingResults || net.spectating) return;
+    const id = this.session.playerCars[0];
+    const place = this.world.race.finishOrder.indexOf(id) + 1;
+    const people = net.spec.entrants.filter((e) => e.playerId >= 0).length;
+    if (place > 0 && people >= 2) this.achRaceSummary(place, this.world.cars[id], true);
+  }
+
   /** A clean lap (one that counts for personal records): a medal if it is a personal best under a medal time. */
   private noteMedal(ticks: number): void {
     const s = this.session;
@@ -2084,6 +2151,12 @@ export class App {
     if (!r.won) return;
     this.banners.push({ title: `${MEDAL_NAMES[r.medal]} MEDAL!`, text: `${s.track.def.name.toUpperCase()} ${formatTime(ticks * DT)}`, color: MEDAL_COLORS[r.medal] });
     playUi(this.audio, 'buy');
+    this.ach.feed({ kind: 'medal', track: s.track.def.id, league: leagueOf(s.spec.league), medal: r.medal, totals: medalTotals(this.medals) });
+  }
+
+  /** Debug tools were used: this race unlocks nothing. */
+  spoilAchievements(): void {
+    this.achSpoiled = true;
   }
 
   /** Put a local player's car back on the track. */
@@ -2116,6 +2189,7 @@ export class App {
     const players = this.playerInputs();
     // Debug driving aids would make the recorded race unreproducible.
     if (this.replay && (this.input.overrideTicks > 0 || this.player.aiDriven)) this.replay.spoiled = true;
+    if (this.input.overrideTicks > 0 || (this.player.aiDriven && !this.player.finished)) this.achSpoiled = true;
     s.playerCars.forEach((id, p) => this.input.sample(players[p], s.inputs[id], p === 0));
     this.replay?.add(s.inputs[s.playerCars[0]]);
     this.view.beforeStep();
@@ -2134,8 +2208,11 @@ export class App {
       this.pitHinted = true;
       this.flashMessage('BADLY DAMAGED - DRIVE THROUGH THE PIT LANE AT THE START TO REPAIR', 3);
     }
+    // Achievements: one person at this screen, offline (online worlds are predicted and rewound).
+    const achOn = this.mode === 'race' && !this.netRace && players.length === 1 && !this.achSpoiled;
     for (let k = 0; k < ev.count; k++) {
       const e = ev.list[k];
+      if (achOn) this.ach.feed({ kind: 'event', e, w, me: w.cars[players[0]] });
       this.haptics.event(e);
       if ((e.kind === Ev.WallHit || e.kind === Ev.CarHit) && this.audio.ready) {
         const dx = e.x - me.x;
@@ -2158,7 +2235,7 @@ export class App {
         const best = car.bestLapTicks === e.value;
         const record = !!this.replay && !this.replay.spoiled && noteLap(this.localRecords, this.recordKey(), e.value);
         if (record && !this.localOnly) this.recordPending = true;
-        if (!!this.replay && !this.replay.spoiled) this.noteMedal(e.value);
+        if (!!this.replay && !this.replay.spoiled && !this.achSpoiled) this.noteMedal(e.value);
         if (record) {
           this.flashMessage(`NEW LAP RECORD ${formatTime(e.value * DT)}`, 3);
           playUi(this.audio, 'buy');
@@ -2169,6 +2246,7 @@ export class App {
           this.crowd?.cheer(this.crowdCloseness(car) * 0.8 + 0.1, 1.6);
         }
       } else if (e.kind === Ev.Finish && players.includes(e.car)) {
+        if (achOn) this.achRaceSummary(e.other, w.cars[e.car], false);
         playFanfare(this.audio, e.other <= 3);
         if (this.replay && !this.replay.spoiled && this.mode === 'race') {
           const car = w.cars[e.car];
@@ -2204,6 +2282,13 @@ export class App {
         playStartBeep(this.audio, true);
         this.crowd?.cheer(0.7, 2.6);
       }
+    }
+    if (achOn) {
+      const t = this.achTick;
+      t.w = w;
+      t.me = w.cars[players[0]];
+      t.track = this.session.track;
+      this.ach.feed(t);
     }
     // Taking off from a ramp.
     players.forEach((id, p) => {
@@ -2354,6 +2439,7 @@ export class App {
     }
     this.updateBoostPads();
     this.updatePodium(dt);
+    this.achOnlineResult();
     const views = this.renderer.viewCount;
     for (let v = 0; v < views; v++) this.updateCamera(v, dt);
     const cam0 = this.renderer.viewports[0].cam;
@@ -2612,6 +2698,8 @@ export class App {
       drawHelp(ctx, W, H, this.controls);
     } else if (this.mode === 'records') {
       this.recordsScreen.draw(ctx, W, H);
+    } else if (this.mode === 'achievements') {
+      this.achievementsScreen.draw(ctx, W, H);
     } else if (this.mode === 'controls') {
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(0, 0, W, H);
@@ -2687,7 +2775,7 @@ export class App {
   private drawTouchExtras(ctx: CanvasRenderingContext2D, W: number, H: number): void {
     this.backRect = null;
     if (!this.touch.enabled) return;
-    const backModes: Mode[] = ['setup', 'page', 'online', 'rooms', 'cup', 'shop', 'controls', 'help', 'records', 'credits', 'career'];
+    const backModes: Mode[] = ['setup', 'page', 'online', 'rooms', 'cup', 'shop', 'controls', 'help', 'records', 'achievements', 'credits', 'career'];
     if (backModes.includes(this.mode) && !(this.mode === 'controls' && this.controlsScreen.capturing)) {
       const r = { x: 4, y: 4, w: 52, h: 20 };
       ctx.fillStyle = 'rgba(10,12,26,0.75)';

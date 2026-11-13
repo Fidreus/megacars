@@ -263,6 +263,31 @@ spelarbanor har inga medaljer). Medaljerna sparas för sig i webbläsaren
 RECORDS-skärmen (de tre måltiderna, vunna medaljer tända), på bankortet i
 SINGLE RACE och som en kort banderoll ("GOLD MEDAL!") när en vinns.
 
+## Prestationer
+
+**ACHIEVEMENTS** i titelmenyn listar 25 prestationer, från sådant man gör de
+första tio minuterna (köra klart ett race, vinna, vraka en bil, hoppa 40 m,
+hålla en drift i 4 s, åka i mörker) via några kvällar (tio pallplatser,
+vinna från sista plats, vinna utan att skjuta, avsluta med under 5 %
+skada, brons-silver-guld, befordran i karriären, publicera en bana, vinna
+online) till veckor (vinna på varje bana, 25 vinster, 50 vrak, MEGACARS
+CHAMPION, försvara titeln, guld på varje bana i en liga och i alla). Låsta
+är dämpade, räknande har framsteg ("7/10") och överst står summan. När en
+låses upp glider en liten banderoll in högst upp i mitten (aldrig över
+vägen); flera på en gång visas efter varandra. Läget sparas i webbläsaren
+(`megacars.achievements.v1`).
+
+Reglerna är en tabell i `src/client/game/achievementRules.ts`: varje post har
+id, namn, en rad text, ev. mål och en `feed`-funktion som får det klienten ser
+(simuleringshändelser och bilens tillstånd varje tick, en sammanfattning när
+racet är slut, en vunnen medalj, ett avslutat säsongsår, en publicerad bana)
+och flyttar sin egen mätare. En ny prestation för en ny funktion är en post i
+tabellen (och vid behov en ny ingångstyp). Räknas bara för en person vid
+skärmen offline (online ses bara slutresultatet, delad skärm räknar inte), och
+aldrig med felsökningsverktyg (`?debug`, `__megacars.drive/autopilot/reset/
+setTuning`, flyttad bil, ändrad fysik i träning). Enhetstester finns i
+`achievements.test.ts`.
+
 ## Grafik och prestanda
 
 **OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM eller LOW. AUTO börjar på HIGH och
