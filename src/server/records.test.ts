@@ -1,10 +1,11 @@
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING } from '../shared/config/tuning.ts';
 import { createRaceWorld } from '../shared/game/raceSetup.ts';
-import { ReplayRecorder } from '../shared/game/records.ts';
+import { SIM_VERSION } from '../shared/config/constants.ts';
+import { ReplayRecorder, type Boards, type StoredReplay } from '../shared/game/records.ts';
 import { PROTOCOL_VERSION, type RaceSpec } from '../shared/net/protocol.ts';
 import { quantizeInput, type CarInput } from '../shared/sim/input.ts';
 import { stepWorld } from '../shared/sim/step.ts';
@@ -47,5 +48,77 @@ describe('record store', () => {
     const bad = await store.submit({ v: PROTOCOL_VERSION, name: 'cheat', spec: { ...spec, entrants: [{ ...spec.entrants[0], loadout: {} as never }] }, replay });
     expect(bad.ok).toBe(false);
     expect((await store.submit({ v: 1, name: 'old', spec, replay })).error).toBe('version');
+  });
+});
+
+describe('record boards per simulation version', () => {
+  const old = { frostring: [{ name: 'OLDTIMER', ticks: 1234, at: 1 }], 'gonetrack@super': [{ name: 'X', ticks: 999, at: 2 }] };
+
+  it('starts empty next to an old records.json and never touches it', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-rec-'));
+    const oldText = JSON.stringify(old);
+    writeFileSync(join(dir, 'records.json'), oldText);
+    const store = new RecordStore(dir);
+    expect(store.served()).toEqual({});
+    const { replay, best } = record(60 * 120);
+    const r = await store.submit({ v: PROTOCOL_VERSION, name: 'new', spec, replay });
+    expect(r).toEqual({ ok: true, best, rank: 1 });
+    store.flush();
+    expect(readFileSync(join(dir, 'records.json'), 'utf8')).toBe(oldText);
+    const saved = JSON.parse(readFileSync(join(dir, 'records', `v${SIM_VERSION}`, 'records.json'), 'utf8')) as Boards;
+    expect(saved.frostring.map((e) => e.name)).toEqual(['NEW']);
+    // The race is kept beside the board and comes back as it was sent.
+    const id = saved.frostring[0].id!;
+    const kept = JSON.parse(store.replayText(id)!) as StoredReplay;
+    expect(kept).toMatchObject({ v: SIM_VERSION, key: 'frostring', name: 'NEW', ticks: best, replay });
+    expect(kept.spec).toEqual(spec);
+    expect(store.replayText('../../records')).toBeNull();
+    // A server restart reads the same board; the next version starts over and leaves this one be.
+    expect(new RecordStore(dir).served().frostring[0].id).toBe(id);
+    const next = new RecordStore(dir, SIM_VERSION + 1);
+    expect(next.served()).toEqual({});
+    expect(new RecordStore(dir).served().frostring[0].name).toBe('NEW');
+    expect(readFileSync(join(dir, 'records.json'), 'utf8')).toBe(oldText);
+  });
+
+  it('removes the replay of an entry that falls off the board', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-rec-'));
+    const vdir = join(dir, 'records', `v${SIM_VERSION}`);
+    mkdirSync(join(vdir, 'replays'), { recursive: true });
+    const { replay, best } = record(60 * 120);
+    // Nine faster laps and one slower: the new lap pushes the slow one off.
+    const board = Array.from({ length: 10 }, (_, k) => ({ name: `D${k}`, ticks: k < 9 ? best - 100 + k : best + 50, at: k, id: `seed000${k}` }));
+    writeFileSync(join(vdir, 'records.json'), JSON.stringify({ frostring: board, 'unknowntrack@mega': [{ name: 'Z', ticks: 5, at: 0, id: 'keepme000' }] }));
+    for (const e of board) writeFileSync(join(vdir, 'replays', `${e.id}.json`), '{}');
+    writeFileSync(join(vdir, 'replays', 'keepme000.json'), '{}');
+    writeFileSync(join(vdir, 'replays', 'orphan000.json'), '{}');
+    const store = new RecordStore(dir);
+    expect(existsSync(join(vdir, 'replays', 'orphan000.json'))).toBe(false);
+    // A board for a track this server doesn't know is kept, just not shown.
+    expect(Object.keys(store.served())).toEqual(['frostring']);
+    const r = await store.submit({ v: PROTOCOL_VERSION, name: 'late', spec, replay });
+    expect(r.rank).toBe(10);
+    // The dropped replay goes only once the board without it is saved.
+    expect(existsSync(join(vdir, 'replays', 'seed0009.json'))).toBe(true);
+    store.flush();
+    expect(existsSync(join(vdir, 'replays', 'seed0009.json'))).toBe(false);
+    expect(existsSync(join(vdir, 'replays', 'seed0008.json'))).toBe(true);
+    expect(existsSync(join(vdir, 'replays', 'keepme000.json'))).toBe(true);
+    const saved = JSON.parse(readFileSync(join(vdir, 'records.json'), 'utf8')) as Boards;
+    expect(saved['unknowntrack@mega']).toHaveLength(1);
+    expect(store.replayText(saved.frostring[9].id!)).not.toBeNull();
+  });
+
+  it('moves an unreadable board aside instead of overwriting it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-rec-'));
+    const vdir = join(dir, 'records', `v${SIM_VERSION}`);
+    mkdirSync(join(vdir, 'replays'), { recursive: true });
+    writeFileSync(join(vdir, 'records.json'), '{"frostring": [trunc');
+    writeFileSync(join(vdir, 'replays', 'abcdef123.json'), '{}');
+    const store = new RecordStore(dir);
+    expect(store.served()).toEqual({});
+    expect(readdirSync(vdir).some((f) => f.startsWith('records.json.bad-'))).toBe(true);
+    // Its replays are not mistaken for orphans.
+    expect(existsSync(join(vdir, 'replays', 'abcdef123.json'))).toBe(true);
   });
 });

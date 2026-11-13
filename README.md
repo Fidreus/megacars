@@ -284,13 +284,56 @@ Banorna sparas i `$DATA_DIR/tracks.json`. API:
 
 **RECORDS** i titelmenyn visar per bana ditt bästa varv och dina bästa
 racetider (sparas i webbläsaren) och världens topp 10 bästa varv. Slår du
-ditt rekord i ett snabbrace eller i träning med serienbil skickas racet till
+ditt rekord i ett snabbrace, i träning eller i en tidskörning med serienbil skickas racet till
 servern: din inmatning tick för tick (komprimerad, typiskt 30–50 kB) och
 racets uppsättning. Eftersom simuleringen är deterministisk spelar servern
 upp racet igen i en egen tråd (≈1 s för 3 minuter med 8 bilar) och mäter
 varven själv – en påhittad tid kan alltså inte komma in. Topplistan sparas i
-`$DATA_DIR/records.json` (standard `./data`); i produktion bör `DATA_DIR`
-peka på en beständig volym.
+`$DATA_DIR/records/v<SIM_VERSION>/records.json` (standard `./data`); i
+produktion bör `DATA_DIR` peka på en beständig volym.
+
+Topplistorna hör till en simuleringsversion (`SIM_VERSION`): när fysiken
+ändras börjar listorna om i en ny mapp, och gamla tider ligger kvar orörda
+på disk men visas inte. Tiderna från före version 25 ligger kvar i
+`$DATA_DIR/records.json`. En lista som inte går att läsa flyttas undan
+(`records.json.bad-<tid>`) i stället för att skrivas över.
+
+För varje plats på en lista sparar servern det kontrollerade racet (racets
+uppsättning och inmatningen) som en egen fil bredvid listan,
+`records/v<version>/replays/<id>.json` (30–50 kB, packas till ~10 kB), så att
+andra kan köra mot det som spöke. Filen tas bort när platsen faller ur
+listan. `GET /api/records/replay/<id>` hämtar det (id står på platsen i
+`GET /api/records`); ett id:s race ändras aldrig, så svaret får cachas för
+evigt. Högst 30 hämtningar per minut och adress. Dina egna rekord
+i webbläsaren sparas också per version (`megacars.records.v1.sim<version>`);
+de gamla finns kvar i localStorage men visas inte.
+
+## Tidskörning (TIME TRIAL)
+
+**TIME TRIAL** i titelmenyn: ensam på banan, inga vapen, serienbil (inte
+den egna tuningen) och hur många varv som helst – fri träning med ett
+spöke att jaga. Välj bana, klass och spöke: **OFF**, **MY BEST** (ditt
+bästa varv på banan i den klassen), **WORLD RECORD** (etta på världslistan)
+eller båda. På egna banor finns ingen världslista, där finns bara MY BEST.
+Valet sparas.
+
+Spöket är en genomskinlig bil utan kollisioner och ljud (MY BEST cyan,
+världsrekordet gult) som börjar sitt varv varje gång du börjar ett, så du
+kör alltid samma varv från linjen. Det bleknar när det ligger ovanpå din
+bil. Överst i mitten står skillnaden mot spöket på samma ställe på banan
+(uppdateras tio gånger i sekunden, grön före, röd efter; med två spöken
+jämförs mot det snabbare), och efter varje varv en kort rad med
+skillnaden för hela varvet. Ett nytt personbästa blir ditt spöke direkt.
+
+MY BEST sparas i webbläsarens IndexedDB (position, höjd, riktning och
+körd sträcka varje tick, ~20 byte per tick, ~70 kB för en minut), per
+simuleringsversion som rekorden; spöket sparas från varje nytt personbästa
+varv, även i snabbrace och träning. Världsrekordets race hämtas från
+servern, spelas upp igen i en Web Worker (en hel session kan ta några
+sekunder) och det snabbaste varvet plockas ut; det måste ha exakt samma tid
+som på listan, annars visas det inte. Det sparas, ett per bana och klass.
+I **RECORDS** väljer ↑↓ (eller ett tryck) en plats på världslistan och
+ENTER (eller ett tryck till) startar en tidskörning mot just den.
 
 ## Grafik och prestanda
 
@@ -405,7 +448,9 @@ att alla bilar går i mål.
 Felsökning i konsolen: `__megacars.state()`, `.startRace({ players: 2 })`,
 `.advance(ticks)`, `.pause()`, `.autopilot()`, `.debug.crawlTest()`,
 `.debug.bench()`, `.debug.look({ mood, palette, crt })`, `.debug.snap(namn)`,
-`.online()` (anslutning, rum, förutsägelsens lead/takt).
+`.online()` (anslutning, rum, förutsägelsens lead/takt), `.timeTrial()`
+(spöken, avstånd), `.worldGhost(bana, klass, plats)` (hämtar och spelar upp
+en plats på världslistan, jämför varvtiden), `.keepLapAsMyGhost()`.
 
 ## Användningslogg
 

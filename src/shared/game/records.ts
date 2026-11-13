@@ -22,7 +22,26 @@ export interface RecordEntry {
   ticks: number;
   /** When it was set (ms since 1970). */
   at: number;
+  /** The kept replay of the race (GET /api/records/replay/<id>); none on older entries. */
+  id?: string;
 }
+
+/** A board entry's verified race, as the server keeps and serves it. */
+export interface StoredReplay {
+  /** Simulation version it was checked with. */
+  v: number;
+  /** Board key ("greenvalley@super"). */
+  key: string;
+  name: string;
+  /** The lap time on the board (ticks). */
+  ticks: number;
+  at: number;
+  spec: RaceSpec;
+  replay: string;
+}
+
+/** Ids of board entries' replays: short, lower-case letters and digits. */
+export const REPLAY_ID = /^[a-z0-9]{8,32}$/;
 
 export type Boards = Record<string, RecordEntry[]>;
 

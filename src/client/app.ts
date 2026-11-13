@@ -42,6 +42,10 @@ import { RecordsScreen } from './ui/screens/records.ts';
 import { ReplayRecorder, specProblem } from '../shared/game/records.ts';
 import { trackRace } from './analytics.ts';
 import { loadLocalRecords, noteLap, noteRace, submitRecord } from './game/records.ts';
+import { ghostChoiceFor, TimeTrial, timeTrialItems } from './game/timeTrial.ts';
+import { saveMyGhost } from './game/ghostStore.ts';
+import { LapTape } from '../shared/game/ghost.ts';
+import type { RecordEntry } from '../shared/game/records.ts';
 import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
 import { VERSION } from './version.ts';
 import { UpdateCheck } from './net/update.ts';
@@ -236,6 +240,12 @@ export class App {
   private replay: ReplayRecorder | null = null;
   /** A new personal best lap this race that hasn't been sent yet. */
   private recordPending = false;
+  /** The player's poses lap by lap (ghost of a new best lap). */
+  private lapTape: LapTape | null = null;
+  /** Time trial: the ghosts and the gap to them. */
+  private timeTrial: TimeTrial | null = null;
+  /** Time trial against this board entry (from RECORDS) instead of the world record. */
+  private ttEntry: { entry: RecordEntry; rank: number } | null = null;
   /** What happened to the last lap sent to the boards (shown with the results). */
   private recordNote = '';
   /** A world-board record waits for the player to type a name. */
@@ -479,6 +489,12 @@ export class App {
     this.audio.volume = (this.settings.soundVolume / 10) * 0.9;
     this.music.onSong = () => (this.songToast = 4);
     this.recordsScreen = new RecordsScreen(() => this.toTitle(), () => playUi(this.audio, 'move'));
+    this.recordsScreen.onRace = (track, league, entry, rank) => {
+      this.settings.track = track;
+      this.settings.league = league;
+      saveSettings(this.settings);
+      this.startTimeTrial({ entry, rank });
+    };
     this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'page'), (k) => playUi(this.audio, k));
     this.pauseAll = this.pauseMenu.items;
     this.tuneItem = this.pauseAll[1];
@@ -617,6 +633,7 @@ export class App {
     return [
       ...update,
       { label: () => 'SINGLE RACE', select: () => this.toSetup() },
+      { label: () => 'TIME TRIAL', select: () => this.openTimeTrial() },
       { label: () => 'CHAMPIONSHIP', select: () => { this.career = null; this.mode = 'cup'; this.cupMenu.index = loadCup() ? 0 : 1; } },
       { label: () => 'CAREER', select: () => this.toCareer() },
       { label: () => 'PLAY ONLINE', select: () => this.toOnline() },
@@ -670,6 +687,31 @@ export class App {
       { label: () => 'FREE PRACTICE', select: () => this.startRace({ ...s, practice: true, players: 1, opponents: 0 }) },
       { label: () => 'BACK', select: () => this.toTitle() },
     ];
+  }
+
+  /** TIME TRIAL: track, league and ghost, then alone on the track. */
+  private openTimeTrial(): void {
+    const s = this.settings;
+    this.openPage('TIME TRIAL', timeTrialItems({
+      settings: s,
+      tracks: () => [...TRACK_LIST.map((t) => t.id), ...myTracks().map((t) => t.id).filter(playable)],
+      trackName,
+      leagues: LEAGUES,
+      leagueName: (l) => LEAGUE_NAMES[l],
+      local: isCustomId,
+      best: () => this.localRecords[boardKey(s.track, s.league)]?.lap ?? 0,
+      changed: (track) => {
+        saveSettings(s);
+        if (track) this.showAttract('page');
+      },
+      start: () => this.startTimeTrial(),
+    }), 'ALONE, NO WEAPONS, STOCK CAR, ENDLESS LAPS - BEAT THE GHOST');
+  }
+
+  /** Time trial on the chosen track and league (against a board entry, if given). */
+  private startTimeTrial(vs: { entry: RecordEntry; rank: number } | null = null): void {
+    this.ttEntry = vs;
+    this.startRace({ ...this.settings, practice: true, timeTrial: true, weapons: false, players: 1, opponents: 0 });
   }
 
   private toSetup(): void {
@@ -1485,11 +1527,13 @@ export class App {
     this.qualityWatch.grace = 4;
     // The tuning panel's handling only drives free practice; races use the stock car.
     const practice = !!settings.practice && !spec;
-    if (!practice) this.tuningPanel?.hide();
+    // Time trial is practice with the stock car.
+    const ownTuning = practice && !settings.timeTrial;
+    if (!ownTuning) this.tuningPanel?.hide();
     else if (isTuned(this.tuning)) this.flashMessage('TUNED HANDLING (PAUSE > TUNE HANDLING)', 3);
     const league = leagueOf(spec?.league ?? settings.league);
     if (league !== 'standard') this.flashMessage(`${LEAGUE_NAMES[league]}!`, 2.5);
-    this.setSession(new RaceSession({ ...settings }, practice ? this.tuning : cloneTuning(DEFAULT_TUNING), spec?.seed, spec));
+    this.setSession(new RaceSession({ ...settings }, ownTuning ? this.tuning : cloneTuning(DEFAULT_TUNING), spec?.seed, spec));
     // Quick races and practice with one person and a stock car can set verified records.
     const rs = this.session as RaceSession;
     // Player tracks have no world boards: their bests are kept here, with a stock car.
@@ -1500,10 +1544,22 @@ export class App {
       countPlay(rs.track.def.id);
     }
     const checked = specProblem(this.localOnly ? { ...rs.spec, track: TRACK_LIST[0].id } : rs.spec) === null;
-    const fair = !this.localOnly || !(practice && isTuned(this.tuning));
+    const fair = !this.localOnly || !(ownTuning && isTuned(this.tuning));
     this.replay = !spec && rs.playerCars.length === 1 && checked && fair ? new ReplayRecorder() : null;
     this.recordPending = false;
     this.recordNote = '';
+    const tt = practice && !!settings.timeTrial && rs.playerCars.length === 1;
+    this.lapTape = this.replay || tt ? new LapTape() : null;
+    if (tt) {
+      const key = boardKey(rs.track.def.id, rs.spec.league);
+      const vs = this.ttEntry;
+      const choice = ghostChoiceFor(this.localOnly);
+      this.timeTrial = new TimeTrial(this.scene, {
+        key, league: rs.league, local: this.localOnly, entry: vs?.entry, rank: vs?.rank,
+        // Against a chosen entry: that ghost, and yours too if you race both.
+        choice: vs ? (choice === 'both' ? 'both' : 'world') : choice,
+      });
+    }
     trackRace({
       track: rs.track.def.id,
       mode: this.cupRace ? (this.career ? 'career' : 'cup') : practice ? 'practice' : 'quick',
@@ -1586,6 +1642,9 @@ export class App {
     }
     this.sendRecord();
     this.replay = null;
+    this.lapTape = null;
+    this.timeTrial?.dispose();
+    this.timeTrial = null;
     if (this.view) this.view.dispose();
     if (this.track !== session.track) this.setTrack(session.track);
     this.session = session;
@@ -1688,7 +1747,7 @@ export class App {
   /** Free practice on this device (where the tuning panel's handling applies). */
   private get practicing(): boolean {
     const s = this.session;
-    return this.mode === 'race' && !this.netRace && s instanceof RaceSession && !!s.settings.practice && !this.cupRace;
+    return this.mode === 'race' && !this.netRace && s instanceof RaceSession && !!s.settings.practice && !s.settings.timeTrial && !this.cupRace;
   }
 
   async openTuning(force = false): Promise<void> {
@@ -2104,6 +2163,7 @@ export class App {
     this.replay?.add(s.inputs[s.playerCars[0]]);
     this.view.beforeStep();
     s.step();
+    this.lapTape?.sample(this.world.cars[s.playerCars[0]], this.world.tick);
     this.view.afterStep();
     this.handleEvents();
   }
@@ -2142,6 +2202,9 @@ export class App {
         const best = car.bestLapTicks === e.value;
         const record = !!this.replay && !this.replay.spoiled && noteLap(this.localRecords, this.recordKey(), e.value);
         if (record && !this.localOnly) this.recordPending = true;
+        const lap = this.lapTape?.last ?? null;
+        if (record && lap && lap.ticks === e.value) saveMyGhost(this.recordKey(), lap);
+        this.timeTrial?.lapDone(e.value, lap, record);
         if (record) {
           this.flashMessage(`NEW LAP RECORD ${formatTime(e.value * DT)}`, 3);
           playUi(this.audio, 'buy');
@@ -2347,6 +2410,7 @@ export class App {
       this.podium.update(dt, 0.19 / cam0.metersPerPixel, this.mood.particleLight, this.renderer.paletteMode !== PaletteMode.Off);
     }
     this.view.update(alpha, dt, 0.19 / cam0.metersPerPixel, this.renderer.paletteMode !== PaletteMode.Off);
+    this.timeTrial?.update(this.world, this.session.playerCars[0], this.lapTape, alpha, dt);
     this.view.particles.light.value = this.mood.particleLight;
     animTime.value = performance.now() / 1000;
     this.sceneryAnimate?.(animTime.value);
@@ -2698,8 +2762,9 @@ export class App {
     const [kx] = this.renderer.uiPerLow;
     for (let p = 0; p < s.playerCars.length; p++) {
       const vp = this.renderer.viewports[split ? p : 0];
-      drawPlayerHud(ctx, { x: Math.round(vp.x * kx), w: Math.round(vp.w * kx), h: H }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split);
+      drawPlayerHud(ctx, { x: Math.round(vp.x * kx), w: Math.round(vp.w * kx), h: H }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split, this.timeTrial ? 'TIME TRIAL' : undefined);
     }
+    if (!this.showingResults) this.timeTrial?.draw(ctx, W, H);
     if (split) {
       ctx.fillStyle = '#000';
       ctx.fillRect(Math.round(this.renderer.viewports[1].x * kx) - 2, 0, 2, H);

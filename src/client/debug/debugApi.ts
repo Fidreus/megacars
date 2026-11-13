@@ -10,6 +10,11 @@ import { stepWorld } from '../../shared/sim/step.ts';
 import { PROTOCOL_VERSION, type RaceSpec } from '../../shared/net/protocol.ts';
 import { DEFAULT_TUNING } from '../../shared/config/tuning.ts';
 import type { App } from '../app.ts';
+import type { TimeTrial } from '../game/timeTrial.ts';
+import type { LapTape } from '../../shared/game/ghost.ts';
+import { loadWorldGhost, saveMyGhost } from '../game/ghostStore.ts';
+import { fetchBoards } from '../game/records.ts';
+import { boardKey, type League } from '../../shared/game/leagues.ts';
 import { moodById } from '../render/mood.ts';
 import type { PaletteModeId } from '../render/palette.ts';
 
@@ -212,6 +217,29 @@ export function installDebugApi(app: App): void {
       const r = (app as unknown as { replay: ReplayRecorder | null; session: { spec?: RaceSpec } }).replay;
       const spec = (app.session as { spec?: RaceSpec }).spec;
       return r && spec ? { recorded: r.ticks, tick: app.world.tick, spec, replay: r.encode(), best: app.player.bestLapTicks } : null;
+    },
+    /** Time trial: ghosts, gap and readout (null outside a time trial). */
+    timeTrial() {
+      const a = app as unknown as { timeTrial: TimeTrial | null };
+      return a.timeTrial?.debugState() ?? null;
+    },
+    /** A world board entry's ghost, re-run here as the time trial does: its lap time against the board's. */
+    async worldGhost(track = 'frostring', league: League = 'standard', rank = 1) {
+      const e = (await fetchBoards())?.[boardKey(track, league)]?.[rank - 1];
+      if (!e) return { error: 'no entry' };
+      const t0 = performance.now();
+      const g = await loadWorldGhost(e, boardKey(track, league));
+      return typeof g === 'string' ? { error: g, board: e.ticks } : { board: e.ticks, ghost: g.ticks, bytes: g.data.byteLength, ms: Math.round(performance.now() - t0) };
+    },
+    /** Keep the last lap driven (autopilot laps don't count as records) as your ghost here. */
+    keepLapAsMyGhost() {
+      const a = app as unknown as { timeTrial: TimeTrial | null; lapTape: LapTape | null };
+      const lap = a.lapTape?.last;
+      if (!lap) return 0;
+      const s = app.session as unknown as { spec: { league?: League } };
+      saveMyGhost(boardKey(app.session.track.def.id, s.spec.league), lap);
+      a.timeTrial?.setMine(lap);
+      return lap.ticks;
     },
     /** The active menu: labels and where to tap each row (CSS pixels). */
     menu() {
