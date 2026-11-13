@@ -1,9 +1,15 @@
 // Your own records (saved in the browser) and the verified world boards on
 // the server.
 
+import { SIM_VERSION } from '../../shared/config/constants.ts';
 import type { Boards, RecordSubmission } from '../../shared/game/records.ts';
 
-const KEY = 'megacars.records.v1';
+/**
+ * Per simulation version: new rules start an empty list. Older lists stay in
+ * storage (megacars.records.v1 holds the ones from before version 25) but
+ * are not shown.
+ */
+const KEY = `megacars.records.v1.sim${SIM_VERSION}`;
 
 export interface TrackRecords {
   /** Best lap (ticks), 0 = none yet. */

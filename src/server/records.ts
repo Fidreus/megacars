@@ -1,14 +1,17 @@
-// Lap record boards: verified best laps per track, kept in DATA_DIR/records.json
-// (point DATA_DIR at a persistent volume in production). Submissions are
-// replayed in a worker thread, one at a time, and the server's own lap
-// times go on the board.
+// Lap record boards: verified best laps per track, kept per simulation
+// version in DATA_DIR/records/v<SIM_VERSION>/records.json (point DATA_DIR at a
+// persistent volume in production). A new version starts empty boards in a
+// new folder; older folders and the pre-versioning DATA_DIR/records.json are
+// never read, written or deleted. Submissions are replayed in a worker
+// thread, one at a time, and the server's own lap times go on the board.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { SIM_VERSION } from '../shared/config/constants.ts';
 import { cleanName, PROTOCOL_VERSION } from '../shared/net/protocol.ts';
 import { boardKey } from '../shared/game/leagues.ts';
-import { insertRecord, specProblem, type Boards, type RecordSubmission } from '../shared/game/records.ts';
+import { insertRecord, specProblem, type Boards, type RecordEntry, type RecordSubmission } from '../shared/game/records.ts';
 import { TRACKS } from '../shared/track/defs/index.ts';
 
 const JOB_TIMEOUT_MS = 15_000;
@@ -31,7 +34,11 @@ interface Job {
 
 export class RecordStore {
   boards: Boards = {};
+  /** This version's folder. */
+  readonly dir: string;
   private readonly file: string;
+  /** The board file could not be read or moved aside: don't save over it. */
+  private readOnly = false;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private worker: Worker | null = null;
   private readonly queue: Job[] = [];
@@ -39,17 +46,34 @@ export class RecordStore {
   private jobTimer: ReturnType<typeof setTimeout> | null = null;
   private nextId = 1;
 
-  constructor(dir: string) {
-    mkdirSync(dir, { recursive: true });
-    this.file = join(dir, 'records.json');
-    try {
-      if (existsSync(this.file)) this.boards = JSON.parse(readFileSync(this.file, 'utf8')) as Boards;
-    } catch (e) {
-      console.warn('records: could not read', this.file, e);
+  constructor(dataDir: string, version = SIM_VERSION) {
+    this.dir = join(dataDir, 'records', `v${version}`);
+    this.file = join(this.dir, 'records.json');
+    mkdirSync(this.dir, { recursive: true });
+    if (existsSync(this.file)) {
+      try {
+        this.boards = parseBoards(readFileSync(this.file, 'utf8'));
+      } catch (e) {
+        // Never overwrite a board we could not read: move it aside first.
+        const aside = `${this.file}.bad-${Date.now()}`;
+        console.warn('records: could not read', this.file, e, '- kept as', aside);
+        try {
+          renameSync(this.file, aside);
+        } catch {
+          // Can't move it: then never write over it.
+          this.readOnly = true;
+        }
+      }
     }
-    for (const id of Object.keys(this.boards)) if (!TRACKS[id.split('@')[0]]) delete this.boards[id];
     const n = Object.values(this.boards).reduce((k, b) => k + b.length, 0);
     console.log(`records: ${n} entries in ${this.file}`);
+  }
+
+  /** The boards to show: tracks this server knows (others stay on disk). */
+  served(): Boards {
+    const out: Boards = {};
+    for (const [key, board] of Object.entries(this.boards)) if (TRACKS[key.split('@')[0]]) out[key] = board;
+    return out;
   }
 
   /** Queue a submission for checking; resolves when it is done. */
@@ -63,6 +87,14 @@ export class RecordStore {
       this.queue.push({ id: this.nextId++, sub, done });
       this.pump();
     });
+  }
+
+  /** Write the boards now (shutdown). */
+  flush(): void {
+    if (!this.saveTimer) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    this.save();
   }
 
   private ensureWorker(): Worker {
@@ -103,26 +135,51 @@ export class RecordStore {
       job.done({ ok: false, error: 'no complete lap' });
     } else {
       const best = Math.min(...result.laps);
-      const board = (this.boards[boardKey(job.sub.spec.track, job.sub.spec.league)] ??= []);
-      const name = cleanName(job.sub.name) || 'DRIVER';
-      const rank = insertRecord(board, { name, ticks: best, at: Date.now() });
-      if (rank > 0) this.scheduleSave();
-      job.done({ ok: true, best, rank });
+      job.done(this.place(job.sub, best));
     }
     this.pump();
+  }
+
+  /** Put a checked lap on its board. */
+  private place(sub: RecordSubmission, best: number): SubmitResult {
+    const board = (this.boards[boardKey(sub.spec.track, sub.spec.league)] ??= []);
+    const rank = insertRecord(board, { name: cleanName(sub.name) || 'DRIVER', ticks: best, at: Date.now() });
+    if (rank > 0) this.scheduleSave();
+    return { ok: true, best, rank };
   }
 
   private scheduleSave(): void {
     if (this.saveTimer) return;
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      try {
-        const tmp = `${this.file}.tmp`;
-        writeFileSync(tmp, JSON.stringify(this.boards));
-        renameSync(tmp, this.file);
-      } catch (e) {
-        console.warn('records: could not save', e);
-      }
+      this.save();
     }, 2000);
   }
+
+  private save(): void {
+    if (this.readOnly) return;
+    try {
+      writeAtomic(this.file, JSON.stringify(this.boards));
+    } catch (e) {
+      console.warn('records: could not save', e);
+    }
+  }
+}
+
+/** Boards from JSON; throws if it is not boards at all. */
+function parseBoards(text: string): Boards {
+  const raw = JSON.parse(text) as unknown;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('not boards');
+  const out: Boards = {};
+  for (const [key, board] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(board)) throw new Error('not boards');
+    out[key] = board as RecordEntry[];
+  }
+  return out;
+}
+
+function writeAtomic(file: string, text: string): void {
+  const tmp = `${file}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, file);
 }

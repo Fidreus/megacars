@@ -242,8 +242,16 @@ servern: din inmatning tick för tick (komprimerad, typiskt 30–50 kB) och
 racets uppsättning. Eftersom simuleringen är deterministisk spelar servern
 upp racet igen i en egen tråd (≈1 s för 3 minuter med 8 bilar) och mäter
 varven själv – en påhittad tid kan alltså inte komma in. Topplistan sparas i
-`$DATA_DIR/records.json` (standard `./data`); i produktion bör `DATA_DIR`
-peka på en beständig volym.
+`$DATA_DIR/records/v<SIM_VERSION>/records.json` (standard `./data`); i
+produktion bör `DATA_DIR` peka på en beständig volym.
+
+Topplistorna hör till en simuleringsversion (`SIM_VERSION`): när fysiken
+ändras börjar listorna om i en ny mapp, och gamla tider ligger kvar orörda
+på disk men visas inte. Tiderna från före version 25 ligger kvar i
+`$DATA_DIR/records.json`. En lista som inte går att läsa flyttas undan
+(`records.json.bad-<tid>`) i stället för att skrivas över. Dina egna rekord
+i webbläsaren sparas också per version (`megacars.records.v1.sim<version>`);
+de gamla finns kvar i localStorage men visas inte.
 
 ## Grafik och prestanda
 

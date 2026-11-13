@@ -203,7 +203,7 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 /** GET: all boards. POST: a race to check (spec + the player's inputs). */
 function handleRecords(req: IncomingMessage, res: ServerResponse): void {
   if (req.method === 'GET') {
-    json(res, 200, records.boards);
+    json(res, 200, records.served());
     return;
   }
   if (req.method !== 'POST') {
@@ -238,6 +238,7 @@ function handleRecords(req: IncomingMessage, res: ServerResponse): void {
     void records.submit(sub).then((r) => json(res, r.ok ? 200 : 400, r));
   });
 }
+
 
 /** A token from `Authorization: Bearer ...` matches `secret` (never when there is none). */
 function tokenOk(req: IncomingMessage, url: URL, secret: string): boolean {
@@ -520,6 +521,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     for (const c of conns) c.ws.close(1012, 'server restarting');
     trackStore.flush();
+    records.flush();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 1000).unref();
   });
