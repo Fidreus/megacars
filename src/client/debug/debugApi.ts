@@ -192,6 +192,11 @@ export function installDebugApi(app: App): void {
       }
       return { best: car.bestLapTicks, sub: { v: PROTOCOL_VERSION, name: 'SELFTEST', spec, replay: rec.encode() } };
     },
+    /** The podium scene: null when it is not up, else how long it has been showing. */
+    podiumState() {
+      const p = (app as unknown as { podium: { time: number; entries: { name: string }[] } | null }).podium;
+      return p ? { time: +p.time.toFixed(2), names: p.entries.map((e) => e.name) } : null;
+    },
     /** Start a slow-motion beat now (testing; ignores the option and the cooldown). */
     slowmo(slowTime = true) {
       app.slowmo.enabled = true;

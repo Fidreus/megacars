@@ -278,6 +278,17 @@ in exakt en gång, så lap-rekord kan fortfarande kontrolleras. Online styr
 servern klockan, och i delad skärm delar två spelare på den: där blir det bara
 kamerarörelsen. Av/på under **OPTIONS → GAME FEEL → SLOW MOTION ON WRECKS**.
 
+**Prispall:** när ett lopp är slut, före resultatlistan, visas en kort prispall
+över startrakan: de tre främsta bilarna på första, andra och tredje steget med
+förarnamn och konfetti (byggd av renderarens egna delar: bilmodellerna, partiklarna
+och pixelkameran). Enter, ett tryck eller en handkontrollsknapp (A/B/Start) hoppar
+över den; annars går den vidare av sig själv efter ca fyra sekunder. Den visas
+efter vanliga lopp, mästerskaps- och karriärlopp och onlinelopp (varje klient
+ritar den från slutställningen), i delad skärm över hela skärmen, men inte vid
+fri träning. Är det färre än tre bilar visas lika många steg som bilar. Står du
+själv på pallen blir det en stor banderoll ("YOU WIN!", "SECOND PLACE!"...) och
+mer konfetti; slutar du längre ner visas vem som vann och din placering.
+
 ## Musik
 
 Trackermusik (MOD/XM) spelas med libopenmpt i en Web Worker; en liten AudioWorklet spelar upp det renderade ljudet, så ljudtråden aldrig blockeras.

@@ -34,6 +34,8 @@ import { TouchControls } from './input/touch.ts';
 import { Haptics, PULSE } from './input/haptics.ts';
 import { feelItems } from './game/feelOptions.ts';
 import { SlowMotion } from './game/slowMotion.ts';
+import { Podium, type PodiumEntry } from './render/podium.ts';
+import { drawPodiumUi, type PodiumTag } from './ui/screens/podium.ts';
 import { TextBridge } from './input/textBridge.ts';
 import { drawHelp } from './ui/screens/help.ts';
 import { RecordsScreen } from './ui/screens/records.ts';
@@ -109,6 +111,8 @@ const FAR_ENGINES = 3;
 const FAR_RANGE = 45;
 /** Visible height of a full-screen view, metres. Split screen zooms out a little. */
 const VIEW_HEIGHT = 51.3;
+/** The podium moves on to the results by itself after this many seconds. */
+const PODIUM_SECONDS = 4.2;
 /** Follow camera: how much more it shows than the classic view, and its tilt (degrees). */
 const FOLLOW_ZOOM = 1.35;
 const FOLLOW_TILT = 50;
@@ -288,6 +292,11 @@ export class App {
   private flashTime = 0;
   private showTelemetry = false;
   private padIndex = -1;
+  /** The podium scene between the race and the results table. */
+  private podium: Podium | null = null;
+  /** The podium has been shown for this race. */
+  private podiumDone = false;
+  private podiumBloom = 0;
   /** The slow-motion beat on wrecks (offline: slows the game; online and split: camera only). */
   readonly slowmo = new SlowMotion();
   /** Gamepad and phone vibration; each pad only feels its own player's car. */
@@ -937,7 +946,7 @@ export class App {
       { label: () => 'GRAPHICS & CAMERA', select: () => this.openPage('GRAPHICS & CAMERA', this.displayItems(), 'M TIME OF DAY   3 CRT   4 COLOURS') },
       { label: () => 'CONTROLS', select: () => this.openPage('CONTROLS', this.controlItems()) },
       { label: () => 'PLAYER', select: () => this.openPage('PLAYER', this.playerItems(), 'YOUR NAME IN ONLINE ROOMS AND ON THE RECORD BOARDS') },
-      { label: () => 'GAME FEEL', select: () => this.openPage('GAME FEEL', feelItems(this.settings, () => saveSettings(this.settings), (on) => this.setVibration(on)), 'VIBRATION: GAMEPADS AND PHONES (NOT IPHONES)   SLOW MOTION: A SHORT BEAT WHEN A CAR IS WRECKED') },
+      { label: () => 'GAME FEEL', select: () => this.openPage('GAME FEEL', feelItems(this.settings, () => saveSettings(this.settings), (on) => this.setVibration(on)), 'RUMBLE ON PADS AND ANDROID PHONES - A SLOW BEAT ON WRECKS') },
     ]);
   }
 
@@ -1586,6 +1595,8 @@ export class App {
     this.fireworks = 0;
     this.shake = 0;
     this.slowmo.reset();
+    this.endPodium();
+    this.podiumDone = false;
     const split = this.mode === 'race' && session.playerCars.length === 2;
     this.renderer.setSplit(split);
     for (const vp of this.renderer.viewports) {
@@ -1783,7 +1794,7 @@ export class App {
 
   /** The menu that has the keyboard on the current screen. */
   get activeMenu(): Menu | null {
-    if (this.askName && this.showingResults) return this.nameMenu;
+    if (this.askName && this.showingResults && !this.podium) return this.nameMenu;
     if (this.mode === 'title') return this.titleMenu;
     if (this.mode === 'setup') return this.setupMenu;
     if (this.mode === 'page') return this.pages[this.pages.length - 1]?.menu ?? null;
@@ -1978,6 +1989,11 @@ export class App {
           this.openCupShop(0);
         }
       }
+      return;
+    }
+    if (this.podium) {
+      // Enter, a tap or a pad button goes straight on to the results.
+      if ((nav.confirm || nav.click || nav.back) && this.podium.time > 0.35) this.endPodium();
       return;
     }
     if (this.showingResults && this.askName) {
@@ -2189,6 +2205,74 @@ export class App {
     }
   }
 
+  // ------------------------------------------------------------- podium
+
+  /** Start the podium once the results are due, and move on by itself after a few seconds. */
+  private updatePodium(dt: number): void {
+    const p = this.podium;
+    if (p) {
+      if (p.time >= PODIUM_SECONDS || !this.showingResults) this.endPodium();
+      return;
+    }
+    if (this.podiumDone || !this.showingResults || this.mode !== 'race' || this.practicing) return;
+    this.podiumDone = true;
+    const s = this.session;
+    const order = standings(this.world).slice(0, 3);
+    if (order.length === 0) return;
+    const entries: PodiumEntry[] = order.map((id) => ({
+      id, name: s.names[id] ?? `CAR ${id + 1}`, color: s.colors[id] ?? '#ffffff', model: s.models[id] ?? -1, local: s.playerCars.includes(id),
+    }));
+    this.podium = new Podium(this.scene, this.track, entries, s.league, false, 0);
+    this.view.show(false);
+    // Headlights and confetti would bloom into big blobs at this zoom.
+    this.podiumBloom = this.renderer.grade.bloom;
+    this.renderer.grade.bloom *= 0.3;
+    // One view over the whole screen, also in split screen.
+    this.renderer.setSplit(false);
+    this.camInit[0] = false;
+    this.crowd?.cheer(entries.some((e) => e.local) ? 1 : 0.5, 3.5);
+  }
+
+  private endPodium(): void {
+    if (!this.podium) return;
+    this.podium.dispose();
+    this.podium = null;
+    this.podiumDone = true;
+    this.renderer.grade.bloom = this.podiumBloom;
+    this.view.show(true);
+    // Back to the views of the race (the cars are where they stopped).
+    this.renderer.setSplit(this.mode === 'race' && this.session.playerCars.length === 2);
+    this.camInit[0] = this.camInit[1] = false;
+  }
+
+  private drawPodiumUi(ctx: CanvasRenderingContext2D, W: number, H: number, podium: Podium): void {
+    const vp = this.renderer.viewports[0];
+    const [kx, ky] = this.renderer.uiPerLow;
+    const v = new THREE.Vector3();
+    const at = (w: THREE.Vector3): [number, number] => {
+      v.copy(w).project(vp.cam.camera);
+      return [(vp.x + ((v.x + 1) / 2) * vp.w) * kx, ((1 - v.y) / 2) * vp.h * ky];
+    };
+    const tags: PodiumTag[] = podium.points.map((l) => {
+      const [headX, headY] = at(l.head);
+      const [frontX, frontY] = at(l.front);
+      return { name: l.entry.name, local: l.entry.local, place: l.place, headX, headY, frontX, frontY };
+    });
+    // How the people at this screen did (the best of two players).
+    const s = this.session;
+    const order = standings(this.world);
+    let mine = 0;
+    let who = 1;
+    s.playerCars.forEach((id, i) => {
+      const place = order.indexOf(id) + 1;
+      if (mine === 0 || place < mine) {
+        mine = place;
+        who = i + 1;
+      }
+    });
+    drawPodiumUi(ctx, W, H, tags, podium.time, mine, s.playerCars.length, who, podium.entries[0].name, this.touch.enabled);
+  }
+
   /** A local player's car was wrecked, or a local player wrecked a car in view: a slow-motion beat. */
   private wreckBeat(car: number, other: number, dist: number): void {
     const players = this.session.playerCars;
@@ -2251,9 +2335,16 @@ export class App {
       if (Math.random() < dt * 5) this.view.effects.firework(t.x + (Math.random() - 0.5) * 70, t.z - 8 - Math.random() * 25);
     }
     this.updateBoostPads();
+    this.updatePodium(dt);
     const views = this.renderer.viewCount;
     for (let v = 0; v < views; v++) this.updateCamera(v, dt);
     const cam0 = this.renderer.viewports[0].cam;
+    if (this.podium) {
+      const vp = this.renderer.viewports[0];
+      this.podium.aim(cam0, vp.w, vp.h);
+      this.camTargets[0].copy(this.podium.center());
+      this.podium.update(dt, 0.19 / cam0.metersPerPixel, this.mood.particleLight, this.renderer.paletteMode !== PaletteMode.Off);
+    }
     this.view.update(alpha, dt, 0.19 / cam0.metersPerPixel, this.renderer.paletteMode !== PaletteMode.Off);
     this.view.particles.light.value = this.mood.particleLight;
     animTime.value = performance.now() / 1000;
@@ -2596,6 +2687,10 @@ export class App {
   }
 
   private drawRaceUi(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+    if (this.podium) {
+      this.drawPodiumUi(ctx, W, H, this.podium);
+      return;
+    }
     const s = this.session;
     const w = s.world;
     const split = this.renderer.isSplit;

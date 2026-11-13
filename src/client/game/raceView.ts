@@ -85,6 +85,11 @@ export class RaceView {
     for (const m of this.lamps) m.color.set('#3a0d0d');
   }
 
+  /** Hide or show the whole race (cars, marks, particles) while something else is on stage. */
+  show(on: boolean): void {
+    this.group.visible = on;
+  }
+
   setLights(on: boolean, strength: number): void {
     for (const v of this.cars) v.setLights(on, strength);
   }
