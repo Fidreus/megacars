@@ -192,6 +192,27 @@ export function installDebugApi(app: App): void {
       }
       return { best: car.bestLapTicks, sub: { v: PROTOCOL_VERSION, name: 'SELFTEST', spec, replay: rec.encode() } };
     },
+    /** The podium scene: null when it is not up, else how long it has been showing. */
+    podiumState() {
+      const p = (app as unknown as { podium: { time: number; entries: { name: string }[] } | null }).podium;
+      return p ? { time: +p.time.toFixed(2), names: p.entries.map((e) => e.name) } : null;
+    },
+    /** Start a slow-motion beat now (testing; ignores the option and the cooldown). */
+    slowmo(slowTime = true) {
+      app.slowmo.enabled = true;
+      app.slowmo.reset();
+      return app.slowmo.trigger(0, slowTime);
+    },
+    /** Slow-motion state: time scale, depth of the beat. */
+    slowmoState() {
+      return { scale: +app.slowmo.timeScale.toFixed(3), depth: +app.slowmo.depth.toFixed(3), pitch: +app.slowmo.pitch.toFixed(3) };
+    },
+    /** What the lap-record recorder holds for the race now (ticks recorded vs ticks run), and the submission to check. */
+    replayInfo() {
+      const r = (app as unknown as { replay: ReplayRecorder | null; session: { spec?: RaceSpec } }).replay;
+      const spec = (app.session as { spec?: RaceSpec }).spec;
+      return r && spec ? { recorded: r.ticks, tick: app.world.tick, spec, replay: r.encode(), best: app.player.bestLapTicks } : null;
+    },
     /** The active menu: labels and where to tap each row (CSS pixels). */
     menu() {
       const m = app.activeMenu;
