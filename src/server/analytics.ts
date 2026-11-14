@@ -14,7 +14,7 @@ import geoip from 'geoip-country';
 import { TRACKS } from '../shared/track/defs/index.ts';
 
 /** Modes a local race can be started in (what the client reports). */
-const MODES = ['quick', 'practice', 'cup', 'career'];
+const MODES = ['quick', 'practice', 'cup', 'career', 'daily'];
 const BOT = /bot|crawl|spider|slurp|preview|monitor|uptime|curl|wget|headless|lighthouse/i;
 const COUNTRY_HEADERS = ['cf-ipcountry', 'x-vercel-ip-country', 'cloudfront-viewer-country', 'x-country-code'];
 

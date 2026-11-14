@@ -335,6 +335,62 @@ som på listan, annars visas det inte. Det sparas, ett per bana och klass.
 I **RECORDS** väljer ↑↓ (eller ett tryck) en plats på världslistan och
 ENTER (eller ett tryck till) startar en tidskörning mot just den.
 
+## Dagens utmaning (DAILY CHALLENGE)
+
+Varje dag (UTC) har en utmaning: en bana, en klass och en tid på dygnet,
+samma för alla. Reglerna är tidskörningens: ensam, serienbil, inga vapen,
+torrt, och bästa enskilda varv räknas. Dagens lista börjar tom varje
+morgon, så vem som helst kan komma in på den.
+
+Valet är en ren funktion av datumet (`dailyChallenge` i
+`src/shared/game/daily.ts`), så servern och en klient utan nät kommer fram
+till samma sak. Spelets egna banor (`TRACK_LIST`) går i en blandad cykel:
+alla banor en gång innan någon kommer igen, aldrig samma två dagar i rad,
+och när en bana kommer tillbaka är det i en annan klass och vid en annan
+tid på dygnet. Läggs en bana till blandas kommande dagar om, men inget går
+sönder; en dag som redan har en lista behåller sin bana (den sparas med
+listan).
+
+**DAILY CHALLENGE** i titelmenyn visar dagens bana, klass och tid på
+dygnet, hur länge det är kvar till nästa, din bästa tid i dag och din
+plats, toppen av dagens lista och gårdagens topp tre. Där skriver du också
+namnet som står på listan. START kör en tidskörning med dagens spöken:
+dagens ledare (gul) och ditt eget bästa varv i dag (cyan). Under körningen
+står DAILY CHALLENGE i HUD:en och uppe till höger platsen som ditt bästa
+varv skulle ta. Varje nytt dagsbästa skickas direkt (hela racet hittills,
+som för rekorden); avslutar du kommer du tillbaka till sidan med listan.
+
+**Streak:** hur många dagar i rad du har kört ett varv i utmaningen,
+sparat i webbläsaren (`megacars.daily.v1`, ditt bästa varv per dag). Den
+står stort på sidan och i titelmenyn: ■ när dagens varv är kört, □ och
+DRIVE TODAY! när det saknas. Utan nät visas dagens utmaning ändå (räknad
+lokalt) och kan köras och räknas i din streak; sidan säger att listan inte
+går att nå.
+
+Servern bestämmer vilken dag det är. Ett varv får bara skickas till
+serverns dag i dag, plus tio minuter efter midnatt för ett varv som
+pågick då. Racet kontrolleras på samma sätt som rekorden (spelas upp
+igen, servern mäter själv) och måste vara på dagens bana och klass, ensam
+och utan vapen. Samma kontroll lägger varvet på världslistan också om det
+räcker dit. Listan har bästa varv per namn, topp 50. Racen sparas för
+topp 10 (för spökena), och när dagen är över tas alla utom vinnarens
+bort. Listor sparas i 30 dagar, en fil per dag i
+`$DATA_DIR/daily/v<SIM_VERSION>/<dag>.json` med racen i `replays/`,
+skrivna atomiskt som rekorden; en fil som inte går att läsa flyttas undan
+(`.bad-<tid>`).
+
+- `GET /api/daily`: dagens utmaning, lista, serverns klocka, när dagen
+  slutar och gårdagens topp tre (cachas 10 s).
+- `GET /api/daily/<ÅÅÅÅ-MM-DD>`: en sparad dags lista (en avslutad dag
+  cachas en timme).
+- `POST /api/daily`: `{v, name, day, spec, replay}`; högst 6 per minut och
+  adress, som rekorden. Svarar med plats i dag och på världslistan.
+- Dagens race hämtas som rekordens med `GET /api/records/replay/<id>`.
+
+För att testa dagsbyten kan servern i utveckling (`MEGACARS_DEV=1`) få sin
+klocka förskjuten med `DAILY_CLOCK_SHIFT=<ms>`; `DailyStore` tar en klocka
+i testerna.
+
 ## Grafik och prestanda
 
 **OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM eller LOW. AUTO börjar på HIGH och
@@ -466,7 +522,8 @@ Det loggas, en JSON-rad per händelse i `DATA_DIR/analytics/ÅÅÅÅ-MM-DD.jsonl
   skärmbredd i grova steg, språk och vilken sajt man kom från, bara
   domännamnet). Skickas av sidan själv, för servern ser inte sidladdningar när appen körs från cachen. Botar räknas inte.
 - `race`: ett lopp startades på enheten (bana, läge, varv, motståndare,
-  spelare). Det gäller träning, snabbt lopp, mästerskap och karriär.
+  spelare). Det gäller träning, snabbt lopp, mästerskap, karriär och
+  dagens utmaning (läge `daily`).
 - `session`: hur länge sidan varit framme, och hur många lopp. Webbläsaren
   skickar den när fliken göms.
 - `ws`: en onlineanslutning och hur länge den varade.

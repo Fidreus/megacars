@@ -71,6 +71,13 @@ export interface TimeTrialOptions {
   entry?: RecordEntry | null;
   /** ...which is this place on the board. */
   rank?: number;
+  /** Where your ghost and the entry's are kept, if not under `key` (the daily challenge's own). */
+  mineKey?: string;
+  worldKey?: string;
+  /** The entry ghost's name on screen (instead of "#rank"). */
+  entryLabel?: string;
+  /** With no entry given: say this instead of racing the world record. */
+  noEntry?: string;
 }
 
 export class TimeTrial {
@@ -96,7 +103,7 @@ export class TimeTrial {
     const c = opts.choice;
     if (c === 'mine' || c === 'both') {
       this.mineStatus = 'LOADING YOUR GHOST...';
-      void loadMyGhost(opts.key).then((g) => {
+      void loadMyGhost(opts.mineKey ?? opts.key).then((g) => {
         if (this.disposed || this.mine) return;
         if (g) this.setMine(g);
         else this.mineStatus = 'NO GHOST OF YOURS YET - SET A LAP';
@@ -110,6 +117,10 @@ export class TimeTrial {
 
   private async loadWorld(): Promise<void> {
     let entry = this.opts.entry ?? null;
+    if (!entry && this.opts.noEntry) {
+      this.worldStatus = this.opts.noEntry;
+      return;
+    }
     if (!entry) {
       const boards = await fetchBoards();
       if (this.disposed) return;
@@ -123,7 +134,7 @@ export class TimeTrial {
         return;
       }
     }
-    const g = await loadWorldGhost(entry, this.opts.key);
+    const g = await loadWorldGhost(entry, this.opts.worldKey ?? this.opts.key);
     if (this.disposed) return;
     if (typeof g === 'string') {
       this.worldStatus = g === 'offline' ? 'WORLD RECORD: CANNOT REACH THE SERVER' : 'WORLD RECORD GHOST NOT AVAILABLE';
@@ -131,7 +142,7 @@ export class TimeTrial {
     }
     const rank = this.opts.entry ? (this.opts.rank ?? 1) : 1;
     const what = rank > 1 ? `#${rank}` : 'WORLD RECORD';
-    this.world = this.makeGhost(g, `${what} ${entry.name}`, WORLD_COLOR);
+    this.world = this.makeGhost(g, this.opts.entryLabel ?? `${what} ${entry.name}`, WORLD_COLOR);
     this.worldStatus = '';
   }
 
