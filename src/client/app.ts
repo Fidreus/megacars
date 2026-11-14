@@ -32,6 +32,7 @@ import { keysLabel, loadControls, type KeyBinding } from './input/bindings.ts';
 import { ControlsScreen } from './ui/screens/controls.ts';
 import { DriveAudio } from './audio/driveSfx.ts';
 import { crateSounds } from './audio/crateSfx.ts';
+import { lockBeeps, specialSounds } from './audio/specialSfx.ts';
 import { noteCratePickups } from './ui/screens/crateHud.ts';
 import { TouchControls } from './input/touch.ts';
 import { Haptics, PULSE } from './input/haptics.ts';
@@ -93,6 +94,7 @@ import { WeatherLight } from './render/weather.ts';
 import { RainSound } from './audio/rain.ts';
 import { drawWeatherCue } from './ui/weatherCue.ts';
 import { drawCountdown, drawPlayerHud, formatTime, Minimap } from './ui/screens/hud.ts';
+import { drawLockWarning } from './ui/screens/specialHud.ts';
 import { drawResults } from './ui/screens/results.ts';
 import { connText, drawLobby, inviteLink, pingColor } from './ui/screens/lobby.ts';
 import { drawLogo } from './ui/screens/title.ts';
@@ -2356,6 +2358,8 @@ export class App {
         if (dist < 60) playImpact(this.audio, e.value * (1 - dist / 60), dx / 30, e.kind === Ev.CarHit ? 0.9 : 0.5);
       } else if (e.kind === Ev.Fire || e.kind === Ev.Explosion || e.kind === Ev.Wreck || e.kind === Ev.Turbo) {
         this.weaponEvent(e.kind, e.car, e.other, e.value, e.x, e.z);
+      } else if (e.kind === Ev.ShieldBlock && this.mode === 'race' && (players.includes(e.car) || players.includes(e.other))) {
+        this.flashMessage(players.includes(e.car) ? 'SHIELD HELD!' : 'BLOCKED BY A SHIELD', 1.2);
       } else if (e.kind === Ev.Respawn) {
         this.view.snap(e.car);
         if (players.includes(e.car) && this.mode === 'race') {
@@ -2431,6 +2435,8 @@ export class App {
       this.ach.feed(t);
     }
     crateSounds(this.audio, w, ev, players, this.mode === 'race');
+    specialSounds(this.audio, w, ev, players, this.mode === 'race');
+    lockBeeps(this.audio, w, players, DT, this.mode === 'race');
     noteCratePickups(ev, w.tick);
     // Taking off from a ramp.
     players.forEach((id, p) => {
@@ -2547,7 +2553,7 @@ export class App {
     if (this.audio.ready && vol > 0) {
       if (kind === Ev.Fire) {
         if (other === ShotKind.Missile) playLaunch(this.audio, vol, pan);
-        else playMineDrop(this.audio, vol);
+        else if (other === ShotKind.Mine) playMineDrop(this.audio, vol);
       } else if (kind === Ev.Explosion) {
         playExplosion(this.audio, vol, pan, value === 3 ? 0.6 : 1);
       } else if (kind === Ev.Wreck) {
@@ -2562,7 +2568,7 @@ export class App {
     if (this.mode !== 'race') return;
     if (kind === Ev.Wreck) this.wreckBeat(car, other, dist);
     if (kind === Ev.Wreck && mine) this.flashMessage('WRECKED!', 2);
-    else if (kind === Ev.Explosion && value !== 3 && players.includes(other) && !mine) this.flashMessage(value === 2 ? 'MINED!' : 'DIRECT HIT!', 1.2);
+    else if (kind === Ev.Explosion && value !== 3 && players.includes(other) && !mine) this.flashMessage(value === 2 ? 'MINED!' : value === 4 ? 'HOMING HIT!' : 'DIRECT HIT!', 1.2);
   }
 
   // ------------------------------------------------------------- rendering
@@ -2962,6 +2968,7 @@ export class App {
     for (let p = 0; p < s.playerCars.length; p++) {
       const vp = this.renderer.viewports[split ? p : 0];
       drawPlayerHud(ctx, { x: Math.round(vp.x * kx), w: Math.round(vp.w * kx), h: H }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split, this.timeTrial ? 'TIME TRIAL' : undefined);
+      if (!this.showingResults) drawLockWarning(ctx, Math.round(vp.x * kx), Math.round(vp.w * kx), H, w, s.playerCars[p], vp.cam.follow ? vp.cam.yaw : 0);
     }
     if (!this.showingResults) this.timeTrial?.draw(ctx, W, H);
     if (split) {
@@ -2981,7 +2988,7 @@ export class App {
     if (this.touch.enabled && !split) {
       const me = w.cars[s.playerCars[0]];
       this.touch.arrange(W, H);
-      if (this.touch.visible) this.touch.draw(ctx, { missiles: me.missiles, mines: me.mines, turbos: me.turbos }, !!w.race.weapons);
+      if (this.touch.visible) this.touch.draw(ctx, { missiles: me.missiles, mines: me.mines, turbos: me.turbos, special: me.special }, !!w.race.weapons);
       if (this.firstRace && w.tick < w.race.startTick + 60 * 12) {
         const gas = { thumb: 'IT GASSES WHILE YOUR THUMB IS DOWN', always: 'THE CAR ACCELERATES BY ITSELF', button: 'HOLD GAS' }[this.touch.gasMode];
         const how = { point: 'PUSH YOUR LEFT THUMB WHERE YOU WANT TO GO', slide: 'DRAG YOUR LEFT THUMB TO STEER', buttons: 'STEER WITH THE ARROWS' }[this.touch.steerMode];

@@ -12,6 +12,7 @@ import { Effects } from '../render/effects.ts';
 import { Particles } from '../render/particles.ts';
 import { ShotView } from '../render/shotView.ts';
 import { CrateView } from '../render/crateView.ts';
+import { SpecialView } from '../render/specialView.ts';
 import { SkidMarks } from '../render/skidmarks.ts';
 import { WeatherView } from '../render/weather.ts';
 import { themeOf } from '../render/theme.ts';
@@ -34,6 +35,7 @@ export class RaceView {
   private readonly skid = new SkidMarks();
   private readonly shots = new ShotView();
   private readonly crates: CrateView;
+  private readonly specials = new SpecialView();
   readonly effects: Effects;
   /** Rain or snow, spray and the wet road. */
   readonly weather: WeatherView;
@@ -63,7 +65,7 @@ export class RaceView {
       this.prev.push({ x: car.x, z: car.z, y: car.y, heading: car.heading });
       this.offset.push({ x: 0, z: 0, y: 0, heading: 0 });
     }
-    this.group.add(this.skid.mesh, this.particles.points, this.shots.group, this.crates.group, this.weather.object);
+    this.group.add(this.skid.mesh, this.particles.points, this.shots.group, this.crates.group, this.weather.object, this.specials.group);
     session.playerCars.forEach((car, p) => {
       const text = session.playerCars.length > 1 ? `P${p + 1}` : 'YOU';
       // P1 yellow, P2 cyan (like their HUD labels).
@@ -119,6 +121,7 @@ export class RaceView {
   afterStep(): void {
     for (const car of this.session.world.cars) this.emitSkids(car);
     this.effects.tick(this.session.world);
+    this.specials.tick(this.session.world, this.particles);
     this.weather.tick(this.particles);
   }
 
@@ -190,6 +193,7 @@ export class RaceView {
     }
     this.shots.update(world.shots, alpha, world.tick);
     this.crates.update(world, (world.tick + alpha) * DT);
+    this.specials.update(world, alpha, (i) => this.cars[i].root.position, (i) => this.cars[i].root.visible);
     this.particles.time.value = (world.tick + alpha) * DT;
     this.particles.pxScale.value = pxScale;
     this.particles.dither.value = particleDither ? 1 : 0;
