@@ -15,7 +15,7 @@ export function drawResults(
   const boxH = 46 + order.length * rowH + 22;
   const x0 = Math.round(W / 2 - boxW / 2);
   const y0 = Math.round(H / 2 - boxH / 2);
-  ctx.fillStyle = 'rgba(8,10,24,0.86)';
+  ctx.fillStyle = 'rgba(8,10,24,0.95)';
   ctx.fillRect(x0, y0, boxW, boxH);
   ctx.fillStyle = '#ffd84a';
   ctx.fillRect(x0, y0, boxW, 2);

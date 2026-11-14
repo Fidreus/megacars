@@ -5,6 +5,7 @@
 // faces the viewer whatever way the start straight runs.
 
 import * as THREE from 'three';
+import { disposeTree } from './disposeTree.ts';
 import type { League } from '../../shared/game/leagues.ts';
 import type { Track } from '../../shared/track/types.ts';
 import { CarView, MODEL_STYLE } from './carMesh.ts';
@@ -105,6 +106,8 @@ export class Podium {
 
   dispose(): void {
     this.scene.remove(this.group, this.particles.points);
+    disposeTree(this.group);
+    disposeTree(this.particles.points);
   }
 
   /** How far a step has risen (0..1): 3rd first, then 2nd, then 1st. */

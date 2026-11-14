@@ -5,6 +5,7 @@
 // at the same point on the track.
 
 import * as THREE from 'three';
+import { disposeTree } from '../render/disposeTree.ts';
 import { DT } from '../../shared/config/constants.ts';
 import { ghostPose, ghostReach, ghostTicksAt, type GhostLap, type LapTape } from '../../shared/game/ghost.ts';
 import type { League } from '../../shared/game/leagues.ts';
@@ -277,6 +278,7 @@ export class TimeTrial {
     this.disposed = true;
     this.scene.remove(this.group);
     for (const g of [this.mine, this.world]) for (const m of g?.mats ?? []) m.dispose();
+    disposeTree(this.group);
   }
 }
 

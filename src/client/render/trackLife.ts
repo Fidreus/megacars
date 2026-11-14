@@ -273,8 +273,8 @@ function paddocks(ctx: LifeCtx, animals: readonly Animal[], ground: string, fenc
   }
   for (const [animal, herd] of herds) {
     const kind = ANIMALS[animal];
-    ctx.group.add(...chunked(kind.body(), toon('#ffffff'), herd, { shadow: true }));
-    ctx.group.add(...chunked(kind.head(), animated(kind.nod), herd.map((h) => ({ m: h.m, c: kind.headColor(h.c) })), { shadow: true, reach: 1 }));
+    for (const m of chunked(kind.body(), toon('#ffffff'), herd, { shadow: true })) ctx.group.add(m);
+    for (const m of chunked(kind.head(), animated(kind.nod), herd.map((h) => ({ m: h.m, c: kind.headColor(h.c) })), { shadow: true, reach: 1 })) ctx.group.add(m);
   }
 }
 
