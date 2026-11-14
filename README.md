@@ -580,9 +580,11 @@ tangentbordsrobot mot den riktiga simuleringen.
 ## Medaljer
 
 Varje inbyggd bana har en BRONS-, SILVER- och GULDtid per liga (STANDARD,
-SUPERCARS, MEGACARS). Tiderna räknas fram av datorförarna: brons efter den
-LÄTTA förarens bästa ensamvarv (+2 %), silver efter MEDEL och guld en
-aning (1,5 %) snabbare än den SVÅRA förarens bästa varv. Tabellen ligger
+SUPERCARS, MEGACARS). Tiderna räknas fram av datorförarna: brons efter en
+långsam förares bästa ensamvarv (skicklighet 0,72, +2 %), silver efter MEDEL
+(0,86) och guld en aning (1,5 %) snabbare än den felfria förarens (1,0) bästa
+varv. Skickligheterna är fasta, så medaljerna flyttar sig inte när
+svårighetsgraderna (EASY 0,67, HARD 0,97) trimmas. Tabellen ligger
 incheckad i `src/shared/game/medalTimes.ts` så att spelet inte simulerar
 något vid körning. När fysiken eller banorna ändras skriver `npm run medals`
 om tabellen (deterministiskt, några sekunder); `medals.test.ts` kollar att
