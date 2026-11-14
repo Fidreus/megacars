@@ -171,7 +171,7 @@ export class SpecialView {
     seekMat.color.setRGB(Math.floor(time * 8) % 2 ? 6 : 1, 0.5, 0.3);
     while (this.bubbles.length < world.cars.length) {
       const m = new THREE.Mesh(bubbleGeo, new THREE.MeshBasicMaterial({
-        color: new THREE.Color(0.6, 2.2, 3), transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending,
+        color: new THREE.Color(0.35, 1.3, 1.8), transparent: true, opacity: 0.15, depthWrite: false, blending: THREE.AdditiveBlending,
       }));
       m.renderOrder = 4;
       m.visible = false;
@@ -191,7 +191,7 @@ export class SpecialView {
       const hit = time - (this.flash[i] ?? -10);
       const pulse = 0.5 + 0.5 * Math.sin(time * 9);
       const mat = b.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.18 + 0.08 * pulse + (hit < 0.3 ? 0.6 * (1 - hit / 0.3) : 0);
+      mat.opacity = 0.09 + 0.05 * pulse + (hit < 0.3 ? 0.5 * (1 - hit / 0.3) : 0);
       b.scale.setScalar(1 + 0.03 * pulse + (hit < 0.3 ? 0.12 * (1 - hit / 0.3) : 0));
     }
   }

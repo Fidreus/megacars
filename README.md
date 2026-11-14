@@ -99,6 +99,46 @@ kurva. Datorförarna styr gärna över en meter eller två för en låda nära
 sin linje, men aldrig tvärs över vägen. `npm run track` och banskaparens
 statusrad visar raderna. Nya sorters innehåll läggs till som en rad i
 `CRATE_ITEMS` i `src/shared/sim/crates.ts`.
+
+**Specialvapen** (bara med vapen på): utöver ammunitionen har bilen en
+**specialplats** som rymmer ett föremål i taget, och det används med en egen
+knapp (SPECIAL ITEM, se tabellen nedan). Det finns tre:
+
+- **HOMING MISSILE** låser när den avfyras på närmaste bil framför, inom
+  110 m och ungefär ±30° från nosen, och svänger efter den med begränsad
+  svängfart (1,9 rad/s). En skarp kurva eller en sladd kan skaka av den (är
+  målet mer än ~57° från missilens nos släpper låset), den smäller i väggar
+  och följer aldrig en bil upp eller ner till en annan nivå på en bro. Utan
+  mål flyger den rakt. Skada och snurr som en vanlig missil. Den som är låst
+  får en varning: **MISSILE LOCK!** och en pil mot missilen på skärmen, och
+  pip som går fortare ju närmare den kommer.
+- **OIL SLICK** släpps bakom bilen och ligger kvar i 20 sekunder (den bleknar
+  mot slutet). Den gör vägen under sig till olja genom samma ytsystem som de
+  målade oljefläckarna, så däcken, datorförarnas greppplanering och
+  driftreglerna behandlar den likadant – en sladd på olja laddar ingen
+  driftboost. Den som släppte den kan köra på den själv efter drygt en sekund.
+  Datorförarna styr runt en fläck på sin linje när det kostar lite (högst
+  6 m åt sidan och plats på vägen).
+- **SHIELD** är en bubbla runt bilen i 5 sekunder (den blinkar sista
+  sekunden). Missiler och minor studsar av utan skada och utan snurr, och
+  krockar med väggar och bilar gör bara 35 % av skadan.
+
+Specialföremål kommer ur lådorna, mer sällan än ammunition: målsökande
+missiler oftare längre bak i fältet, olja och sköld oftare längre fram. En
+låda byter aldrig ut det du har – med något i specialplatsen ger lådorna
+bara ammunition, så använd det för att kunna få ett nytt. I butiken kan du
+köpa ett före loppet (raden SPECIAL, vänster/höger väljer: homing $300, oil
+$220, shield $260) om platsen är tom; det som är kvar följer med till nästa
+lopp. Start- och depåreglerna är som för de andra vapnen. Datorförarna
+använder dem med sin reaktionstid och sin personlighet: målsökande missil
+mot en bil 14–75 m framför, olja när någon ligger tätt bakom (VIXEN älskar
+det) och sköld när en missil är på väg eller en beväpnad bil sitter bakom.
+HUD:en visar specialplatsen bredvid ammunitionen (och sköldens sekunder
+kvar); på pekskärm finns en ITEM-knapp med föremålets ikon bara när du har
+något. Varje föremål har eget ljud och egen vibration. Allt (föremålet i
+platsen, missiler i luften, fläckar på vägen och sköldar) är världsläge och
+följer med i serverns bilder, så online hamnar det exakt där servern säger,
+även om en annan människas sköld eller lås kan synas några tick sent.
 ## Väder
 
 Ett lopp har ett väder: **DRY**, **RAIN** eller **CHANGING**. I regn blir
@@ -221,6 +261,7 @@ Före varje lopp öppnas **butiken** (vid delad skärm handlar P1 och sedan P2):
 | Däck nivå 1–3 | +7 % grepp, +5 % sladdgrepp per nivå | $1000 / $2000 / $3200 |
 | Pansar nivå 1–3 | −18 % skada per nivå | $1200 / $2400 / $3800 |
 | Missil / mina / turbo | +1 (max 12 / 8 / 6) | $60 / $50 / $90 |
+| Special: homing / oil / shield | ett i specialplatsen (om den är tom) | $300 / $220 / $260 |
 | Reparation | så mycket pengarna räcker till | $8 per % skada |
 
 Oanvänd ammunition och skada följer med till nästa lopp. Du börjar med $1000.
@@ -241,18 +282,21 @@ köp. Värden kan starta en **NEW SEASON**.
 | Space / K | Missil framåt |
 | X / J | Mina bakåt |
 | C / L | Turbo |
+| I / V | Specialföremål (målsökande missil, olja, sköld) |
 | R | Sätt tillbaka bilen på banan (P2 i delad skärm: Enter) |
 | Esc / P | Paus |
 
-Delad skärm: **P1** WASD, drift Q, missil/mina/turbo G/F/H, **P2**
-piltangenter, drift L, missil/mina/turbo . , -. Handkontroller: vänster
-spak styr, RT/A gas, LT/B broms, LB drift, X/RB missil, Y/↓ mina, ↑/L3
-turbo, Select återställ bil, Start paus;
+Delad skärm: **P1** WASD, drift Q, missil/mina/turbo/special G/F/H/V, **P2**
+piltangenter, drift L, missil/mina/turbo/special . , - K (eller numeriska
+0/1/2/4). Handkontroller: vänster spak styr, RT/A gas, LT/B broms, LB drift,
+X/RB missil, Y/↓ mina, ↑/L3 turbo, R3 special, Select återställ bil, Start paus;
 handkontroll 1 = P1, handkontroll 2 = P2.
 
 Alla tangenter och knappar kan bytas under **OPTIONS → CONTROLS** (en
 spelare, delad skärm vänster/höger och handkontroll, två platser per
-funktion). **HOW TO PLAY** i titelmenyn visar de nuvarande knapparna.
+funktion). **HOW TO PLAY** i titelmenyn visar de nuvarande knapparna. Har du
+sparat egna knappar får nya funktioner (som SPECIAL ITEM) sin standardknapp,
+utom om du redan använder den knappen till något annat.
 
 ## Mobil och surfplatta
 
@@ -260,7 +304,8 @@ Spelet fungerar på telefon i liggande läge (i stående visas "vänd
 telefonen", och racet pausas). Vänster tumme styr genom att dra i sidled
 där den landar (analogt, med en bred neutral mitt och mjuk kurva), eller med
 två pilknappar (OPTIONS → TOUCH STEERING). Höger tumme har DRIFT (störst),
-BRAKE, MISSILE, MINE och TURBO (ammunitionen syns på knapparna), RESET och
+BRAKE, MISSILE, MINE och TURBO (ammunitionen syns på knapparna), en ITEM-knapp
+ovanför MISSILE med specialföremålets ikon (bara när du har ett), RESET och
 paus uppe till höger.
 **TOUCH GAS** (OPTIONS): standard är att bilen gasar medan vänster tumme
 ligger på skärmen – lyft tummen för att släppa gasen; i en oönskad sladd
@@ -429,9 +474,10 @@ SINGLE RACE och som en kort banderoll ("GOLD MEDAL!") när en vinns.
 
 ## Prestationer
 
-**ACHIEVEMENTS** i titelmenyn listar 25 prestationer, från sådant man gör de
+**ACHIEVEMENTS** i titelmenyn listar 27 prestationer, från sådant man gör de
 första tio minuterna (köra klart ett race, vinna, vraka en bil, hoppa 40 m,
-hålla en drift i 4 s, åka i mörker) via några kvällar (tio pallplatser,
+hålla en drift i 4 s, åka i mörker, stoppa en träff med skölden, tre träffar
+med målsökande missiler) via några kvällar (tio pallplatser,
 vinna från sista plats, vinna utan att skjuta, avsluta med under 5 %
 skada, brons-silver-guld, befordran i karriären, publicera en bana, vinna
 online) till veckor (vinna på varje bana, 25 vinster, 50 vrak, MEGACARS
@@ -493,7 +539,8 @@ för spel mot datorn.
 stöder det) och Android-mobiler (`navigator.vibrate`; iPhone saknar det och
 får ingenting) ger korta pulser för vägg- och bilkrockar, träffar av missil
 och mina, att bli totalad, hårda landningar, turbo som startar, lådor du
-plockar samt startljusen och GO. Styrkan följer hur hårt det small. I delad skärm känner
+plockar, sköld som går upp, träffar som studsar på skölden, oljefläckar du
+kör på samt startljusen och GO. Styrkan följer hur hårt det small. I delad skärm känner
 varje kontroll bara sin egen bil (kontroll 1 = spelare 1, kontroll 2 =
 spelare 2). Nya händelser får en vibration med en rad i `RULES` i
 `src/client/input/haptics.ts`. Av/på under **OPTIONS → GAME FEEL → VIBRATION**

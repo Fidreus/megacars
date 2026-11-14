@@ -1514,7 +1514,7 @@ export class App {
       const how = { point: 'STEER: PUSH YOUR LEFT THUMB WHERE YOU WANT TO GO', slide: 'STEER: DRAG YOUR LEFT THUMB LEFT/RIGHT', buttons: 'STEER: THE ARROW BUTTONS' }[this.touch.steerMode];
       const gas = { thumb: 'GAS: ON WHILE YOUR THUMB IS DOWN', always: 'GAS: THE CAR ACCELERATES BY ITSELF', button: 'GAS: HOLD THE GAS BUTTON' }[this.touch.gasMode];
       const lines = [how, `${gas}   DRIFT: HOLD DRIFT WHILE TURNING`];
-      if (weapons) lines.push('WEAPONS: THE MISSILE, MINE AND TURBO BUTTONS');
+      if (weapons) lines.push('WEAPONS: THE MISSILE, MINE, TURBO AND ITEM BUTTONS');
       return lines;
     }
     const c = this.controls.solo;
@@ -1523,7 +1523,7 @@ export class App {
       `STEER ${k('left')} ${k('right')}   GAS ${k('gas')}   BRAKE ${k('brake')}`,
       `DRIFT: HOLD ${k('drift')} WHILE TURNING (OR LIFT OFF + GAS AGAIN)`,
     ];
-    if (weapons) lines.push(`WEAPONS: ${k('fireFront')} MISSILE  ${k('fireRear')} MINE  ${k('turbo')} TURBO`);
+    if (weapons) lines.push(`WEAPONS: ${k('fireFront')} MISSILE  ${k('fireRear')} MINE  ${k('turbo')} TURBO  ${k('special')} ITEM`);
     return lines;
   }
 
