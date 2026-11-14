@@ -5,13 +5,14 @@
 // at the same point on the track.
 
 import * as THREE from 'three';
+import { disposeTree } from '../render/disposeTree.ts';
 import { DT } from '../../shared/config/constants.ts';
 import { ghostPose, ghostReach, ghostTicksAt, type GhostLap, type LapTape } from '../../shared/game/ghost.ts';
 import type { League } from '../../shared/game/leagues.ts';
 import type { RecordEntry } from '../../shared/game/records.ts';
 import type { World } from '../../shared/sim/world.ts';
 import { CarView } from '../render/carMesh.ts';
-import { drawText } from '../ui/font.ts';
+import { drawText, textWidth } from '../ui/font.ts';
 import { formatTime } from '../ui/screens/hud.ts';
 import { loadMyGhost, loadWorldGhost } from './ghostStore.ts';
 import { fetchBoards } from './records.ts';
@@ -251,10 +252,12 @@ export class TimeTrial {
       drawText(ctx, 'CROSS THE LINE TO START', cx, 19, { color: '#c8d0dc', align: 'center' });
     }
     // What isn't there (yet), under the gap.
-    let y = t ? 41 : 8;
+    // Narrow screens: no room between the lap box and the minimap, so at the bottom, short.
+    const narrow = W < 500;
+    let y = narrow ? H - 36 : t ? 41 : 8;
     for (const msg of [this.mine ? '' : this.mineStatus, this.world ? '' : this.worldStatus]) {
       if (!msg) continue;
-      drawText(ctx, msg, cx, y, { color: '#8090a8', align: 'center' });
+      drawText(ctx, textWidth(msg) <= W - 300 ? msg : msg.split(' - ')[0], cx, y, { color: '#8090a8', align: 'center' });
       y += 10;
     }
     if (this.opts.choice === 'off' && !t) drawText(ctx, 'TIME TRIAL - NO GHOST', cx, 8, { color: '#8090a8', align: 'center' });
@@ -277,6 +280,7 @@ export class TimeTrial {
     this.disposed = true;
     this.scene.remove(this.group);
     for (const g of [this.mine, this.world]) for (const m of g?.mats ?? []) m.dispose();
+    disposeTree(this.group);
   }
 }
 

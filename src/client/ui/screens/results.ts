@@ -7,7 +7,7 @@ import { elimResult } from './elimHud.ts';
 import { formatTime, ordinal } from './hud.ts';
 
 export function drawResults(
-  ctx: CanvasRenderingContext2D, W: number, H: number, world: World, names: readonly string[], colors: readonly string[], players: readonly number[], time: number,
+  ctx: CanvasRenderingContext2D, W: number, H: number, world: World, names: readonly string[], colors: readonly string[], players: readonly number[], time: number, touch = false,
 ): void {
   const order = standings(world);
   const rowH = 12;
@@ -15,7 +15,7 @@ export function drawResults(
   const boxH = 46 + order.length * rowH + 22;
   const x0 = Math.round(W / 2 - boxW / 2);
   const y0 = Math.round(H / 2 - boxH / 2);
-  ctx.fillStyle = 'rgba(8,10,24,0.86)';
+  ctx.fillStyle = 'rgba(8,10,24,0.95)';
   ctx.fillRect(x0, y0, boxW, boxH);
   ctx.fillStyle = '#ffd84a';
   ctx.fillRect(x0, y0, boxW, 2);
@@ -42,5 +42,5 @@ export function drawResults(
     drawText(ctx, total, x0 + boxW - 92, y, { align: 'right' });
     drawText(ctx, c.bestLapTicks ? formatTime(c.bestLapTicks * DT) : '-', x0 + boxW - 10, y, { align: 'right', color: '#9cff9c' });
   });
-  if (Math.sin(time * 5) > -0.2) drawText(ctx, 'PRESS ENTER TO CONTINUE', W / 2, y0 + boxH - 14, { color: '#c8d0dc', align: 'center' });
+  if (Math.sin(time * 5) > -0.2) drawText(ctx, touch ? 'TAP TO CONTINUE' : 'PRESS ENTER TO CONTINUE', W / 2, y0 + boxH - 14, { color: '#c8d0dc', align: 'center' });
 }

@@ -2,6 +2,12 @@
 
 import { drawText, textWidth } from '../font.ts';
 
+/** Where drawLogo(…, top, maxWidth, …) ends (the y it returns), without drawing. */
+export function logoBottom(top: number, maxWidth: number): number {
+  const scale = Math.max(3, Math.min(9, Math.floor(maxWidth / textWidth('MEGACARS', 1))));
+  return top + 7 * scale + 8 + (scale >= 6 ? 18 : 10);
+}
+
 export function drawLogo(ctx: CanvasRenderingContext2D, cx: number, top: number, maxWidth: number, time: number): number {
   const text = 'MEGACARS';
   const scale = Math.max(3, Math.min(9, Math.floor(maxWidth / textWidth(text, 1))));

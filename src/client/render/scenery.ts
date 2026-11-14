@@ -143,7 +143,8 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
     }
     if (!trunkless) trunks.add(dummy.matrix);
   }
-  for (const c of [crowns, rounds, trunks]) group.add(...c.meshes(true));
+  // add() with no meshes (a track without trees) logs an error.
+  for (const c of [crowns, rounds, trunks]) for (const m of c.meshes(true)) group.add(m);
 
   // Bushes hugging the outside of the barriers.
   const bushGeo = new THREE.IcosahedronGeometry(0.9, 0);
@@ -161,7 +162,7 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
     dummy.updateMatrix();
     bushes.add(dummy.matrix, color.set(theme.bushColors[Math.floor(rnd() * theme.bushColors.length)]).multiplyScalar(0.9));
   }
-  group.add(...bushes.meshes(true));
+  for (const m of bushes.meshes(true)) group.add(m);
 
   // Rocks.
   const rockGeo = new THREE.DodecahedronGeometry(0.8, 0);
@@ -177,7 +178,7 @@ export function buildScenery(track: Track, keepOut: readonly KeepOut[] = []): TH
     dummy.updateMatrix();
     rocks.add(dummy.matrix, color.set(theme.rockColors[Math.floor(rnd() * theme.rockColors.length)]));
   }
-  group.add(...rocks.meshes(true, false));
+  for (const m of rocks.meshes(true, false)) group.add(m);
 
   return group;
 }

@@ -3,7 +3,7 @@
 
 import type { RoomInfo } from '../../../shared/net/protocol.ts';
 import type { ConnState } from '../../net/connection.ts';
-import { drawText } from '../font.ts';
+import { drawText, textWidth } from '../font.ts';
 
 /** Draws the room header and player list; returns the y where the menu goes. */
 export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, room: RoomInfo, me: number, time: number, summary = ''): number {
@@ -14,8 +14,16 @@ export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, r
   drawText(ctx, `INVITE: ${inviteLink(room.code)}`, W / 2, y, { color: '#9fd8ff', align: 'center' });
   y += 12;
   if (summary) {
-    drawText(ctx, summary, W / 2, y, { color: '#ffffff', align: 'center' });
-    y += 12;
+    // A long summary (weather, mode, league...) goes onto two lines on a narrow screen.
+    const words = summary.split(' ');
+    let cut = words.length;
+    while (cut > 1 && textWidth(words.slice(0, cut).join(' ')) > W - 8) cut--;
+    for (const line of [words.slice(0, cut).join(' '), words.slice(cut).join(' ')]) {
+      if (!line) continue;
+      drawText(ctx, line, W / 2, y, { color: '#ffffff', align: 'center' });
+      y += 11;
+    }
+    y += 1;
   }
   y += 2;
   const tour = room.config.tour.length;
@@ -37,10 +45,12 @@ export function drawLobby(ctx: CanvasRenderingContext2D, W: number, H: number, r
   const rowH = 11;
   const boxW = Math.min(W - 24, 300);
   const x0 = Math.round(W / 2 - boxW / 2);
-  const boxH = 8 * rowH + 8;
+  // Short screens: only the players and one open seat, so the menu has room.
+  const rows = H < 300 ? Math.max(2, Math.min(8, players.length + 1)) : 8;
+  const boxH = rows * rowH + 8;
   ctx.fillStyle = 'rgba(8,10,24,0.72)';
   ctx.fillRect(x0, y - 4, boxW, boxH);
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < rows; i++) {
     const p = players[i];
     const ry = y + i * rowH;
     if (!p) {

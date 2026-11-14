@@ -121,9 +121,15 @@ export class ShopScreen {
     g.fillRect(0, 0, W, H);
     const p = this.ctx.profile();
     const big = H >= 330 ? 2 : 1;
+    // Small phones: everything tighter, so START RACE stays on the screen.
+    const short = H < 300;
     let y = Math.round(H * 0.05);
-    drawText(g, this.ctx.title(), W / 2, y, { scale: big * 1.5 >= 3 ? 3 : 2, color: '#ffd84a', align: 'center' });
-    y += big === 2 ? 30 : 20;
+    const title = this.ctx.title();
+    // Long titles (division, race, track, weather) step down a size until they fit.
+    let ts = big === 2 ? 3 : 2;
+    while (ts > 1 && textWidth(title, ts) > W - (short ? 120 : 16)) ts--;
+    drawText(g, title, W / 2, y, { scale: ts, color: '#ffd84a', align: 'center' });
+    y += ts === 3 ? 30 : ts === 2 ? 20 : 12;
     if (!p) {
       drawText(g, 'CONNECTING TO THE SHOP...', W / 2, y, { color: '#c8d0dc', align: 'center' });
       return;
@@ -148,7 +154,8 @@ export class ShopScreen {
     const sw = Math.min(260, W - 40);
     const sx = Math.round(W / 2 - sw / 2);
     g.fillStyle = 'rgba(8,10,24,0.72)';
-    g.fillRect(sx - 6, y - 4, sw + 12, stats.length * 10 + 6);
+    const step = short ? 9 : 10;
+    g.fillRect(sx - 6, y - 4, sw + 12, stats.length * step + 6);
     for (const [name, v, stock, text] of stats) {
       drawText(g, name, sx, y, { color: '#9aa4b8' });
       const bx = sx + 64;
@@ -163,16 +170,16 @@ export class ShopScreen {
         g.fillRect(bx, y, Math.round(bw * Math.min(1, stock)), 6);
       }
       if (text) drawText(g, text, sx + sw, y, { align: 'right' });
-      y += 10;
+      y += step;
     }
-    y += 12;
+    y += short ? 8 : 12;
     const scale = y + this.menu.items.length * 22 < H - 24 ? 2 : 1;
-    this.menu.draw(g, W / 2, y, scale, dt);
+    this.menu.draw(g, W / 2, y, scale, dt, true, H - (short ? 14 : 26));
     if (this.messageTime > 0) {
       this.messageTime -= dt;
-      drawText(g, this.message, W / 2, H - 22, { scale: 1, color: '#ff6b5e', align: 'center' });
+      drawText(g, this.message, W / 2, H - (short ? 11 : 22), { scale: 1, color: '#ff6b5e', align: 'center' });
     } else {
-      drawText(g, 'ENTER BUY   ↑↓ CHOOSE   BLUE = STOCK, YELLOW = UPGRADED', W / 2, H - 22, { color: '#8090a8', align: 'center' });
+      drawText(g, short ? 'BLUE = STOCK, YELLOW = UPGRADED' : 'ENTER BUY   ↑↓ CHOOSE   BLUE = STOCK, YELLOW = UPGRADED', W / 2, H - (short ? 11 : 22), { color: '#8090a8', align: 'center' });
     }
   }
 }

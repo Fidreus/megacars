@@ -4,6 +4,7 @@
 // podium.
 
 import * as THREE from 'three';
+import { disposeTree } from './disposeTree.ts';
 import type { League } from '../../shared/game/leagues.ts';
 import type { Track } from '../../shared/track/types.ts';
 import type { PaintLook } from '../game/paints.ts';
@@ -57,6 +58,7 @@ export class Showroom {
 
   dispose(): void {
     this.scene.remove(this.group);
+    disposeTree(this.group);
   }
 
   private layout(dt: number): void {

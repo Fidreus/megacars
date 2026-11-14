@@ -56,7 +56,7 @@ export function playDriftLevel(audio: AudioSystem, level: number, pan: number): 
     f.type = 'lowpass';
     f.frequency.value = 3200;
     o.connect(f);
-    send(audio, f.connect(env(ctx, 0.07, t, 0.004, 0.11)), pan, 0.2);
+    send(audio, f.connect(env(ctx, 0.14, t, 0.004, 0.11)), pan, 0.2);
     o.start(t);
     o.stop(t + 0.14);
   }
@@ -97,7 +97,7 @@ export function playDriftLost(audio: AudioSystem, pan: number): void {
   f.type = 'lowpass';
   f.frequency.value = 1400;
   o.connect(f);
-  send(audio, f.connect(env(ctx, 0.05, t, 0.004, 0.24)), pan);
+  send(audio, f.connect(env(ctx, 0.1, t, 0.004, 0.24)), pan);
   o.start(t);
   o.stop(t + 0.28);
 }

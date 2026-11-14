@@ -2,6 +2,7 @@
 // simulation ticks), skid marks, particles and the start lights.
 
 import * as THREE from 'three';
+import { disposeTree } from '../render/disposeTree.ts';
 import { DT } from '../../shared/config/constants.ts';
 import { Surface } from '../../shared/config/surfaces.ts';
 import { surfaceAt } from '../../shared/track/builder.ts';
@@ -94,6 +95,7 @@ export class RaceView {
   dispose(): void {
     this.scene.remove(this.group);
     this.weather.dispose();
+    disposeTree(this.group);
     for (const m of this.lamps) m.color.set('#3a0d0d');
   }
 

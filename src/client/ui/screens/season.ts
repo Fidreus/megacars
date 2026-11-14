@@ -31,7 +31,7 @@ const HEADLINES = {
   lost: () => ['TITLE LOST - TRY AGAIN', '#ff6b5e'],
 } as const;
 
-export function drawSeasonEnd(g: CanvasRenderingContext2D, W: number, H: number, c: Career, time: number): void {
+export function drawSeasonEnd(g: CanvasRenderingContext2D, W: number, H: number, c: Career, time: number, touch = false): void {
   const r = c.last!;
   g.fillStyle = 'rgba(8,10,24,0.82)';
   g.fillRect(0, 0, W, H);
@@ -53,5 +53,5 @@ export function drawSeasonEnd(g: CanvasRenderingContext2D, W: number, H: number,
     ? `TITLES: ${c.titles}. DEFEND IT IN DIVISION 1!`
     : `NEXT: DIVISION ${c.division}${c.division > 1 ? ' - FINISH TOP 3 TO MOVE UP' : ' - WIN IT TO BE CHAMPION'}`;
   drawText(g, next, W / 2, y, { color: '#c8d0dc', align: 'center' });
-  if (Math.sin(time * 5) > -0.2) drawText(g, 'PRESS ENTER', W / 2, H - 30, { color: '#c8d0dc', align: 'center' });
+  if (Math.sin(time * 5) > -0.2) drawText(g, touch ? 'TAP TO CONTINUE' : 'PRESS ENTER', W / 2, H - 30, { color: '#c8d0dc', align: 'center' });
 }

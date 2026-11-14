@@ -27,6 +27,12 @@ det är tunat), **SUPERCARS** (mycket snabbare, greppar och bromsar hårdare)
 eller **MEGACARS** (ännu lite snabbare igen, med egen vildare look). Varje
 klass har egna rekordtavlor per bana.
 
+Titelmenyn: SINGLE RACE, CHAMPIONSHIP, CAREER, PLAY ONLINE, DAILY CHALLENGE,
+TIME TRIAL & RECORDS, TRACK EDITOR, PAINT & ACHIEVEMENTS, OPTIONS, DRIVING
+SCHOOL och HOW TO PLAY. Den hålls så kort att den får plats på en liten
+mobil utan att rulla; på låga skärmar krymper loggan i stället. Tillbaka
+från RECORDS, ACHIEVEMENTS och PAINT SHOP leder till sidan man kom ifrån.
+
 På asfalt greppar bilen tills gränsen och understyr sedan – den sladdar inte
 av sig själv. Driften startar du enklast med **driftknappen** (Z, eller LB på
 handkontrollen) medan du styr in i kurvan – håll den nere så håller bilen
@@ -450,7 +456,7 @@ Banorna sparas i `$DATA_DIR/tracks.json`. API:
 
 ## Rekord och topplistor
 
-**RECORDS** i titelmenyn visar per bana ditt bästa varv och dina bästa
+**RECORDS** (under **TIME TRIAL & RECORDS** i titelmenyn) visar per bana ditt bästa varv och dina bästa
 racetider (sparas i webbläsaren) och världens topp 10 bästa varv. Slår du
 ditt rekord i ett snabbrace, i träning eller i en tidskörning med serienbil skickas racet till
 servern: din inmatning tick för tick (komprimerad, typiskt 30–50 kB) och
@@ -487,7 +493,7 @@ de gamla finns kvar i localStorage men visas inte.
 
 ## Tidskörning (TIME TRIAL)
 
-**TIME TRIAL** i titelmenyn: ensam på banan, inga vapen, serienbil (inte
+**TIME TRIAL** (**TIME TRIAL & RECORDS** i titelmenyn, markören står på START): ensam på banan, inga vapen, serienbil (inte
 den egna tuningen) och hur många varv som helst – fri träning med ett
 spöke att jaga. Välj bana, klass och spöke: **OFF**, **MY BEST** (ditt
 bästa varv på banan i den klassen), **WORLD RECORD** (etta på världslistan)
@@ -592,7 +598,7 @@ SINGLE RACE och som en kort banderoll ("GOLD MEDAL!") när en vinns.
 
 ## Prestationer
 
-**ACHIEVEMENTS** i titelmenyn listar 30 prestationer, från sådant man gör de
+**ACHIEVEMENTS** (under **PAINT & ACHIEVEMENTS** i titelmenyn) listar 30 prestationer, från sådant man gör de
 första tio minuterna (köra klart ett race, vinna, vraka en bil, hoppa 40 m,
 hålla en drift i 4 s, åka i mörker, stoppa en träff med skölden, tre träffar
 med målsökande missiler) via några kvällar (tio pallplatser,
@@ -629,7 +635,7 @@ ett race, CHAMPION: MEGACARS CHAMPION) eller till antal medaljer (3 av
 någon färg, 5 silver eller bättre, 3 guld). De snyggaste är svårast: MIDAS
 kräver guld på varje bana i alla tre ligor.
 
-**PAINT SHOP** i titelmenyn visar de tre bilarna på en scen över startrakan i
+**PAINT SHOP** (under **PAINT & ACHIEVEMENTS** i titelmenyn) visar de tre bilarna på en scen över startrakan i
 vald lackering (liganhörande utseende), med en ruta per lackering; låsta
 visar vad som krävs. Vänster/höger bläddrar, ENTER väljer (sparas som
 `megacars.paint.v1`). Valet gäller bil 1 i alla offlineslägen (snabbrace,

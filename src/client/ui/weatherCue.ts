@@ -35,14 +35,14 @@ export function weatherCue(world: World, snow: boolean): { text: string; news: b
   return { text: 'DRY', news: false, sky: 'sun' };
 }
 
-/** Draws the cue centred on x, top at y (W, H: the whole UI). */
-export function drawWeatherCue(ctx: CanvasRenderingContext2D, W: number, H: number, x: number, y: number, world: World, snow: boolean): void {
+/** Draws the cue centred on x, top at y (W, H: the whole UI), ending left of `right`. */
+export function drawWeatherCue(ctx: CanvasRenderingContext2D, W: number, H: number, x: number, y: number, world: World, snow: boolean, right = W - 4): void {
   const cue = weatherCue(world, snow);
   if (!cue.text) return;
   const blink = cue.news && Math.floor(world.tick / 20) % 2 === 0;
   const color = cue.news ? (blink ? '#ffd84a' : '#ffffff') : '#c8d4e4';
   const w = textWidth(cue.text, 1) + 14;
-  const x0 = Math.round(Math.max(4, Math.min(W - w - 4, x - w / 2)));
+  const x0 = Math.round(Math.max(4, Math.min(right - w, x - w / 2)));
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(x0 - 2, y - 1, w + 4, 11);
   drawSky(ctx, x0, y, cue.sky, snow, world.tick);

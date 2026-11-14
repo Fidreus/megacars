@@ -254,12 +254,12 @@ export function lifeContext(track: Track, keepOut: readonly KeepOut[], shirts: r
       // Now and then someone jumps up and cheers. The phase comes from the
       // instance index, so bodies and heads of a cell hop together.
       const cheer = 'transformed.y += max(0.0, sin(uTime * (4.0 + ph * 4.0) + ph * 30.0)) * 0.2 * step(0.55, ph);';
-      group.add(...chunked(body(), animated(cheer), people, { reach: 0.3 }));
-      group.add(...chunked(head(), animated(cheer), heads, { reach: 0.3 }));
+      for (const m of chunked(body(), animated(cheer), people, { reach: 0.3 })) group.add(m);
+      for (const m of chunked(head(), animated(cheer), heads, { reach: 0.3 })) group.add(m);
     }
     if (stills.length) {
-      group.add(...chunked(body(), toon('#ffffff'), stills));
-      group.add(...chunked(head(), toon('#ffffff'), stillHeads));
+      for (const m of chunked(body(), toon('#ffffff'), stills)) group.add(m);
+      for (const m of chunked(head(), toon('#ffffff'), stillHeads)) group.add(m);
     }
     if (walkers.length) {
       // Back and forth along their walk, bobbing a little with each step.
@@ -269,12 +269,12 @@ export function lifeContext(track: Track, keepOut: readonly KeepOut[], shirts: r
         transformed.y += abs(sin(uTime * aWalk.y * 5.0 + aWalk.z)) * 0.06;
       }`;
       const mat = animated(walk, {}, 'attribute vec4 aWalk;');
-      group.add(...chunked(body(), mat, walkers, { attr: { name: 'aWalk', data: walks }, reach: 17 }));
-      group.add(...chunked(head(), mat, walkerHeads, { attr: { name: 'aWalk', data: walks }, reach: 17 }));
+      for (const m of chunked(body(), mat, walkers, { attr: { name: 'aWalk', data: walks }, reach: 17 })) group.add(m);
+      for (const m of chunked(head(), mat, walkerHeads, { attr: { name: 'aWalk', data: walks }, reach: 17 })) group.add(m);
     }
     if (flags.length) {
       const flagGeo = new THREE.PlaneGeometry(1, 0.6, 5, 1).translate(0.5, 0, 0);
-      group.add(...chunked(flagGeo, animated('transformed.z += sin(uTime * 7.0 + position.x * 3.5 + ph * 20.0) * 0.16 * position.x;', { side: THREE.DoubleSide }), flags, { reach: 1 }));
+      for (const m of chunked(flagGeo, animated('transformed.z += sin(uTime * 7.0 + position.x * 3.5 + ph * 20.0) * 0.16 * position.x;', { side: THREE.DoubleSide }), flags, { reach: 1 })) group.add(m);
     }
     if (poles.length) group.add(solid('#dddddd', poles, false));
   };
