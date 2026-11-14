@@ -11,6 +11,7 @@ import { DEG } from '../math/angle.ts';
 import type { Track } from '../track/types.ts';
 import type { CarState } from './car.ts';
 import { Ev, pushEvent, type EventBuffer } from './events.ts';
+import { DMath } from '../math/dmath.ts';
 
 export const DRIFT_BOOST = {
   /** Charge only builds above this speed (m/s) and slip angle. */
@@ -97,7 +98,7 @@ export function stepDriftCharge(car: CarState, surf: SurfaceMix, speed: number, 
   if (car.driftCharge <= 0) return;
   const lv = driftLevel(car.driftCharge);
   car.driftCharge = 0;
-  const fwd = car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading);
+  const fwd = car.vx * DMath.sin(car.heading) - car.vz * DMath.cos(car.heading);
   if (lv === 0 || fwd < DRIFT_BOOST.minSpeed) return;
   // A stronger boost replaces a weaker one still running.
   if (car.driftBoostTicks === 0 || lv >= car.driftBoostLevel) {
@@ -134,12 +135,12 @@ export function stepDriftBoost(car: CarState, t: CarTuning, dt: number): void {
   // (longAccel < 0) holds the boost back, so it never pushes into a corner.
   if (car.turboTicks > 0 || car.longAccel < 0) return;
   const lv = car.driftBoostLevel;
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
   const fwd = car.vx * fx + car.vz * fz;
   const top = t.vTop * DRIFT_BOOST.top[lv];
   if (fwd < top) {
-    const a = DRIFT_BOOST.accel[lv] * Math.max(0, 1 - (fwd / top) ** 2);
+    const a = DRIFT_BOOST.accel[lv] * Math.max(0, 1 - DMath.sq(fwd / top));
     car.vx += fx * a * dt;
     car.vz += fz * a * dt;
   }

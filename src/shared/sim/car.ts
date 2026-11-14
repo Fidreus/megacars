@@ -12,6 +12,7 @@ import { DEG, approach, clamp, headingOf, lerp, smoothstep, wrapAngle } from '..
 import type { CarTuning } from '../config/tuning.ts';
 import type { SurfaceMix } from '../config/surfaces.ts';
 import { Btn, type CarInput } from './input.ts';
+import { DMath } from '../math/dmath.ts';
 
 export interface CarState {
   id: number;
@@ -129,7 +130,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
 }
 
 export function carSpeed(c: CarState): number {
-  return Math.hypot(c.vx, c.vz);
+  return DMath.hypot(c.vx, c.vz);
 }
 
 /** How damage wears the car: nothing up to `from`, the full loss at 100 %. */
@@ -169,8 +170,8 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
 
   const throttle = clamp(inp.throttle, 0, 1);
   const brake = clamp(inp.brake, 0, 1);
-  let fx = Math.sin(car.heading);
-  let fz = -Math.cos(car.heading);
+  let fx = DMath.sin(car.heading);
+  let fz = -DMath.cos(car.heading);
   let vx = car.vx;
   let vz = car.vz;
   const vF = vx * fx + vz * fz;
@@ -206,7 +207,7 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
   vx += fx * aLong * dt;
   vz += fz * aLong * dt;
 
-  let s = Math.hypot(vx, vz);
+  let s = DMath.hypot(vx, vz);
   if (s > 0) {
     // Engine braking only when coasting: driving forwards or in reverse is powered.
     const resist = (1 - Math.max(throttle, reversing)) * (t.coastBase + t.coastLinear * s) + surf.drag + surf.dragLinear * s;
@@ -238,12 +239,12 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
     omegaT -= (inp.buttons & Btn.Analog ? t.assistPad : t.assistKb) * b;
   }
   const kYaw = car.sliding ? t.kYawSlide : t.kYawGrip;
-  car.angVel += (omegaT - car.angVel) * (1 - Math.exp(-kYaw * dt));
+  car.angVel += (omegaT - car.angVel) * (1 - DMath.exp(-kYaw * dt));
   car.heading = wrapAngle(car.heading + car.angVel * dt);
 
   // 4. Tyres: swing the velocity toward the nose within the budget.
-  fx = Math.sin(car.heading);
-  fz = -Math.cos(car.heading);
+  fx = DMath.sin(car.heading);
+  fz = -DMath.cos(car.heading);
   const fwd2 = vx * fx + vz * fz;
   let latAccel = 0;
   if (s < 3) {
@@ -274,7 +275,7 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
       const aSlide = t.aSlide * (1 + t.slideAngleBoost * smoothstep(15 * DEG, 60 * DEG, Math.abs(beta)));
       const rate = Math.min(t.kAlign * Math.abs(beta), (aSlide * surf.slide) / s);
       delta = clamp(beta, -rate * dt, rate * dt);
-      const scrub = Math.max(0, 1 - t.cScrub * surf.scrub * Math.abs(Math.sin(beta)) * dt);
+      const scrub = Math.max(0, 1 - t.cScrub * surf.scrub * Math.abs(DMath.sin(beta)) * dt);
       vx *= scrub;
       vz *= scrub;
       // Holding the drift button keeps the car sliding.
@@ -289,8 +290,8 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
       if (Math.abs(beta) > t.spinDeg * DEG && s > t.spinMinSpeed && car.spinCool === 0) startSpin(car, t, beta);
     }
     // Rotate velocity clockwise (toward increasing heading) by delta.
-    const c = Math.cos(delta);
-    const sn = Math.sin(delta);
+    const c = DMath.cos(delta);
+    const sn = DMath.sin(delta);
     const nvx = vx * c - vz * sn;
     vz = vz * c + vx * sn;
     vx = nvx;
@@ -379,17 +380,17 @@ function startSpin(car: CarState, t: CarTuning, beta: number): void {
 
 function stepSpin(car: CarState, t: CarTuning, dt: number): void {
   car.spinTicks--;
-  const s = Math.hypot(car.vx, car.vz);
+  const s = DMath.hypot(car.vx, car.vz);
   if (s > 0) {
     const k = Math.max(0, s - t.spinDecel * dt) / s;
     car.vx *= k;
     car.vz *= k;
   }
-  car.angVel *= Math.exp(-2.5 * dt);
+  car.angVel *= DMath.exp(-2.5 * dt);
   car.heading = wrapAngle(car.heading + car.angVel * dt);
   car.x += car.vx * dt;
   car.z += car.vz * dt;
-  const sp = Math.hypot(car.vx, car.vz);
+  const sp = DMath.hypot(car.vx, car.vz);
   car.slip = sp > 0.5 ? wrapAngle(car.heading - headingOf(car.vx, car.vz)) : 0;
   car.latAccel = 0;
   car.longAccel = -t.spinDecel;
@@ -402,9 +403,9 @@ function stepSpin(car: CarState, t: CarTuning, dt: number): void {
 
 /** After an external impulse, start sliding if the nose and velocity disagree. */
 export function updateSlideAfterImpact(car: CarState, t: CarTuning): void {
-  const s = Math.hypot(car.vx, car.vz);
+  const s = DMath.hypot(car.vx, car.vz);
   if (s < 3 || car.sliding) return;
-  const fwd = car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading);
+  const fwd = car.vx * DMath.sin(car.heading) - car.vz * DMath.cos(car.heading);
   const dirHeading = fwd >= 0 ? car.heading : car.heading + Math.PI;
   const beta = wrapAngle(dirHeading - headingOf(car.vx, car.vz));
   if (Math.abs(beta) > t.slipEnterDeg * DEG) {

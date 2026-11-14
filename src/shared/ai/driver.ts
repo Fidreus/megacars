@@ -17,6 +17,7 @@ import { Btn, type CarInput } from '../sim/input.ts';
 import { effectiveSkill, personaOf } from './persona.ts';
 import { expect, notice, PLANNED_SLIDE, Sense } from './reaction.ts';
 import { roadBrakeScale, roadGripScale, roadSlideScale } from '../sim/weather.ts';
+import { DMath } from '../math/dmath.ts';
 
 export const AiMode = { Grip: 0, Drift: 1 } as const;
 
@@ -135,9 +136,9 @@ export function aiDrive(
 ): void {
   const line = track.line;
   const n = track.n;
-  const s = Math.hypot(car.vx, car.vz);
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
+  const s = DMath.hypot(car.vx, car.vz);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
   const fwd = car.vx * fx + car.vz * fz;
   const persona = personaOf(car.aiPersona);
   // Grip lovers only slide the corners tighter than their limit.
@@ -147,8 +148,8 @@ export function aiDrive(
   const calm = !tightAhead(track, car.trackIdx, AI_PARAMS.straightR);
   // Weaker drivers corner slower, brake earlier, hold less top speed and wander off the line.
   const lack = clamp(1 - skill, 0, 1);
-  const rx = Math.cos(car.heading);
-  const rz = Math.sin(car.heading);
+  const rx = DMath.cos(car.heading);
+  const rz = DMath.sin(car.heading);
 
   // --- Getting unstuck: back away from the obstacle, nose turning toward the line.
   if (car.aiReverseTicks === 0 && (car.stuckTicks === 40 || car.stuckTicks === 140)) car.aiReverseTicks = 75;
@@ -263,10 +264,10 @@ export function aiDrive(
       dz = pit.oz + pit.tz * ut + pit.nz * lat - car.z;
     }
   }
-  const ld = Math.hypot(dx, dz);
+  const ld = DMath.hypot(dx, dz);
   const travel = s > 2 ? headingOf(car.vx, car.vz) : car.heading;
   const alpha = wrapAngle(headingOf(dx, dz) - travel);
-  const turnRate = (s * 2 * Math.sin(alpha)) / Math.max(ld, 1);
+  const turnRate = (s * 2 * DMath.sin(alpha)) / Math.max(ld, 1);
 
   const dirHeading = fwd >= 0 ? car.heading : car.heading + Math.PI;
   const beta = s > 2 ? wrapAngle(dirHeading - travel) : 0;
@@ -288,7 +289,7 @@ export function aiDrive(
   omegaDes += AI_PARAMS.kLead * (omegaDes - car.angVel);
 
   // Invert the yaw model from car.ts to find the steering that gives omegaDes.
-  const aEngGuess = throttle * t.accel0 * surf.accel * Math.max(0, 1 - (fwd / (t.vTop * surf.vTop)) ** 2);
+  const aEngGuess = throttle * t.accel0 * surf.accel * Math.max(0, 1 - DMath.sq(fwd / (t.vTop * surf.vTop)));
   const budget = gripBudget(t, surf, brake, aEngGuess);
   let omegaMax: number;
   let extra = 0;
@@ -327,7 +328,7 @@ export function aiDrive(
   // Traction control while gripping: hard acceleration eats lateral grip, so
   // ease off (but stay above the lift threshold) when the corner needs most of it.
   if (!car.sliding && throttle > 0.55) {
-    const fullThrottle = t.accel0 * surf.accel * Math.max(0, 1 - (fwd / (t.vTop * surf.vTop)) ** 2);
+    const fullThrottle = t.accel0 * surf.accel * Math.max(0, 1 - DMath.sq(fwd / (t.vTop * surf.vTop)));
     if (Math.abs(turnRate) * s > gripBudget(t, surf, 0, fullThrottle) * 0.92) throttle = 0.55;
   }
 

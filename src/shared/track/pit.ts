@@ -10,6 +10,7 @@
 
 import { smoothstep } from '../math/angle.ts';
 import type { Track } from './types.ts';
+import { DMath } from '../math/dmath.ts';
 
 export const PIT = {
   /** Half width of the lane. */
@@ -137,9 +138,11 @@ export function buildPit(track: Track): Pit | null {
   const pitOff = barrier + PIT.island + PIT.laneHalf;
   const outer = pitOff + PIT.laneHalf + PIT.garage;
   // Room on each side: the closest other part of the track (its barrier) to the pit area.
-  let best: 1 | -1 = 1;
+  // A side needs clearly more room to win: on a symmetric straight the two
+  // differ only by rounding, and that must not move the pits (left on a tie).
+  let best: 1 | -1 = -1;
   let bestRoom = -Infinity;
-  for (const side of [1, -1] as const) {
+  for (const side of [-1, 1] as const) {
     let room = Infinity;
     for (let u = a; u <= b; u += 4) {
       for (const lat of [barrier + 2, outer]) {
@@ -148,11 +151,11 @@ export function buildPit(track: Track): Pit | null {
         for (let j = 0; j < n; j++) {
           const uj = sampleU(track, j);
           if (uj > a - 30 && uj < b + 30) continue;
-          room = Math.min(room, Math.hypot(track.px[j] - x, track.pz[j] - z) - hw[j] - def.runoff);
+          room = Math.min(room, DMath.hypot(track.px[j] - x, track.pz[j] - z) - hw[j] - def.runoff);
         }
       }
     }
-    if (room > bestRoom) {
+    if (room > bestRoom + 0.01) {
       bestRoom = room;
       best = side;
     }

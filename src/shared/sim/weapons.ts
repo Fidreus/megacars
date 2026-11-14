@@ -11,6 +11,7 @@ import { Ev, pushEvent, type EventBuffer } from './events.ts';
 import { Btn, type CarInput } from './input.ts';
 import { inPitArea } from '../track/pit.ts';
 import { stepDriftBoost } from './driftBoost.ts';
+import { DMath } from '../math/dmath.ts';
 
 export const ShotKind = { None: 0, Missile: 1, Mine: 2 } as const;
 
@@ -99,8 +100,8 @@ export function useWeapons(car: CarState, inp: CarInput, shots: Shot[], ev: Even
   // Not allowed: in the pit lane, where nobody shoots or gets shot.
   if (!allowed || car.finished || car.wreckTicks > 0 || car.ghostTicks > 0) return;
   const pressed = inp.buttons & ~car.prevButtons;
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
   if (pressed & Btn.FireFront && car.missiles > 0 && car.fireCool === 0) {
     car.missiles--;
     car.fireCool = WEAPON.missileCool;
@@ -145,12 +146,12 @@ export function stepBoostAndAir(
   if (car.turboTicks > 0) {
     car.turboTicks--;
     if (car.spinTicks === 0 && car.wreckTicks === 0) {
-      const fx = Math.sin(car.heading);
-      const fz = -Math.cos(car.heading);
+      const fx = DMath.sin(car.heading);
+      const fz = -DMath.cos(car.heading);
       const fwd = car.vx * fx + car.vz * fz;
       const top = t.vTop * WEAPON.turboTopFactor;
       if (fwd < top) {
-        const a = WEAPON.turboAccel * Math.max(0, 1 - (fwd / top) ** 2);
+        const a = WEAPON.turboAccel * Math.max(0, 1 - DMath.sq(fwd / top));
         car.vx += fx * a * dt;
         car.vz += fz * a * dt;
       }
@@ -183,11 +184,11 @@ export function stepBoostAndAir(
 
 /** 0 when a car lands pointing the way it flies, 1 when sideways or backwards. */
 export function landingCrooked(car: CarState): number {
-  const s = Math.hypot(car.vx, car.vz);
+  const s = DMath.hypot(car.vx, car.vz);
   if (s < 3) return 0;
-  const along = (car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading)) / s;
+  const along = (car.vx * DMath.sin(car.heading) - car.vz * DMath.cos(car.heading)) / s;
   if (along <= 0) return 1;
-  const angle = Math.acos(Math.min(1, along));
+  const angle = DMath.acos(Math.min(1, along));
   const lo = (25 * Math.PI) / 180;
   const hi = (70 * Math.PI) / 180;
   const x = Math.max(0, Math.min(1, (angle - lo) / (hi - lo)));
@@ -217,7 +218,7 @@ function hitCar(
 function wallBetween(walls: Walls, ax: number, az: number, bx: number, bz: number, y: number): boolean {
   const mx = (ax + bx) / 2;
   const mz = (az + bz) / 2;
-  const r = Math.hypot(bx - ax, bz - az) / 2 + 0.6;
+  const r = DMath.hypot(bx - ax, bz - az) / 2 + 0.6;
   const n = walls.grid.query(mx, mz, r, queryBuf);
   for (let q = 0; q < n; q++) {
     const i = queryBuf[q];
@@ -248,8 +249,8 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
         if ((c.id === s.owner && s.age < 20) || c.ghostTicks > 0 || c.wreckTicks > 0 || c.finished || Math.abs(c.y - s.y) > 1.2) continue;
         if (inPitArea(track.pit, c.x, c.z)) continue;
         const t = tunings[c.id] ?? tunings[0];
-        const fx = Math.sin(c.heading);
-        const fz = -Math.cos(c.heading);
+        const fx = DMath.sin(c.heading);
+        const fz = -DMath.cos(c.heading);
         const rr = t.circleR + WEAPON.missileRadius;
         for (const off of [t.circleOffset, -t.circleOffset]) {
           closestOnSegment(c.x + fx * off, c.z + fz * off, s.x, s.z, nx, nz, closest);
@@ -260,7 +261,7 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
       s.x = nx;
       s.z = nz;
       if (hit >= 0) {
-        const sp = Math.hypot(s.vx, s.vz) || 1;
+        const sp = DMath.hypot(s.vx, s.vz) || 1;
         const c = cars[hit];
         hitCar(c, cars, tunings[hit] ?? tunings[0], WEAPON.missileDamage, s.vx / sp, s.vz / sp, ev, 1, s.owner);
         s.kind = ShotKind.None;
@@ -275,8 +276,8 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
         if (c.ghostTicks > 0 || c.wreckTicks > 0 || c.finished || Math.abs(c.y - s.y) > 0.5) continue;
         if (inPitArea(track.pit, c.x, c.z)) continue;
         const t = tunings[c.id] ?? tunings[0];
-        const fx = Math.sin(c.heading);
-        const fz = -Math.cos(c.heading);
+        const fx = DMath.sin(c.heading);
+        const fz = -DMath.cos(c.heading);
         const rr = t.circleR + WEAPON.mineRadius;
         let near = false;
         for (const off of [t.circleOffset, -t.circleOffset]) {
@@ -329,13 +330,13 @@ export function checkWreck(car: CarState, cars: CarState[], ev: EventBuffer): bo
 
 /** A wrecked car: slides to a stop, no control. */
 export function stepWreck(car: CarState, dt: number): void {
-  const s = Math.hypot(car.vx, car.vz);
+  const s = DMath.hypot(car.vx, car.vz);
   if (s > 0) {
     const k = Math.max(0, s - 14 * dt) / s;
     car.vx *= k;
     car.vz *= k;
   }
-  car.angVel *= Math.exp(-3 * dt);
+  car.angVel *= DMath.exp(-3 * dt);
   car.heading = wrapAngle(car.heading + car.angVel * dt);
   car.x += car.vx * dt;
   car.z += car.vz * dt;

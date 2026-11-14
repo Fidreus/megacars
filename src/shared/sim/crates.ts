@@ -13,6 +13,7 @@ import { sampleU } from '../track/pit.ts';
 import type { CarState } from './car.ts';
 import { CATCH_UP } from './catchUp.ts';
 import { Ev, pushEvent, type EventBuffer } from './events.ts';
+import { DMath } from '../math/dmath.ts';
 
 export const CRATE = {
   /** Ticks a taken crate stays away (6 s). */
@@ -267,8 +268,8 @@ export function stepCrates(
   for (const car of cars) {
     if (car.finished || car.wreckTicks > 0 || car.airborne) continue;
     const t = tunings[car.id] ?? tunings[0];
-    const fx = Math.sin(car.heading);
-    const fz = -Math.cos(car.heading);
+    const fx = DMath.sin(car.heading);
+    const fz = -DMath.cos(car.heading);
     const rr = t.circleR + CRATE.radius;
     for (let k = 0; k < spots.length; k++) {
       if (crates[k] !== 0) continue;

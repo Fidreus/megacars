@@ -6,6 +6,7 @@
 
 import { curvature3 } from '../math/geom.ts';
 import type { RacingLine, Track } from '../track/types.ts';
+import { DMath } from '../math/dmath.ts';
 
 /** Distance kept from the outer road edge (car centre), metres. */
 const EXT_MARGIN = 1.5;
@@ -56,7 +57,7 @@ export function computeRacingLine(track: Track): RacingLine {
     setOff(i, o);
   };
 
-  const dist = (a: number, b: number) => Math.hypot(x[a] - x[b], z[a] - z[b]);
+  const dist = (a: number, b: number) => DMath.hypot(x[a] - x[b], z[a] - z[b]);
 
   for (let step = 128; step >= 1; step >>= 1) {
     const coarse: number[] = [];
@@ -114,7 +115,7 @@ export function computeRacingLine(track: Track): RacingLine {
   for (let i = 0; i < n; i++) {
     s[i] = acc;
     const j = (i + 1) % n;
-    acc += Math.hypot(x[j] - x[i], z[j] - z[i]);
+    acc += DMath.hypot(x[j] - x[i], z[j] - z[i]);
   }
   return { off, x, z, curv, s, length: acc };
 }

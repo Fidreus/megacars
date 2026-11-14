@@ -2,6 +2,7 @@
 
 import { segmentsIntersect } from '../math/geom.ts';
 import type { Track } from './types.ts';
+import { DMath } from '../math/dmath.ts';
 
 export interface ValidateOptions {
   /** Allow the centreline to cross itself (figure-8 tracks). */
@@ -39,7 +40,7 @@ export function validateTrack(track: Track, opts: ValidateOptions = {}): string[
           let along = Math.abs(s[j] - s[i]);
           along = Math.min(along, length - along);
           if (along < minGap * 2.2 || crossing(i, j)) continue;
-          const d = Math.hypot(px[j] - px[i], pz[j] - pz[i]);
+          const d = DMath.hypot(px[j] - px[i], pz[j] - pz[i]);
           if (d < minGap && !opts.allowCrossing) {
             errors.push(`sections at s=${s[i].toFixed(0)} and s=${s[j].toFixed(0)} are only ${d.toFixed(1)} m apart (need ${minGap.toFixed(1)})`);
             reported++;
@@ -69,7 +70,7 @@ export function validateTrack(track: Track, opts: ValidateOptions = {}): string[
     let best = 0;
     let bestD = Infinity;
     for (let i = 0; i < n; i++) {
-      const d = (px[i] - slot.x) ** 2 + (pz[i] - slot.z) ** 2;
+      const d = DMath.sq(px[i] - slot.x) + DMath.sq(pz[i] - slot.z);
       if (d < bestD) {
         bestD = d;
         best = i;
@@ -102,7 +103,7 @@ function checkBridges(track: Track): string[] {
     let best = -1;
     let bestD = Infinity;
     for (const j of list) {
-      const d = (px[j] - x) ** 2 + (pz[j] - z) ** 2;
+      const d = DMath.sq(px[j] - x) + DMath.sq(pz[j] - z);
       if (d < bestD) {
         bestD = d;
         best = j;

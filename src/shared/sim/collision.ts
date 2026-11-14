@@ -7,6 +7,7 @@ import type { CarTuning } from '../config/tuning.ts';
 import type { Walls } from '../track/types.ts';
 import { type CarState, updateSlideAfterImpact } from './car.ts';
 import { Ev, pushEvent, type EventBuffer } from './events.ts';
+import { DMath } from '../math/dmath.ts';
 
 const queryBuf = new Int32Array(128);
 const closest: Closest = { x: 0, z: 0, t: 0, d2: 0 };
@@ -27,8 +28,8 @@ export function collideCarWithWalls(car: CarState, t: CarTuning, walls: Walls, e
     const off = k === 0 ? t.circleOffset : -t.circleOffset;
     // Two passes so a corner pinch between two walls resolves cleanly.
     for (let pass = 0; pass < 2; pass++) {
-      const fx = Math.sin(car.heading);
-      const fz = -Math.cos(car.heading);
+      const fx = DMath.sin(car.heading);
+      const fz = -DMath.cos(car.heading);
       const cx = car.x + fx * off;
       const cz = car.z + fz * off;
       const n = walls.grid.query(cx, cz, r + 0.25, queryBuf);
@@ -127,15 +128,15 @@ export function collideCars(a: CarState, b: CarState, ta: CarTuning, tb: CarTuni
   let hz = 0;
   for (let ka = 0; ka < 2; ka++) {
     for (let kb = 0; kb < 2; kb++) {
-      const fax = Math.sin(a.heading), faz = -Math.cos(a.heading);
-      const fbx = Math.sin(b.heading), fbz = -Math.cos(b.heading);
+      const fax = DMath.sin(a.heading), faz = -DMath.cos(a.heading);
+      const fbx = DMath.sin(b.heading), fbz = -DMath.cos(b.heading);
       const oa = ka === 0 ? ta.circleOffset : -ta.circleOffset;
       const ob = kb === 0 ? tb.circleOffset : -tb.circleOffset;
       const cax = a.x + fax * oa, caz = a.z + faz * oa;
       const cbx = b.x + fbx * ob, cbz = b.z + fbz * ob;
       let nx = cax - cbx;
       let nz = caz - cbz;
-      const d = Math.hypot(nx, nz);
+      const d = DMath.hypot(nx, nz);
       if (d >= rSum) continue;
       if (d > 1e-6) {
         nx /= d;
@@ -202,7 +203,7 @@ export function collideCars(a: CarState, b: CarState, ta: CarTuning, tb: CarTuni
 }
 
 export function clampSpeed(car: CarState): void {
-  const s = Math.hypot(car.vx, car.vz);
+  const s = DMath.hypot(car.vx, car.vz);
   if (s > MAX_SPEED) {
     const k = MAX_SPEED / s;
     car.vx *= k;

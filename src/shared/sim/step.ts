@@ -26,6 +26,7 @@ import { elimDanger, stepElimination, stepOutCar } from './elimination.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
+import { DMath } from '../math/dmath.ts';
 
 const aiInput = neutralInput();
 const surfMix = makeSurfaceMix();
@@ -49,8 +50,8 @@ const FINISH_TIMEOUT_WEAPONS = 60 * 75;
 const END_DELAY_TICKS = 60 * 3;
 
 export function sampleCarSurface(car: CarState, track: Track, t: CarTuning): void {
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
   car.surfFront = surfaceAt(track, car.x + fx * t.circleOffset, car.z + fz * t.circleOffset);
   car.surfRear = surfaceAt(track, car.x - fx * t.circleOffset, car.z - fz * t.circleOffset);
 }
@@ -144,7 +145,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     car.prevButtons = inp.buttons;
 
     // Stuck: nearly stopped while trying to drive.
-    const speed = Math.hypot(car.vx, car.vz);
+    const speed = DMath.hypot(car.vx, car.vz);
     const trying = (car.aiDriven || inp.throttle > 0.3 || inp.brake > 0.3) && !car.airborne;
     // Drifting through a corner mends the car a little (sliding down a straight does not).
     const cornering = car.sliding === 1 && isCornering(car, track);
@@ -168,7 +169,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     // People may park in the box; a computer car standing there is stuck (nose in a wall) and backs out.
     const parked = inPit && !car.aiDriven;
     if (speed < 1.2 && trying && race.phase === RacePhase.Racing && !parked) car.stuckTicks++;
-    else if (parked || car.vx * Math.sin(car.heading) - car.vz * Math.cos(car.heading) > (car.aiDriven && car.stuckTicks >= AI_STUCK_ESCAPE.after ? AI_STUCK_ESCAPE.speed : 4)) car.stuckTicks = 0;
+    else if (parked || car.vx * DMath.sin(car.heading) - car.vz * DMath.cos(car.heading) > (car.aiDriven && car.stuckTicks >= AI_STUCK_ESCAPE.after ? AI_STUCK_ESCAPE.speed : 4)) car.stuckTicks = 0;
     if (car.ghostTicks > 0) car.ghostTicks--;
   }
   if (race.weapons) stepShots(w.shots, cars, track, tunings, DT, w.events);

@@ -5,6 +5,7 @@
 import { Surface } from '../config/surfaces.ts';
 import { hash3 } from '../math/rng.ts';
 import type { SurfacePatch } from './types.ts';
+import { DMath } from '../math/dmath.ts';
 
 export interface PatchShape {
   /** Direction of the long axis (radians). */
@@ -56,12 +57,12 @@ export function patchReach(p: SurfacePatch, s: PatchShape): number {
 export function inPatchShape(p: SurfacePatch, s: PatchShape, x: number, z: number): boolean {
   const dx = x - p.x;
   const dz = z - p.z;
-  const c = Math.cos(s.angle);
-  const sn = Math.sin(s.angle);
+  const c = DMath.cos(s.angle);
+  const sn = DMath.sin(s.angle);
   const k = Math.sqrt(s.aspect);
   const u = (dx * c + dz * sn) / k;
   const v = (-dx * sn + dz * c) * k;
-  const th = Math.atan2(v, u);
-  const lim = p.r * (1 + s.a2 * Math.cos(2 * th + s.p2) + s.a3 * Math.cos(3 * th + s.p3) + s.a5 * Math.cos(5 * th + s.p5));
+  const th = DMath.atan2(v, u);
+  const lim = p.r * (1 + s.a2 * DMath.cos(2 * th + s.p2) + s.a3 * DMath.cos(3 * th + s.p3) + s.a5 * DMath.cos(5 * th + s.p5));
   return u * u + v * v < lim * lim;
 }
