@@ -6,11 +6,11 @@ import type { League } from './leagues.ts';
 
 export const MEDAL_TICKS: Record<string, Record<League, readonly [number, number, number]>> = {
   greenvalley: { standard: [2814, 3037, 3330], super: [2138, 2295, 2520], mega: [1833, 1939, 2125] },
-  dustbowl: { standard: [3211, 3420, 3740], super: [2504, 2685, 2940], mega: [2168, 2329, 2542] },
+  dustbowl: { standard: [3210, 3426, 3727], super: [2504, 2680, 2944], mega: [2204, 2362, 2562] },
   frostring: { standard: [2455, 2620, 2858], super: [1882, 2007, 2175], mega: [1610, 1717, 1867] },
-  meltdown: { standard: [3187, 3413, 3729], super: [2442, 2631, 2875], mega: [2105, 2258, 2464] },
-  twinbridges: { standard: [3340, 3618, 3973], super: [2527, 2678, 2909], mega: [2222, 2272, 2439] },
-  brewerybash: { standard: [2206, 2327, 2531], super: [1809, 1902, 2002], mega: [1567, 1641, 1768] },
+  meltdown: { standard: [3187, 3413, 3729], super: [2443, 2630, 2873], mega: [2129, 2283, 2487] },
+  twinbridges: { standard: [3340, 3619, 3974], super: [2524, 2674, 2904], mega: [2244, 2268, 2424] },
+  brewerybash: { standard: [2234, 2338, 2530], super: [1828, 1867, 2032], mega: [1594, 1685, 1783] },
   tivoli: { standard: [1066, 1148, 1255], super: [872, 940, 1033], mega: [776, 835, 912] },
   cigars: { standard: [1339, 1435, 1548], super: [1095, 1184, 1292], mega: [969, 1048, 1156] },
   manhattan: { standard: [1008, 1076, 1169], super: [788, 852, 930], mega: [694, 751, 827] },
