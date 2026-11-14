@@ -46,7 +46,9 @@ export type AchInput =
   | { kind: 'race'; r: RaceSummary }
   | { kind: 'medal'; track: string; league: League; medal: number; totals: MedalTotals }
   | { kind: 'season'; outcome: SeasonOutcome }
-  | { kind: 'publish' };
+  | { kind: 'publish' }
+  /** Every driving school lesson has been passed. */
+  | { kind: 'school' };
 
 /** One rule's progress: a number that reaches the goal, a set of keys, and notes for the race at hand. */
 export interface Meter {
@@ -84,6 +86,10 @@ export const ACHIEVEMENTS: readonly AchievementRule[] = [
   {
     id: 'finish', name: 'OFF THE GRID', desc: 'FINISH A RACE',
     feed: (m, i) => { if (i.kind === 'race') m.set(1); },
+  },
+  {
+    id: 'school', name: 'LICENSED TO DRIFT', desc: 'FINISH THE DRIVING SCHOOL',
+    feed: (m, i) => { if (i.kind === 'school') m.set(1); },
   },
   {
     id: 'win', name: 'NUMBER ONE', desc: 'WIN A RACE',

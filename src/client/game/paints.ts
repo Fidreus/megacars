@@ -41,6 +41,7 @@ export const PAINTS: readonly PaintJob[] = [
   { id: 'sunshine', name: 'SUNSHINE', body: '#f6c91c', accent: '#1a1a22', pattern: 'dual', unlock: { kind: 'free' } },
   { id: 'british', name: 'BRITISH GREEN', body: '#1f9a52', accent: '#f4f0dc', pattern: 'stripe', unlock: { kind: 'free' } },
   { id: 'tangerine', name: 'TANGERINE', body: '#ff7a1a', accent: '#15161a', pattern: 'twotone', unlock: { kind: 'achievement', id: 'finish' } },
+  { id: 'learner', name: 'L-PLATE', body: '#f6f6ec', accent: '#2fb04a', pattern: 'bands', unlock: { kind: 'achievement', id: 'school' } },
   { id: 'bubblegum', name: 'BUBBLEGUM', body: '#ff6fb5', accent: '#ffffff', pattern: 'halves', unlock: { kind: 'achievement', id: 'win' } },
   { id: 'sidewinder', name: 'SIDEWINDER', body: '#28c4d0', accent: '#8a3ddc', pattern: 'dual', unlock: { kind: 'achievement', id: 'drift' } },
   { id: 'neon', name: 'NEON NIGHT', body: '#7a46f0', accent: '#38f0ff', pattern: 'stripe', unlock: { kind: 'achievement', id: 'night' } },

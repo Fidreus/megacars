@@ -500,6 +500,66 @@ som på listan, annars visas det inte. Det sparas, ett per bana och klass.
 I **RECORDS** väljer ↑↓ (eller ett tryck) en plats på världslistan och
 ENTER (eller ett tryck till) startar en tidskörning mot just den.
 
+## Körskola (DRIVING SCHOOL)
+
+**DRIVING SCHOOL** i titelmenyn, bredvid HOW TO PLAY: fem korta lektioner
+(ungefär en minut var) ensam på en egen övningsbana, där spelet säger vad du
+ska göra med just dina knappar, ser vad bilen gör och säger direkt när du
+klarade det. Den som aldrig spelat förut (inget sparat i webbläsaren) får en
+fråga första gången titelmenyn visas: **START THE DRIVING SCHOOL** eller **NO
+THANKS**. Frågan ställs aldrig om, vad man än svarar.
+
+1. **THE BASICS**: gasa, bromsa och styr runt tre stycken av banan utan att
+   köra in i väggen (första kurvan, hårnålen, en vänsterkurva).
+2. **THE DRIFT BUTTON**: håll driftknappen medan du styr in i kurvan; tre
+   drifter på minst en sekund utan att nudda en vägg ("2 OF 3").
+3. **DRIFT WITHOUT THE BUTTON**: släpp gasen kort och trampa igen, eller dutta på
+   bromsen, medan du styr; tre drifter som började utan knappen.
+4. **THE DRIFT BOOST**: håll sladden tills mätaren når nivå 2, räta upp och få
+   boosten; sedan nivå 3 i den långa svepande kurvan.
+5. **PUT IT TOGETHER**: ett helt varv med minst tre boostar på under 0:55.
+
+Övningsbanan är `src/shared/track/defs/school.ts` (`SCHOOL`): en medelkurva, en
+hårnål, en vänsterkurva och en lång 180°-sväng, 1,5 km. Den ligger inte i
+`TRACK_LIST`, så den finns inte i banvalet, mästerskapet, rekorden, medaljerna
+eller den dagliga rotationen; skolan registrerar den själv med
+`registerTrack`. Inga motståndare, inga vapen, serienbil.
+
+Hur det fungerar:
+
+- Texten står i ett band högst upp (aldrig över bilen) och nämner dina egna
+  knappar: tangenterna som de är bundna just nu (OPTIONS > CONTROLS), knapparna
+  på handkontrollen, eller på mobilen "THE DRIFT BUTTON" med en pulserande ring
+  runt rätt knapp. Med automatisk gas på mobilen står det i första lektionen
+  att bilen gasar själv (eller att tummen ska vara nere, eller att man håller
+  gasknappen, efter vad som är valt). På mobilen tar lektion 3 bromsknappen,
+  eftersom gasen inte går att släppa med tummen.
+- Varje försök börjar med bilen rullande på rätt ställe, så ingen kör runt i
+  onödan. Går det fel (vägg, för sakta in i kurvan, släppte för tidigt, snurrade)
+  står orsaken med några ord ("HIT THE WALL", "TOO SLOW INTO THE CORNER", "LET GO
+  TOO EARLY") och bilen ställs tillbaka efter drygt en sekund. RESET-knappen
+  börjar om försöket utan att det räknas som fel.
+- Efter tre misslyckanden i rad kommer en ledtråd ("HINT: ...") och efter fem
+  pekar bandet ut pausmenyn. I pausmenyn finns alltid **SKIP TO THE NEXT
+  LESSON**, **RESTART LESSON** och **LESSON LIST**. Överhoppade lektioner är
+  markerade SKIPPED i listan och räknas inte som klara.
+- När en lektion är klar visas **LESSON COMPLETE** med NEXT LESSON, REPEAT THIS
+  LESSON, LESSON LIST. Klara lektioner sparas i webbläsaren
+  (`megacars.school.v1`, tillsammans med att frågan har ställts). Klarar man
+  alla fem låses prestationen **LICENSED TO DRIFT** och lackeringen **L-PLATE**
+  upp.
+- Skolan räknas inte för varvrekord, medaljer, spöken eller andra
+  prestationer, och använder aldrig den egna tuningen. I användningsloggen är
+  det spelläget `school` (Körskola). Ingen delad skärm och inget online.
+
+Koden ligger i `src/client/game/school/`: `lessons.ts` (lektionerna som data
+och domarna som rena funktioner av en `Frame` per tick: vad bilen och
+knapparna gör, väggsmällar, driftnivåer, boostar), `prompts.ts` (texterna ur
+dina knappar), `progress.ts` (det sparade), `schoolRun.ts` (var i lektionen du
+är, omstarter, ritning) och `frames.ts`. Enhetstesterna (`*.test.ts` bredvid)
+matar domarna med påhittade bilar och spelar lektionerna med en
+tangentbordsrobot mot den riktiga simuleringen.
+
 ## Medaljer
 
 Varje inbyggd bana har en BRONS-, SILVER- och GULDtid per liga (STANDARD,
@@ -520,7 +580,7 @@ SINGLE RACE och som en kort banderoll ("GOLD MEDAL!") när en vinns.
 
 ## Prestationer
 
-**ACHIEVEMENTS** i titelmenyn listar 27 prestationer, från sådant man gör de
+**ACHIEVEMENTS** i titelmenyn listar 30 prestationer, från sådant man gör de
 första tio minuterna (köra klart ett race, vinna, vraka en bil, hoppa 40 m,
 hålla en drift i 4 s, åka i mörker, stoppa en träff med skölden, tre träffar
 med målsökande missiler) via några kvällar (tio pallplatser,
@@ -756,7 +816,8 @@ Det loggas, en JSON-rad per händelse i `DATA_DIR/analytics/ÅÅÅÅ-MM-DD.jsonl
   domännamnet). Skickas av sidan själv, för servern ser inte sidladdningar när appen körs från cachen. Botar räknas inte.
 - `race`: ett lopp startades på enheten (bana, läge, varv, motståndare,
   spelare). Det gäller träning, snabbt lopp, mästerskap, karriär och
-  dagens utmaning (läge `daily`).
+  dagens utmaning (läge `daily`) och körskolan (läget `school`, alltid med
+  Green Valley som bana).
 - `session`: hur länge sidan varit framme, och hur många lopp. Webbläsaren
   skickar den när fliken göms.
 - `ws`: en onlineanslutning och hur länge den varade.

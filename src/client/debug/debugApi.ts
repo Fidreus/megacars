@@ -40,6 +40,8 @@ export function installDebugApi(app: App): void {
         scale: r.scale,
         /** Race weather: plan (ticks) and the wetness and rain now. */
         weather: app.world.weather ? { ...app.world.weather, wet: +wetnessAt(app.world.weather, app.world.tick).toFixed(3), rain: +rainAt(app.world.weather, app.world.tick).toFixed(3) } : null,
+        uiScale: r.uiScale,
+        menuIndex: app.activeMenu?.index ?? -1,
         cars: app.world.cars.map((c) => ({
           id: c.id,
           x: +c.x.toFixed(2),
@@ -350,6 +352,14 @@ export function installDebugApi(app: App): void {
         room: o.room,
         race: n ? { tick: n.world.tick, server: n.predictor.serverTick, lead: n.predictor.lead, rate: n.rate, cars: n.localCars } : null,
       };
+    },
+    /** The driving school: the running lesson's state (null outside the school), and a way to start one. */
+    school() {
+      return app.school?.debug() ?? null;
+    },
+    startSchool(lesson = 0) {
+      app.startSchool(lesson);
+      return api.school();
     },
     /** Start a race straight away, e.g. startRace({ players: 2, laps: 1 }). */
     startRace(over: Record<string, unknown> = {}) {

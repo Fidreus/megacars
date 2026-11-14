@@ -19,6 +19,8 @@ export interface RaceSettings {
   practice: boolean;
   /** Time trial: practice alone with a stock car, against a ghost (never saved). */
   timeTrial?: boolean;
+  /** Driving school lesson (practice alone on the school circuit; never saved). */
+  school?: boolean;
   /** Missiles, mines, turbo and damage. */
   weapons: boolean;
   /** 0 a song per track, 1 shuffle, 2 off. */
