@@ -3190,7 +3190,7 @@ export class App {
     } else if (this.mode === 'credits') {
       drawCredits(ctx, W, H, this.time);
     } else if (this.mode === 'seasonEnd' && this.career?.last) {
-      drawSeasonEnd(ctx, W, H, this.career, this.time);
+      drawSeasonEnd(ctx, W, H, this.career, this.time, this.touch.enabled);
       if (Math.random() < dt * 4 && (this.career.last.outcome === 'champion' || this.career.last.outcome === 'defended' || this.career.last.outcome === 'promoted')) {
         const t = this.camTargets[0];
         this.view.effects.firework(t.x + (Math.random() - 0.5) * 70, t.z - 8 - Math.random() * 25);
@@ -3203,7 +3203,7 @@ export class App {
       const head = this.career ? `DIVISION ${this.career.division}` : 'CHAMPIONSHIP';
       const title = over ? `${leader(cup).name === 'YOU' ? 'YOU WIN' : `${leader(cup).name} WINS`} ${head}!` : head;
       const sub = over ? 'FINAL STANDINGS' : `AFTER RACE ${cup.race} OF ${cup.tracks.length}${this.career ? ` - SEASON ${this.career.season}` : ''}`;
-      drawStandings(ctx, W, H, title, sub, standingsRows(cup), this.time, over ? 'PRESS ENTER' : 'PRESS ENTER FOR THE SHOP', rivalLine(cup));
+      drawStandings(ctx, W, H, title, sub, standingsRows(cup), this.time, this.touch.enabled ? (over ? 'TAP TO CONTINUE' : 'TAP FOR THE SHOP') : over ? 'PRESS ENTER' : 'PRESS ENTER FOR THE SHOP', rivalLine(cup));
     } else if (this.mode === 'lobby' && this.online.room) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
@@ -3353,7 +3353,7 @@ export class App {
     if (this.netRace) this.drawOnlineRaceUi(ctx, W, H);
     if (this.showingResults) {
       this.firstRace = false;
-      drawResults(ctx, W, H, w, s.names, s.colors, s.playerCars, this.time);
+      drawResults(ctx, W, H, w, s.names, s.colors, s.playerCars, this.time, this.touch.enabled);
       if (this.askName) {
         // Below the results table, on a band of its own.
         const k = H >= 360 ? 2 : 1;
@@ -3712,7 +3712,6 @@ export class App {
   }
 }
 
-/** Largest text scale (2 or 1) at which the menu fits between top and bottom. */
 /** Parts joined with wide gaps, narrower ones, then fewer parts until the line fits `room`. */
 function fitLine(parts: string[], room: number): string {
   for (let n = parts.length; n > 1; n--) {
@@ -3724,6 +3723,7 @@ function fitLine(parts: string[], room: number): string {
   return parts[0];
 }
 
+/** Largest text scale (2 or 1) at which the menu fits between top and bottom. */
 function fitScale(menu: Menu, top: number, bottom: number): number {
   return top + menu.items.length * (LINE_H * 2 + 4) <= bottom ? 2 : 1;
 }
