@@ -39,6 +39,8 @@ const STUCK_RESPAWN_TICKS = 240;
  * over (a pit lane island) still adds up to a respawn.
  */
 const AI_STUCK_ESCAPE = { after: 40, speed: 25 };
+/** Towed back after a wreck: this long untouchable (not just the usual respawn moment), to get clear of the mines that did it. */
+const TOW_GHOST_TICKS = 150;
 /** AI facing the wrong way this long: put it back on the track. */
 const AI_WRONG_WAY_TICKS = 150;
 /** After the first car finishes, everybody else gets this long. */
@@ -96,6 +98,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
         // Towed back onto the track, patched up.
         respawnCar(car, track, safeRespawnS(track, car.trackS - 4));
         car.damage = WEAPON.wreckRepair;
+        car.ghostTicks = TOW_GHOST_TICKS;
         pushEvent(w.events, Ev.Respawn, car.id, -1, 2, car.x, car.z);
       }
       car.prevButtons = 0;
