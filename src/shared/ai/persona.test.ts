@@ -108,7 +108,7 @@ describe('reaction time', () => {
     expect(medLo).toBeGreaterThanOrEqual(0.14);
     expect(medHi).toBeLessThanOrEqual(0.26);
     expect(hardLo).toBeGreaterThanOrEqual(0.07);
-    expect(hardHi).toBeLessThanOrEqual(0.16);
+    expect(hardHi).toBeLessThanOrEqual(0.18);
     expect(hardHi - hardLo).toBeGreaterThan(0.03);
     expect(hardMean).toBeLessThan(medLo);
   });

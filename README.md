@@ -238,8 +238,8 @@ kontrollerar att varje lopp slutar med exakt en vinnare.
 
 De tio datorförarna har var sin personlighet som syns i hur de kör. Inom en
 svårighetsgrad skiljer det ungefär ±1,5 % i varvtid mellan dem (snittet är
-detsamma som förut; på HARD kan ingen bli snabbare än den felfria föraren,
-så där är spridningen mest åt det långsamma hållet).
+detsamma som förut; HARD ligger strax under den felfria föraren, så de
+snabbaste personligheterna kör där ungefär som den och resten lite långsammare).
 
 | Förare | Typ | Hur |
 | --- | --- | --- |
@@ -262,7 +262,7 @@ förare (på smala skärmar bara typen).
 Datorförarna har också **reaktionstid** som en människa: något nytt (en sladd
 de inte bett om, en bil som plötsligt dyker upp, ett mål som kommer i
 siktet, grönt ljus) hanteras först efter ca 0,25–0,35 s på EASY, 0,15–0,25 s
-på MEDIUM och 0,08–0,15 s på HARD, olika från gång till gång och per förare.
+på MEDIUM och 0,10–0,17 s på HARD, olika från gång till gång och per förare.
 Att följa linjen och bromsa för en kurva de ser komma är förutseende och sker
 direkt. Bromstrycken för att drifta är olika långa. På raksträckor kör de
 rakt: inga driftstarter, inte mer styrning än däcken klarar, och en sladd
