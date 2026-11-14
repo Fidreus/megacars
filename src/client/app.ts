@@ -725,7 +725,11 @@ export class App {
 
   /** DAILY CHALLENGE: today's track, league and time of day, the board, your streak. */
   private openDaily(): void {
-    if (this.mode === 'race') this.mode = 'title';
+    if (this.mode === 'race') {
+      // Back from a run: the page shows how it went.
+      this.mode = 'title';
+      this.flashTime = 0;
+    }
     const info = this.dailyInfo;
     const show = () => {
       const ch = info.challenge();

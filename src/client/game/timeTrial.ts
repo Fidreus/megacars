@@ -137,7 +137,9 @@ export class TimeTrial {
     const g = await loadWorldGhost(entry, this.opts.worldKey ?? this.opts.key);
     if (this.disposed) return;
     if (typeof g === 'string') {
-      this.worldStatus = g === 'offline' ? 'WORLD RECORD: CANNOT REACH THE SERVER' : 'WORLD RECORD GHOST NOT AVAILABLE';
+      // The daily challenge's leader, or the world record.
+      const what = this.opts.entryLabel ? 'LEADER' : 'WORLD RECORD';
+      this.worldStatus = g === 'offline' ? `${what}: CANNOT REACH THE SERVER` : `${what} GHOST NOT AVAILABLE`;
       return;
     }
     const rank = this.opts.entry ? (this.opts.rank ?? 1) : 1;

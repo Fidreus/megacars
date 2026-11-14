@@ -125,10 +125,16 @@ export function drawDaily(ctx: CanvasRenderingContext2D, W: number, H: number, d
     drawText(ctx, `BEST LAP ${formatTime(best * DT)}`, rx, ry, { color: '#9cff9c', scale: k });
     ry += line;
     if (info.online) {
-      const mine = board.findIndex((e) => e.name === me && e.ticks === best);
-      const p = mine >= 0 ? mine + 1 : dailyPlace(board, me, best);
-      const text = p > DAILY_BOARD_SIZE ? 'OUTSIDE THE TOP 50' : mine >= 0 ? `PLACE #${p} OF ${board.length}` : `WOULD BE #${p} - NOT SENT`;
-      drawText(ctx, text, rx, ry, { color: p === 1 ? '#5aff6a' : YELLOW, scale: k });
+      // The board has the lap as the server measured it.
+      const mine = board.findIndex((e) => e.name === me);
+      if (mine >= 0) {
+        const e = board[mine];
+        const text = e.ticks === best ? `PLACE #${mine + 1} OF ${board.length}` : `ON THE BOARD: #${mine + 1} ${formatTime(e.ticks * DT)}`;
+        drawText(ctx, text, rx, ry, { color: mine === 0 ? '#5aff6a' : YELLOW, scale: k });
+      } else {
+        const p = dailyPlace(board, me, best);
+        drawText(ctx, p > DAILY_BOARD_SIZE ? 'OUTSIDE THE TOP 50' : 'NOT ON THE BOARD YET', rx, ry, { color: GREY, scale: k });
+      }
       ry += line;
     }
   } else {
