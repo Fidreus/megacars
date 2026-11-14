@@ -308,6 +308,7 @@ export class App {
   private schoolSave: SchoolSave = loadSchool();
   private schoolStart = 0;
   private schoolDoneMenu!: Menu;
+  private schoolDoneRows: MenuItem[] | null = null;
   private schoolPauseItems: MenuItem[] = [];
   /** What the player steers with now (for the wording of the lessons). */
   private schoolDevice: Device = 'keys';
@@ -870,6 +871,10 @@ export class App {
     this.haptics.stop();
     this.pauseSub = this.schoolDoneMenu;
     this.schoolDoneMenu.index = 0;
+    // After the last lesson the first row already goes to the list.
+    const rows = this.schoolDoneRows ??= this.schoolDoneMenu.items;
+    const last = !!this.school && this.school.index + 1 >= this.school.lessons.length;
+    this.schoolDoneMenu.items = last ? rows.filter((_, i) => i !== 2) : rows;
   }
 
   /** Give up on this lesson (it stays open in the list) and go to the next. */
@@ -3349,7 +3354,8 @@ export class App {
     } else if (this.paused) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(0, 0, W, H);
-      const py = Math.round(H * (H < 320 ? 0.12 : 0.3));
+      // A lesson's line above the title stays below the banners at the top.
+      const py = Math.max(Math.round(H * (H < 320 ? 0.12 : 0.3)), this.school?.finished ? 48 : 0);
       const title = this.school?.finished ? (this.school.skipped ? 'SKIPPED' : this.schoolSave.done && allDone(this.schoolSave, this.school.lessons.map((l) => l.id)) ? 'SCHOOL COMPLETE' : 'LESSON COMPLETE') : 'PAUSED';
       drawText(ctx, title, W / 2, py, { scale: H < 320 ? 3 : 4, color: '#ffd84a', align: 'center' });
       if (this.school?.finished) {
