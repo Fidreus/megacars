@@ -19,7 +19,7 @@ import { fellOff, groundUnder, makeGround, safeRespawnS, stepRamps } from './ram
 import { plannedWetness, wetnessAt, wetSurfaces } from './weather.ts';
 import { inPitArea, inPitBox, pitRepair } from '../track/pit.ts';
 import { leaderDistance, stepBoostPads } from './catchUp.ts';
-import { breakDriftCharge, isCornering, stepDriftCharge } from './driftBoost.ts';
+import { applyDriftCharge, breakDriftCharge, isCornering, stepDriftCharge } from './driftBoost.ts';
 import { applySlipstream, stepSlipstream } from './slipstream.ts';
 import { crateLean, stepCrates } from './crates.ts';
 import { elimDanger, stepElimination, stepOutCar } from './elimination.ts';
@@ -116,6 +116,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     if (wetPlan > 0) wetSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, wet, wetPlan, surfMix);
     applyDamage(surfMix, car.damage, t);
     applySlipstream(surfMix, car.draft);
+    applyDriftCharge(surfMix, car, (inp.buttons & Btn.Drift) !== 0);
     if (car.aiDriven) {
       const danger = w.elim ? elimDanger(w, car) : 0;
       aiDrive(

@@ -40,12 +40,17 @@ eller motstyr för att räta upp. Is, olja och snö sladdar av sig själva.
 **Driftboost:** en sladd genom en kurva laddar en boost i tre nivåer, efter
 ungefär 0,6, 1,3 och 2,2 sekunders drift (mätaren bredvid hastigheten, gnistor
 från bakhjulen i blått, orange och lila). När bilen greppar igen får den en
-kort knuff framåt: nivå 1 är en liten puff, nivå 3 (en lång hårnål på Cigar
-Circuit) ungefär som en turbo. Det räknas bara när bilen verkligen svänger,
+kort knuff framåt: nivå 1 är en liten puff (0,6 s), nivå 2 längre och
+starkare (1,2 s), nivå 3 (en lång hårnål på Cigar Circuit) lite bättre än en
+turbo (2 s). Så länge du håller driftknappen genom en laddad drift nöter
+däcken bara en fjärdedel så mycket fart, så en lång ren drift lönar sig mer
+än en kort: i kurvrika banor med långa kurvor vinner den som håller kvar
+driften 1–3 % av ett varv mot den som bara slänger in bilen. Det räknas bara när bilen verkligen svänger,
 i en kurva och strax efter den; att sladda eller slingra nerför en raka ger
 ingen laddning och ingen reparation. Is, olja och snö laddar inget, en hård
 smäll i en vägg eller en bil eller en snurr tar bort laddningen, och broms
-håller tillbaka boosten. Datorförarna laddar och får boost på samma sätt.
+håller tillbaka boosten. Datorförarna laddar och får boost på samma sätt
+(men de håller aldrig driftknappen, så de får inte den lägre nötningen).
 
 **Draft:** ligger du tätt bakom en annan bil (från några meter till ungefär
 24 m bakom, i samma riktning och i fart) dras du med: upp till 6 % högre

@@ -20,11 +20,13 @@ export const DRIFT_BOOST = {
   /** Seconds of drifting to reach level 1, 2 and 3. */
   levels: [0.6, 1.3, 2.2],
   /** Per level (index 1-3): boost length in ticks, thrust (m/s²) and top speed factor. */
-  ticks: [0, 36, 54, 90],
-  accel: [0, 10, 13, 15],
-  top: [1, 1.12, 1.2, 1.28],
+  ticks: [0, 36, 72, 120],
+  accel: [0, 10, 15, 19],
+  top: [1, 1.12, 1.24, 1.33],
   /** A wall or car hit harder than this (m/s) during the drift loses the charge. */
   hardHit: 5,
+  /** Share of the usual tyre scrub while the drift button holds a charged drift (a long clean drift costs less). */
+  heldScrub: 0.25,
 };
 
 /** What counts as cornering: near a bend of the road, with the car's path turning. */
@@ -151,4 +153,9 @@ export function clearDriftBoost(car: CarState): void {
   car.driftCharge = 0;
   car.driftBoostTicks = 0;
   car.driftBoostLevel = 0;
+}
+
+/** A charged drift held with the drift button scrubs less speed: fold that into the surface. */
+export function applyDriftCharge(surf: SurfaceMix, car: CarState, held: boolean): void {
+  if (held && car.sliding && car.driftCharge > 0) surf.scrub *= DRIFT_BOOST.heldScrub;
 }
