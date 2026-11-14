@@ -3,7 +3,7 @@
 
 import { DT } from '../config/constants.ts';
 import { wrapAngle } from '../math/angle.ts';
-import { makeSurfaceMix, mixSurfaces, type SurfaceId } from '../config/surfaces.ts';
+import { makeSurfaceMix, mixSurfaces, Surface, type SurfaceId } from '../config/surfaces.ts';
 import type { CarTuning } from '../config/tuning.ts';
 import { aiDrive } from '../ai/driver.ts';
 import { aiWeapons } from '../ai/weapons.ts';
@@ -22,6 +22,8 @@ import { leaderDistance, stepBoostPads } from './catchUp.ts';
 import { breakDriftCharge, isCornering, stepDriftCharge } from './driftBoost.ts';
 import { applySlipstream, stepSlipstream } from './slipstream.ts';
 import { crateLean, stepCrates } from './crates.ts';
+import { slickUnder, useSpecial } from './specials.ts';
+import { aiSpecial, slickAvoid } from '../ai/specials.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
@@ -101,14 +103,17 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
       if (car.ghostTicks > 0) car.ghostTicks--;
       continue;
     }
+    const oiled = car.surfFront === Surface.Oil || car.surfRear === Surface.Oil;
     sampleCarSurface(car, track, t);
+    if (race.weapons) slickUnder(car, t, w.shots, w.events, oiled);
     mixSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, surfMix);
     if (wetPlan > 0) wetSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, wet, wetPlan, surfMix);
     applyDamage(surfMix, car.damage, t);
     applySlipstream(surfMix, car.draft);
     if (car.aiDriven) {
-      aiDrive(car, track, t, surfMix, cars, w.tick, aiInput, race.weapons ? crateLean(car, track, w.crates) : 0);
+      aiDrive(car, track, t, surfMix, cars, w.tick, aiInput, race.weapons ? crateLean(car, track, w.crates) : 0, race.weapons ? slickAvoid(car, track, w.shots) : 0);
       if (armed) aiWeapons(car, cars, track, w.tick, t.vTop, aiInput, race.laps);
+      if (armed) aiSpecial(car, cars, w.shots, track, w.tick, aiInput);
       inp = aiInput;
     } else if (inp.buttons & Btn.Reset && !(car.prevButtons & Btn.Reset) && race.phase === RacePhase.Racing && !car.finished) {
       // The driver asked to be put back on the track.
@@ -117,6 +122,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
       pushEvent(w.events, Ev.Respawn, car.id, -1, 1, car.x, car.z);
     }
     if (armed) useWeapons(car, inp, w.shots, w.events, !inPitArea(track.pit, car.x, car.z));
+    if (armed) useSpecial(car, inp, cars, w.shots, track.pit, w.events, !inPitArea(track.pit, car.x, car.z));
     if (car.airborne) {
       // Flying after a mine: no grip, keep going.
       car.heading = wrapAngle(car.heading + car.angVel * DT);

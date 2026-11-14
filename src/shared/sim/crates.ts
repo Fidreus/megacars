@@ -13,6 +13,7 @@ import { sampleU } from '../track/pit.ts';
 import type { CarState } from './car.ts';
 import { CATCH_UP } from './catchUp.ts';
 import { Ev, pushEvent, type EventBuffer } from './events.ts';
+import { SPECIAL_NAMES, SpecialItem } from './specials.ts';
 
 export const CRATE = {
   /** Ticks a taken crate stays away (6 s). */
@@ -55,7 +56,7 @@ export interface CrateSpot {
 // ------------------------------------------------------------------ contents
 
 /** Item kinds a crate can hold (sent in Ev.CratePickup's `other`). */
-export const CrateItem = { Missiles: 1, Mines: 2, Turbo: 3, Repair: 4 } as const;
+export const CrateItem = { Missiles: 1, Mines: 2, Turbo: 3, Repair: 4, Homing: 5, Oil: 6, Shield: 7 } as const;
 
 export interface CrateContent {
   item: number;
@@ -119,7 +120,22 @@ export const CRATE_ITEMS: CrateContent[] = [
       return Math.round(n * 100);
     },
   },
+  // Special items (specials.ts): rarer, only into an empty slot (a held one is kept).
+  specialRow(CrateItem.Homing, SpecialItem.Homing, 1.8, 3.6),
+  specialRow(CrateItem.Oil, SpecialItem.Oil, 3.4, 1.3),
+  specialRow(CrateItem.Shield, SpecialItem.Shield, 3, 2.2),
 ];
+
+function specialRow(item: number, special: number, front: number, back: number): CrateContent {
+  return {
+    item, label: SPECIAL_NAMES[special], front, back,
+    room: (c) => (c.special === SpecialItem.None ? 1 : 0),
+    give: (c) => {
+      c.special = special;
+      return 1;
+    },
+  };
+}
 
 /** The content for an item kind (null if unknown). */
 export function crateContent(item: number): CrateContent | null {

@@ -10,6 +10,7 @@ export interface PadState {
   fireFront: boolean;
   fireRear: boolean;
   turbo: boolean;
+  special: boolean;
   drift: boolean;
   reset: boolean;
   /** Any input this frame (used to pick keyboard vs pad). */
@@ -24,7 +25,7 @@ export function readPad(index: number, out: PadState, bind: PadBinding = PAD_DEF
   out.connected = !!gp;
   out.active = false;
   out.steer = out.throttle = out.brake = 0;
-  out.fireFront = out.fireRear = out.turbo = out.drift = out.reset = false;
+  out.fireFront = out.fireRear = out.turbo = out.special = out.drift = out.reset = false;
   if (!gp) return out;
   const b = (i: number) => gp.buttons[i];
   const val = (i: number) => (b(i) ? b(i).value : 0);
@@ -44,14 +45,15 @@ export function readPad(index: number, out: PadState, bind: PadBinding = PAD_DEF
   out.fireFront = any(bind.fireFront);
   out.fireRear = any(bind.fireRear);
   out.turbo = any(bind.turbo);
+  out.special = any(bind.special ?? []);
   out.drift = any(bind.drift);
   out.reset = any(bind.reset);
-  out.active = x !== 0 || out.throttle > 0.05 || out.brake > 0.05 || out.fireFront || out.fireRear || out.turbo || out.drift || out.reset;
+  out.active = x !== 0 || out.throttle > 0.05 || out.brake > 0.05 || out.fireFront || out.fireRear || out.turbo || out.special || out.drift || out.reset;
   return out;
 }
 
 export function makePadState(): PadState {
-  return { connected: false, steer: 0, throttle: 0, brake: 0, fireFront: false, fireRear: false, turbo: false, drift: false, reset: false, active: false };
+  return { connected: false, steer: 0, throttle: 0, brake: 0, fireFront: false, fireRear: false, turbo: false, special: false, drift: false, reset: false, active: false };
 }
 
 /** A button newly pressed on any pad this frame (for rebinding), or -1. */

@@ -53,6 +53,7 @@ export class InputManager {
       if (kb.anyDown(k.fireFront)) buttons |= Btn.FireFront;
       if (kb.anyDown(k.fireRear)) buttons |= Btn.FireRear;
       if (kb.anyDown(k.turbo)) buttons |= Btn.Turbo;
+      if (kb.anyDown(k.special ?? [])) buttons |= Btn.Special;
       if (kb.anyDown(k.reset)) buttons |= Btn.Reset;
       if (kb.anyDown(k.drift)) buttons |= Btn.Drift;
     }
@@ -70,6 +71,7 @@ export class InputManager {
         if (p.fireFront) buttons |= Btn.FireFront;
         if (p.fireRear) buttons |= Btn.FireRear;
         if (p.turbo) buttons |= Btn.Turbo;
+        if (p.special) buttons |= Btn.Special;
         if (p.drift) buttons |= Btn.Drift;
         if (p.reset) buttons |= Btn.Reset;
       }

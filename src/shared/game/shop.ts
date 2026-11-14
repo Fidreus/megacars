@@ -7,6 +7,7 @@ import { cloneTuning, type CarTuning } from '../config/tuning.ts';
 import type { World } from '../sim/world.ts';
 import { standings } from '../sim/world.ts';
 import { START_AMMO } from '../sim/weapons.ts';
+import { SpecialItem } from '../sim/specials.ts';
 
 export const MAX_LEVEL = 3;
 
@@ -39,6 +40,8 @@ export interface Loadout {
   turbos: number;
   /** 0..1, carried over until repaired. */
   damage: number;
+  /** Special item in the slot (SpecialItem; missing in old saves = none). */
+  special?: number;
 }
 
 export interface Profile extends Loadout {
@@ -63,7 +66,7 @@ export function newProfile(): Profile {
 export function loadoutOf(p: Loadout): Loadout {
   return {
     car: p.car ?? 0, engine: p.engine, tyres: p.tyres, armour: p.armour,
-    missiles: p.missiles, mines: p.mines, turbos: p.turbos, damage: p.damage,
+    missiles: p.missiles, mines: p.mines, turbos: p.turbos, damage: p.damage, special: p.special ?? 0,
   };
 }
 
@@ -87,7 +90,10 @@ export const UPGRADES = ['engine', 'tyres', 'armour'] as const;
 export type Upgrade = (typeof UPGRADES)[number];
 export const AMMO = ['missiles', 'mines', 'turbos'] as const;
 export type Ammo = (typeof AMMO)[number];
-export type ShopItem = Upgrade | Ammo | 'repair' | 'car';
+/** Special items: one at a time, into an empty slot. */
+export const SPECIALS = ['homing', 'oil', 'shield'] as const;
+export type Special = (typeof SPECIALS)[number];
+export type ShopItem = Upgrade | Ammo | Special | 'repair' | 'car';
 
 /** Price of the next level (index = current level). */
 export const UPGRADE_PRICES: Record<Upgrade, readonly number[]> = {
@@ -97,11 +103,14 @@ export const UPGRADE_PRICES: Record<Upgrade, readonly number[]> = {
 };
 export const AMMO_PRICE: Record<Ammo, number> = { missiles: 60, mines: 50, turbos: 90 };
 export const AMMO_MAX: Record<Ammo, number> = { missiles: 12, mines: 8, turbos: 6 };
+export const SPECIAL_PRICE: Record<Special, number> = { homing: 300, oil: 220, shield: 260 };
+export const SPECIAL_KIND: Record<Special, number> = { homing: SpecialItem.Homing, oil: SpecialItem.Oil, shield: SpecialItem.Shield };
 /** Price of repairing all damage (1.0). */
 export const REPAIR_PRICE = 800;
 
 export function isShopItem(x: unknown): x is ShopItem {
-  return x === 'repair' || x === 'car' || (UPGRADES as readonly unknown[]).includes(x) || (AMMO as readonly unknown[]).includes(x);
+  return x === 'repair' || x === 'car' || (UPGRADES as readonly unknown[]).includes(x) || (AMMO as readonly unknown[]).includes(x)
+    || (SPECIALS as readonly unknown[]).includes(x);
 }
 
 /** Cost of buying `item` once, or null when it can't be bought (maxed, nothing to repair). */
@@ -112,6 +121,7 @@ export function priceOf(p: Loadout, item: ShopItem): number | null {
     const lvl = p[item as Upgrade];
     return lvl >= MAX_LEVEL ? null : UPGRADE_PRICES[item as Upgrade][lvl];
   }
+  if ((SPECIALS as readonly string[]).includes(item)) return p.special ? null : SPECIAL_PRICE[item as Special];
   const a = item as Ammo;
   return p[a] >= AMMO_MAX[a] ? null : AMMO_PRICE[a];
 }
@@ -122,7 +132,7 @@ export function priceOf(p: Loadout, item: ShopItem): number | null {
  */
 export function buy(p: Profile, item: ShopItem): string | null {
   const price = priceOf(p, item);
-  if (price === null) return item === 'repair' ? 'NOTHING TO REPAIR' : 'MAXED OUT';
+  if (price === null) return item === 'repair' ? 'NOTHING TO REPAIR' : (SPECIALS as readonly string[]).includes(item) ? 'SLOT FULL' : 'MAXED OUT';
   if (item === 'repair') {
     if (p.money <= 0) return 'NO MONEY';
     const fix = Math.min(p.damage, p.money / REPAIR_PRICE);
@@ -139,6 +149,7 @@ export function buy(p: Profile, item: ShopItem): string | null {
     return null;
   }
   if ((UPGRADES as readonly string[]).includes(item)) p[item as Upgrade]++;
+  else if ((SPECIALS as readonly string[]).includes(item)) p.special = SPECIAL_KIND[item as Special];
   else p[item as Ammo]++;
   return null;
 }
@@ -191,6 +202,7 @@ export function settle(p: Profile, w: World, r: CarResult): void {
   p.missiles = c.missiles;
   p.mines = c.mines;
   p.turbos = c.turbos;
+  p.special = c.special;
   // A wrecked-and-patched car keeps its damage; finishing heals nothing.
   p.damage = Math.min(1, +c.damage.toFixed(4));
 }

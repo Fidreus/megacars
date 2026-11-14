@@ -10,6 +10,8 @@ export const Btn = {
   Reset: 16,
   /** Dedicated drift: a press throws the car into a slide, holding keeps it there. */
   Drift: 32,
+  /** Use the special item held (homing missile, oil slick, shield; sim/specials.ts). */
+  Special: 64,
   /** Set when steering comes from an analog stick (no keyboard ramp). */
   Analog: 128,
 } as const;

@@ -2,7 +2,7 @@
 // localStorage), and names for showing them. Never Ctrl/Alt/Cmd (OS
 // shortcuts) or Shift (sticky keys).
 
-export const ACTIONS = ['left', 'right', 'gas', 'brake', 'drift', 'fireFront', 'fireRear', 'turbo', 'reset'] as const;
+export const ACTIONS = ['left', 'right', 'gas', 'brake', 'drift', 'fireFront', 'fireRear', 'turbo', 'special', 'reset'] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export const ACTION_NAMES: Record<Action, string> = {
@@ -14,6 +14,7 @@ export const ACTION_NAMES: Record<Action, string> = {
   fireFront: 'MISSILE',
   fireRear: 'MINE',
   turbo: 'TURBO',
+  special: 'SPECIAL ITEM',
   reset: 'RESET CAR',
 };
 
@@ -21,7 +22,7 @@ export const ACTION_NAMES: Record<Action, string> = {
 export type KeyBinding = Record<Action, string[]>;
 
 /** Pad actions (steering is always the left stick and d-pad left/right). */
-export const PAD_ACTIONS = ['gas', 'brake', 'drift', 'fireFront', 'fireRear', 'turbo', 'reset'] as const;
+export const PAD_ACTIONS = ['gas', 'brake', 'drift', 'fireFront', 'fireRear', 'turbo', 'special', 'reset'] as const;
 export type PadAction = (typeof PAD_ACTIONS)[number];
 /** Up to two buttons (standard mapping index) per action. */
 export type PadBinding = Record<PadAction, number[]>;
@@ -35,6 +36,7 @@ export const SOLO_KEYS: KeyBinding = {
   fireFront: ['Space', 'KeyK'],
   fireRear: ['KeyJ', 'KeyX'],
   turbo: ['KeyL', 'KeyC'],
+  special: ['KeyI', 'KeyV'],
   reset: ['KeyR'],
   drift: ['KeyZ', 'KeyB'],
 };
@@ -48,6 +50,7 @@ export const P1_KEYS: KeyBinding = {
   fireFront: ['KeyG'],
   fireRear: ['KeyF'],
   turbo: ['KeyH'],
+  special: ['KeyV'],
   reset: ['KeyR'],
   drift: ['KeyQ'],
 };
@@ -61,17 +64,19 @@ export const P2_KEYS: KeyBinding = {
   fireFront: ['Period', 'Numpad0'],
   fireRear: ['Comma', 'Numpad1'],
   turbo: ['Slash', 'Numpad2'],
+  special: ['KeyK', 'Numpad4'],
   reset: ['Enter', 'NumpadEnter'],
   drift: ['KeyL', 'Numpad3'],
 };
 
-/** A/RT gas, B/LT brake, X/RB missile, Y/d-pad down mine, d-pad up/L3 turbo, LB drift, Select reset. */
+/** A/RT gas, B/LT brake, X/RB missile, Y/d-pad down mine, d-pad up/L3 turbo, R3 special, LB drift, Select reset. */
 export const PAD_DEFAULT: PadBinding = {
   gas: [7, 0],
   brake: [6, 1],
   fireFront: [2, 5],
   fireRear: [3, 13],
   turbo: [12, 10],
+  special: [11],
   drift: [4],
   reset: [8],
 };
@@ -107,14 +112,34 @@ export function loadControls(): Controls {
         if (Array.isArray(v) && v.every((k) => typeof k === 'string')) c[set][a] = v.slice(0, 2);
       }
     }
+    // The two split-screen sets share one keyboard.
+    keepNewDefaults(c.solo, saved.solo);
+    keepNewDefaults(c.p1, saved.p1, c.p2);
+    keepNewDefaults(c.p2, saved.p2, c.p1);
     for (const a of PAD_ACTIONS) {
       const v = saved.pad?.[a];
       if (Array.isArray(v) && v.every((k) => Number.isInteger(k))) c.pad[a] = v.slice(0, 2);
     }
+    keepNewDefaults(c.pad, saved.pad);
   } catch {
     // Corrupt or blocked: defaults.
   }
   return c;
+}
+
+/**
+ * Actions added after a player saved their own bindings get their defaults,
+ * minus any key or button the player has since given to something else.
+ */
+function keepNewDefaults<T extends string | number>(
+  b: Record<string, T[]>, saved: Partial<Record<string, unknown>> | undefined, also?: Record<string, T[]>,
+): void {
+  if (!saved) return;
+  for (const a of Object.keys(b)) {
+    if (a in saved) continue;
+    const taken = (k: T) => Object.entries(b).some(([o, ks]) => o !== a && ks.includes(k)) || Object.values(also ?? {}).some((ks) => ks.includes(k));
+    b[a] = b[a].filter((k) => !taken(k));
+  }
 }
 
 export function saveControls(c: Controls): void {

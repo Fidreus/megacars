@@ -11,8 +11,10 @@ import { Ev, pushEvent, type EventBuffer } from './events.ts';
 import { Btn, type CarInput } from './input.ts';
 import { inPitArea } from '../track/pit.ts';
 import { stepDriftBoost } from './driftBoost.ts';
+import { knockFactor, shieldBlocks, steerHoming, SPECIAL } from './specials.ts';
 
-export const ShotKind = { None: 0, Missile: 1, Mine: 2 } as const;
+/** Homing missiles and oil slicks are the special items (specials.ts). */
+export const ShotKind = { None: 0, Missile: 1, Mine: 2, Homing: 3, Oil: 4 } as const;
 
 /** What each car starts a race with when weapons are on (crates on the track give more). */
 export const START_AMMO = { missiles: 3, mines: 2, turbos: 2 };
@@ -59,10 +61,12 @@ export interface Shot {
   vz: number;
   heading: number;
   age: number;
+  /** Homing missile: the car it is locked onto (-1 = none, flies straight). */
+  target: number;
 }
 
 export function makeShot(): Shot {
-  return { kind: 0, owner: 0, x: 0, z: 0, y: 0, vx: 0, vz: 0, heading: 0, age: 0 };
+  return { kind: 0, owner: 0, x: 0, z: 0, y: 0, vx: 0, vz: 0, heading: 0, age: 0, target: -1 };
 }
 
 const closest: Closest = { x: 0, z: 0, t: 0, d2: 0 };
@@ -80,7 +84,7 @@ export function isWrecked(car: CarState): boolean {
 }
 
 /** A free slot, or the oldest mine when the pool is full. */
-function allocShot(shots: Shot[]): Shot {
+export function allocShot(shots: Shot[]): Shot {
   for (const s of shots) if (s.kind === ShotKind.None) return s;
   if (shots.length < MAX_SHOTS) {
     const s = makeShot();
@@ -115,6 +119,7 @@ export function useWeapons(car: CarState, inp: CarInput, shots: Shot[], ev: Even
     s.vz = fz * (WEAPON.missileSpeed + fwd);
     s.heading = car.heading;
     s.age = 0;
+    s.target = -1;
     pushEvent(ev, Ev.Fire, car.id, ShotKind.Missile, 0, s.x, s.z);
   }
   if (pressed & Btn.FireRear && car.mines > 0 && car.mineCool === 0) {
@@ -129,6 +134,7 @@ export function useWeapons(car: CarState, inp: CarInput, shots: Shot[], ev: Even
     s.vx = s.vz = 0;
     s.heading = car.heading;
     s.age = 0;
+    s.target = -1;
     pushEvent(ev, Ev.Fire, car.id, ShotKind.Mine, 0, s.x, s.z);
   }
   if (pressed & Btn.Turbo && car.turbos > 0 && car.turboTicks === 0) {
@@ -194,10 +200,11 @@ export function landingCrooked(car: CarState): number {
   return x * x * (3 - 2 * x);
 }
 
-/** A hit: damage, a spin and a shove in the given direction. */
+/** A hit: damage, a spin and a shove in the given direction. False when a shield took it. */
 function hitCar(
   car: CarState, cars: CarState[], t: CarTuning, damage: number, dx: number, dz: number, ev: EventBuffer, kind: number, owner: number,
-): void {
+): boolean {
+  if (shieldBlocks(car, dx, dz, ev, kind, owner)) return false;
   car.damage = Math.min(1, car.damage + damage * t.armour);
   if (owner !== car.id && cars[owner]) {
     cars[owner].hits++;
@@ -212,6 +219,7 @@ function hitCar(
   car.sliding = 1;
   car.turboTicks = 0;
   pushEvent(ev, Ev.Explosion, car.id, owner, kind, car.x, car.z);
+  return true;
 }
 
 function wallBetween(walls: Walls, ax: number, az: number, bx: number, bz: number, y: number): boolean {
@@ -234,10 +242,12 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
   for (const s of shots) {
     if (s.kind === ShotKind.None) continue;
     s.age++;
-    if (s.kind === ShotKind.Missile) {
+    if (s.kind === ShotKind.Missile || s.kind === ShotKind.Homing) {
+      const homing = s.kind === ShotKind.Homing;
+      if (homing) steerHoming(s, cars, dt);
       const nx = s.x + s.vx * dt;
       const nz = s.z + s.vz * dt;
-      if (s.age > WEAPON.missileLife || wallBetween(track.walls, s.x, s.z, nx, nz, s.y)) {
+      if (s.age > (homing ? SPECIAL.homingLife : WEAPON.missileLife) || wallBetween(track.walls, s.x, s.z, nx, nz, s.y)) {
         pushEvent(ev, Ev.Explosion, -1, s.owner, 3, nx, nz);
         s.kind = ShotKind.None;
         continue;
@@ -262,7 +272,8 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
       if (hit >= 0) {
         const sp = Math.hypot(s.vx, s.vz) || 1;
         const c = cars[hit];
-        hitCar(c, cars, tunings[hit] ?? tunings[0], WEAPON.missileDamage, s.vx / sp, s.vz / sp, ev, 1, s.owner);
+        // value 4: a homing missile (the same damage and spin).
+        hitCar(c, cars, tunings[hit] ?? tunings[0], WEAPON.missileDamage, s.vx / sp, s.vz / sp, ev, homing ? 4 : 1, s.owner);
         s.kind = ShotKind.None;
       }
     } else if (s.kind === ShotKind.Mine) {
@@ -285,13 +296,17 @@ export function stepShots(shots: Shot[], cars: CarState[], track: Track, tunings
           if (dx * dx + dz * dz < rr * rr) near = true;
         }
         if (!near) continue;
-        hitCar(c, cars, t, WEAPON.mineDamage, 0, 0, ev, 2, s.owner);
-        c.vy = WEAPON.mineLaunch;
-        c.y += 0.01;
-        c.airborne = 1;
+        if (hitCar(c, cars, t, WEAPON.mineDamage, 0, 0, ev, 2, s.owner)) {
+          c.vy = WEAPON.mineLaunch;
+          c.y += 0.01;
+          c.airborne = 1;
+        }
         s.kind = ShotKind.None;
         break;
       }
+    } else if (s.kind === ShotKind.Oil) {
+      // An oil slick: it works through the surface under the cars (specials.ts slickUnder).
+      if (s.age > SPECIAL.oilLife) s.kind = ShotKind.None;
     }
   }
 }
@@ -303,12 +318,12 @@ export function applyImpactDamage(cars: CarState[], tunings: readonly CarTuning[
     if (e.kind === Ev.WallHit) {
       const c = cars[e.car];
       const t = tunings[c.id] ?? tunings[0];
-      if (!c.finished && e.value > t.wallDamageSpeed) c.damage = Math.min(1, c.damage + (e.value - t.wallDamageSpeed) * WEAPON.wallDamage * t.armour);
+      if (!c.finished && e.value > t.wallDamageSpeed) c.damage = Math.min(1, c.damage + (e.value - t.wallDamageSpeed) * WEAPON.wallDamage * t.armour * knockFactor(c));
     } else if (e.kind === Ev.CarHit) {
       for (const id of [e.car, e.other]) {
         const c = cars[id];
         const t = tunings[c.id] ?? tunings[0];
-        if (!c.finished && e.value > t.carDamageSpeed) c.damage = Math.min(1, c.damage + (e.value - t.carDamageSpeed) * WEAPON.carDamage * t.armour);
+        if (!c.finished && e.value > t.carDamageSpeed) c.damage = Math.min(1, c.damage + (e.value - t.carDamageSpeed) * WEAPON.carDamage * t.armour * knockFactor(c));
       }
     }
   }
@@ -320,6 +335,7 @@ export function checkWreck(car: CarState, cars: CarState[], ev: EventBuffer): bo
   car.wreckTicks = WEAPON.wreckTicks;
   car.wrecks++;
   car.turboTicks = 0;
+  car.shieldTicks = 0;
   const by = car.lastHitBy;
   if (by >= 0 && cars[by]) cars[by].kills++;
   car.lastHitBy = -1;
