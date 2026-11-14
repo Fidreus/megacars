@@ -11,6 +11,7 @@ import { isShopItem } from '../shared/game/shop.ts';
 import { decodeTrack, MAX_CODE } from '../shared/track/custom.ts';
 import { randomTour, Room, type Peer } from './room.ts';
 import { TrackChecker } from './trackChecker.ts';
+import { isElimination } from '../shared/game/raceMode.ts';
 
 export interface Transport {
   sendText(s: string): void;
@@ -115,6 +116,7 @@ export class GameServer {
       humans: spec.entrants.filter((e) => e.playerId >= 0).length,
       ai: spec.entrants.filter((e) => e.playerId < 0).length,
       public: room.config.public,
+      ...(isElimination(spec) ? { mode: 'elimination' } : {}),
     });
   }
 

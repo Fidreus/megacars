@@ -9,6 +9,7 @@ import { resetProgress } from './race.ts';
 import { giveStartAmmo, type Shot } from './weapons.ts';
 import { clearDriftBoost } from './driftBoost.ts';
 import type { WeatherPlan } from './weather.ts';
+import type { ElimPlan } from './elimination.ts';
 
 export const RacePhase = { Countdown: 0, Racing: 1, Finished: 2 } as const;
 
@@ -33,6 +34,8 @@ export interface World {
   rng: number;
   /** Rain during the race (absent = dry). Fixed by the race spec, so it is not in snapshots. */
   weather?: WeatherPlan;
+  /** Elimination race (absent = a normal race). Fixed by the race spec, so it is not in snapshots. */
+  elim?: ElimPlan;
   cars: CarState[];
   race: RaceState;
   /** Missiles and mines (slots with kind 0 are free). */
@@ -90,6 +93,10 @@ export function standings(w: World): number[] {
     const fa = finishIndex.get(a);
     const fb = finishIndex.get(b);
     if (fa !== undefined || fb !== undefined) return (fa ?? 1e9) - (fb ?? 1e9);
+    // Elimination: cars still in, then the eliminated, the last out first.
+    const oa = w.cars[a].outOrder;
+    const ob = w.cars[b].outOrder;
+    if (oa || ob) return (oa ? 1e9 - oa : 0) - (ob ? 1e9 - ob : 0);
     return w.cars[b].raceDist - w.cars[a].raceDist;
   });
   return order;

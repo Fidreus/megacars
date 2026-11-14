@@ -28,7 +28,7 @@ describe('achievement table', () => {
   it('has unique ids, short descriptions and about two dozen entries', () => {
     expect(ACHIEVEMENT_IDS.size).toBe(ACHIEVEMENTS.length);
     expect(ACHIEVEMENTS.length).toBeGreaterThanOrEqual(20);
-    expect(ACHIEVEMENTS.length).toBeLessThanOrEqual(25);
+    expect(ACHIEVEMENTS.length).toBeLessThanOrEqual(27);
     for (const r of ACHIEVEMENTS) {
       expect(r.desc.length, r.id).toBeLessThanOrEqual(28);
       expect(r.name.length, r.id).toBeLessThanOrEqual(17);
@@ -268,5 +268,22 @@ describe('unlocking', () => {
     const a = fresh();
     const got = a.feed({ kind: 'race', r: summary({ place: 1, weapons: false }) } as AchInput);
     expect(got.map((r) => r.id)).toEqual(['finish', 'win']);
+  });
+});
+
+describe('elimination achievements', () => {
+  const race = (over: Partial<RaceSummary>): AchInput => ({ kind: 'race', r: { track: 'tivoli', league: 'standard', mode: 'quick', cars: 8, place: 5, laps: 21, weapons: true, night: false, kills: 0, damage: 0.3, live: true, elimination: true, start: 8, ...over } });
+  const rule = (id: string) => ACHIEVEMENTS.find((a) => a.id === id)!;
+  it('winning an elimination race; surviving to the last two from the back of the grid', () => {
+    const m = { n: 0, get: () => 0, set(n: number) { this.n = n; }, max() {}, add() {}, addKey() {}, scratch: {} };
+    rule('elimWin').feed(m, race({ place: 1, elimination: false }));
+    expect(m.n).toBe(0);
+    rule('elimWin').feed(m, race({ place: 1 }));
+    expect(m.n).toBe(1);
+    m.n = 0;
+    rule('elimSurvivor').feed(m, race({ place: 2, start: 3 }));
+    expect(m.n).toBe(0);
+    rule('elimSurvivor').feed(m, race({ place: 2 }));
+    expect(m.n).toBe(1);
   });
 });

@@ -13,6 +13,7 @@ import { setPersona } from './personaSetup.ts';
 import { makeWeatherPlan, type Weather } from '../sim/weather.ts';
 import { expectedRaceTicks } from './weather.ts';
 import type { League } from './leagues.ts';
+import { startElimination } from '../sim/elimination.ts';
 
 export interface SimRaceResult {
   seed: number;
@@ -30,12 +31,17 @@ export interface SimRaceResult {
   /** Item crates taken. */
   pickups: number;
   order: number[];
+  /** Elimination: the race ended with one car left and every other one out. */
+  oneWinner?: boolean;
+  /** Elimination: the leader's laps. */
+  leaderLaps?: number;
 }
 
-export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number; laps?: number; tuning?: CarTuning; weapons?: boolean; personas?: boolean; weather?: Weather; league?: League } = {}): SimRaceResult {
+export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number; laps?: number; tuning?: CarTuning; weapons?: boolean; personas?: boolean; weather?: Weather; league?: League; elimination?: boolean } = {}): SimRaceResult {
   const track = getTrack(def);
   const carCount = opts.cars ?? 8;
   const world: World = createWorld(track, carCount, seed, { laps: opts.laps ?? 3, countdownTicks: 1, weapons: opts.weapons });
+  if (opts.elimination) startElimination(world, track);
   if (opts.weather) world.weather = makeWeatherPlan(opts.weather, seed, world.race.startTick, expectedRaceTicks(track, { laps: world.race.laps, league: opts.league }));
   const rnd = makeRng(seed * 7 + 1);
   for (const c of world.cars) {
@@ -51,7 +57,8 @@ export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number;
   let hits = 0;
   let wrecks = 0;
   let pickups = 0;
-  const maxTicks = 60 * 60 * 8;
+  // Elimination races run (cars - 1) eliminations of about a full-size lap each.
+  const maxTicks = 60 * 60 * (opts.elimination ? 20 : 8);
   while (world.race.phase !== RacePhase.Finished && world.tick < maxTicks) {
     stepWorld(world, track, [], tunings);
     for (let k = 0; k < world.events.count; k++) {
@@ -81,5 +88,9 @@ export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number;
     wrecks,
     pickups,
     order: standings(world),
+    ...(opts.elimination ? {
+      oneWinner: world.race.phase === RacePhase.Finished && world.cars.filter((c) => c.outOrder === 0).length === 1 && world.cars[winner]?.outOrder === 0,
+      leaderLaps: Math.max(...world.cars.map((c) => c.lap - 1)),
+    } : {}),
   };
 }

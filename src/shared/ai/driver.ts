@@ -67,6 +67,8 @@ export const AI_PIT = {
   vLane: 18,
   /** In the box: slow enough for several seconds of repairs. */
   vBox: 11,
+  /** Elimination race, in last place: added to the damage that sends a car in (a stop there is the end). */
+  danger: 0.35,
 };
 
 const pitLoc = { u: 0, lat: 0 };
@@ -124,9 +126,12 @@ function tightAhead(track: Track, from: number, r: number): boolean {
   return false;
 }
 
-/** `lean`: sideways shift (m) toward an item crate close to the line (sim/crates.ts crateLean). */
+/**
+ * `lean`: sideways shift (m) toward an item crate close to the line (sim/crates.ts crateLean).
+ * `danger`: 0..1, how close the car is to going out of an elimination race (sim/elimination.ts).
+ */
 export function aiDrive(
-  car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, cars: readonly CarState[], tick: number, out: CarInput, lean = 0,
+  car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, cars: readonly CarState[], tick: number, out: CarInput, lean = 0, danger = 0,
 ): void {
   const line = track.line;
   const n = track.n;
@@ -200,7 +205,7 @@ export function aiDrive(
     if (uTrack >= pit.a - AI_PIT.approach && uTrack <= pit.b + 10) {
       pitLocal(pit, car.x, car.z, pitLoc);
       const inLane = pitLoc.u >= pit.a && pitLoc.u <= pit.b && pitLoc.lat > pit.barrier && pitLoc.lat <= pitWallOffset(pit, pitLoc.u) + 1;
-      pitting = inLane || (car.damage >= AI_PIT.damage + persona.pitShift && uTrack <= pit.a + pit.ramp * 0.5);
+      pitting = inLane || (car.damage >= AI_PIT.damage + persona.pitShift + danger * AI_PIT.danger && uTrack <= pit.a + pit.ramp * 0.5);
     }
   }
 
