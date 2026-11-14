@@ -3287,9 +3287,13 @@ export class App {
     const bar = this.school ? SCHOOL_BAR : 0;
     ctx.save();
     ctx.translate(0, bar);
+    // Split screen: the minimap sits at the bottom of the divide, so player 2's HUD starts right of it.
+    const mw = Math.round(Math.min(split ? 80 : 110, W * (split ? 0.14 : 0.2)));
+    const mh = Math.round(mw * 0.75);
     for (let p = 0; p < s.playerCars.length; p++) {
       const vp = this.renderer.viewports[split ? p : 0];
-      drawPlayerHud(ctx, { x: Math.round(vp.x * kx), w: Math.round(vp.w * kx), h: H - bar }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split, this.dailyRun ? 'DAILY CHALLENGE' : this.timeTrial ? 'TIME TRIAL' : this.school ? 'SCHOOL' : undefined);
+      const pad = split && p === 1 ? Math.round(mw / 2) + 2 : 0;
+      drawPlayerHud(ctx, { x: Math.round(vp.x * kx) + pad, w: Math.round(vp.w * kx) - pad, h: H - bar }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split, this.dailyRun ? 'DAILY CHALLENGE' : this.timeTrial ? 'TIME TRIAL' : this.school ? 'SCHOOL' : undefined);
       if (!this.showingResults) drawLockWarning(ctx, Math.round(vp.x * kx), Math.round(vp.w * kx), H, w, s.playerCars[p], vp.cam.follow ? vp.cam.yaw : 0);
     }
     ctx.restore();
@@ -3301,15 +3305,13 @@ export class App {
       ctx.fillStyle = '#000';
       ctx.fillRect(Math.round(this.renderer.viewports[1].x * kx) - 2, 0, 2, H);
     }
-    const mw = Math.round(Math.min(110, W * 0.2));
-    const mh = Math.round(mw * 0.75);
     // Room for the touch pause button in the corner.
     const mx = split ? Math.round(W / 2 - mw / 2) : W - mw - 8 - (this.touch.enabled ? 30 : 0);
     const my = split ? H - mh - 8 : 8 + bar;
     const rival = s instanceof RaceSession && this.cupRace ? rivalCar(s.spec.entrants) : -1;
     this.minimap.draw(ctx, s.track, w, s.colors, s.playerCars, mx, my, mw, mh, rival);
     if (rival >= 0) this.drawRivalTag(ctx, rival);
-    if (!this.showingResults) drawWeatherCue(ctx, W, H, mx + mw / 2, split ? my - 13 : my + mh + (this.netRace ? 16 : 4), w, this.view.weather.snow);
+    if (!this.showingResults) drawWeatherCue(ctx, W, H, mx + mw / 2, split ? my - 13 : my + mh + (this.netRace ? 16 : 4), w, this.view.weather.snow, this.touch.enabled && !split ? W - Math.round(48 * Math.max(0.75, Math.min(1.4, H / 360))) - 4 : W - 4);
     drawCountdown(ctx, W, w);
     if (this.touch.enabled && !split) {
       const me = w.cars[s.playerCars[0]];
@@ -3323,16 +3325,22 @@ export class App {
         drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, Math.round(H * 0.62) + 11, { color: '#ffd84a', align: 'center' });
       }
     } else if (this.firstRace && !this.school && w.tick < w.race.startTick + 60 * 15) {
-      // Above the weapons panel and the special slot when weapons are on.
-      const hintY = split ? my - 14 : H - (w.race.weapons ? 100 : 36);
+      // Above the weapons panel and the special slot when weapons are on; in
+      // split screen each player's keys in their own half.
+      const hintY = H - (w.race.weapons ? 100 : 36);
       const c = this.controls;
-      const drift = split ? `P1 ${keysLabel(c.p1, 'drift')} / P2 ${keysLabel(c.p2, 'drift')}` : keysLabel(c.solo, 'drift');
-      drawText(ctx, `DRIFT: HOLD ${drift} WHILE TURNING (OR LIFT OFF + GAS AGAIN)`, W / 2, hintY, { color: '#ffd84a', align: 'center' });
-      if (w.race.weapons) {
-        const weap = (b: KeyBinding) => `${keysLabel(b, 'fireFront')} MISSILE  ${keysLabel(b, 'fireRear')} MINE  ${keysLabel(b, 'turbo')} TURBO${split ? '' : `  ${keysLabel(b, 'special')} ITEM`}`;
-        const keys = split ? `P1 ${weap(c.p1)}   P2 ${weap(c.p2)}` : weap(c.solo);
-        drawText(ctx, `WEAPONS: ${keys}`, W / 2, hintY - 11, { color: '#ffd84a', align: 'center' });
-      }
+      const binds = split ? [c.p1, c.p2] : [c.solo];
+      binds.forEach((b, p) => {
+        const vp = this.renderer.viewports[p];
+        const cx = Math.round((vp.x + vp.w / 2) * kx);
+        const room = Math.round(vp.w * kx) - 8;
+        const drift = `DRIFT: HOLD ${keysLabel(b, 'drift')} WHILE TURNING`;
+        drawText(ctx, textWidth(`${drift} (OR LIFT OFF + GAS AGAIN)`) <= room ? `${drift} (OR LIFT OFF + GAS AGAIN)` : drift, cx, hintY, { color: '#ffd84a', align: 'center' });
+        if (w.race.weapons) {
+          const keys = fitLine([`${keysLabel(b, 'fireFront')} MISSILE`, `${keysLabel(b, 'fireRear')} MINE`, `${keysLabel(b, 'turbo')} TURBO`, `${keysLabel(b, 'special')} ITEM`], room - textWidth('WEAPONS: '));
+          drawText(ctx, `WEAPONS: ${keys}`, cx, hintY - 11, { color: '#ffd84a', align: 'center' });
+        }
+      });
     }
     drawElimNews(ctx, W, H, w, s.names, s.playerCars, split);
     this.elimSkipRect = drawElimWatching(ctx, W, H, w, s.playerCars, !!this.netRace, this.touch.enabled);
