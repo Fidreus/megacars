@@ -3216,12 +3216,15 @@ export class App {
       ctx.fillRect(0, 0, W, H);
       const top = drawLobby(ctx, W, H, this.online.room, this.online.me, this.time, this.raceSummary(this.online.room));
       // How to drive, readable while waiting for the start.
-      const help = this.controlsHelp(this.online.room.config.weapons !== false);
+      // (Not on small phones, where the room menu needs the space; the race shows the keys at its start.)
+      const help = H < 300 ? [] : this.controlsHelp(this.online.room.config.weapons !== false);
       const helpTop = H - 26 - help.length * 10;
-      const helpW = Math.max(...help.map((l) => textWidth(l))) + 12;
-      ctx.fillStyle = 'rgba(8,10,24,0.72)';
-      ctx.fillRect(Math.round(W / 2 - helpW / 2), helpTop - 4, Math.round(helpW), help.length * 10 + 2);
-      help.forEach((line, i) => drawText(ctx, line, W / 2, helpTop + i * 10, { align: 'center', color: '#ffd84a' }));
+      if (help.length) {
+        const helpW = Math.max(...help.map((l) => textWidth(l))) + 12;
+        ctx.fillStyle = 'rgba(8,10,24,0.72)';
+        ctx.fillRect(Math.round(W / 2 - helpW / 2), helpTop - 4, Math.round(helpW), help.length * 10 + 2);
+        help.forEach((line, i) => drawText(ctx, line, W / 2, helpTop + i * 10, { align: 'center', color: '#ffd84a' }));
+      }
       const bottom = helpTop - 6;
       this.lobbyMenu.draw(ctx, W / 2, top, fitScale(this.lobbyMenu, top, bottom), dt, true, bottom);
       const st = connText(this.online.state, this.online.conn.rtt);
@@ -3520,7 +3523,9 @@ export class App {
     } else if (conn.rtt >= 0) {
       // Under the minimap (same layout as drawRaceUi).
       const mh = Math.round(Math.round(Math.min(110, W * 0.2)) * 0.75);
-      drawText(ctx, `PING ${Math.round(conn.rtt)}`, W - 8, 8 + mh + 4, { color: pingColor(conn.rtt), align: 'right' });
+      // Touch: left of the RESET button.
+      const right = this.touch.enabled ? W - Math.round(48 * Math.max(0.75, Math.min(1.4, H / 360))) - 4 : W - 8;
+      drawText(ctx, `PING ${Math.round(conn.rtt)}`, right, 8 + mh + 4, { color: pingColor(conn.rtt), align: 'right' });
     }
     if (net.spectating && !this.showingResults) {
       drawText(ctx, 'WATCHING - YOU JOIN THE NEXT RACE', W / 2, H - 24, { color: '#ffd84a', align: 'center' });
