@@ -13,8 +13,10 @@ import { renderHtml } from './analyticsHtml.ts';
 import { formatSummary, readLog, summarize } from './analyticsStats.ts';
 import { Client, GameServer } from './gameServer.ts';
 import { RecordStore } from './records.ts';
+import { DailyStore } from './daily.ts';
 import { TrackStore, type TrackSort } from './trackStore.ts';
 import type { RecordSubmission } from '../shared/game/records.ts';
+import { DAY_RE, type DailySubmission } from '../shared/game/daily.ts';
 
 // SERVER_PORT wins in development (PORT may be set for the Vite dev server).
 const PORT = Number(process.env.SERVER_PORT ?? process.env.PORT ?? 8787);
@@ -23,6 +25,15 @@ const SHOTS = resolve(import.meta.dirname, '../../screenshots');
 /** Lap record boards live here (a persistent volume in production). */
 const DATA_DIR = process.env.DATA_DIR ?? resolve(import.meta.dirname, '../../data');
 const records = new RecordStore(DATA_DIR);
+/**
+ * Daily challenge boards; laps are checked like the records (and land on the
+ * world board too). DAILY_CLOCK_SHIFT (ms, development only) moves its clock to test day changes.
+ */
+const dailyShift = process.env.MEGACARS_DEV === '1' ? Number(process.env.DAILY_CLOCK_SHIFT) || 0 : 0;
+const daily = new DailyStore(DATA_DIR, (sub) => records.submit(sub), { now: () => Date.now() + dailyShift });
+setInterval(() => daily.sweep(), 3_600_000).unref();
+/** Daily challenge submissions per address per minute. */
+const dailySubmits = new Map<string, number[]>();
 /** Record submissions per address per minute. */
 const SUBMIT_LIMIT = 6;
 const submits = new Map<string, number[]>();
@@ -111,6 +122,10 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   }
   if (url.pathname.startsWith('/api/records/replay/')) {
     handleReplay(req, res, url.pathname.slice('/api/records/replay/'.length));
+    return;
+  }
+  if (url.pathname === '/api/daily' || url.pathname.startsWith('/api/daily/')) {
+    handleDaily(req, res, url.pathname.slice('/api/daily/'.length));
     return;
   }
   if (url.pathname === '/api/tracks' || url.pathname.startsWith('/api/tracks/')) {
@@ -267,7 +282,8 @@ function handleReplay(req: IncomingMessage, res: ServerResponse, id: string): vo
   }
   const tag = `"${id}"`;
   const headers: Record<string, string> = { 'content-type': 'application/json', 'cache-control': 'public, max-age=31536000, immutable', etag: tag, vary: 'accept-encoding' };
-  const text = records.replayText(id);
+  // Daily challenge entries' races are served here too (their ids never clash).
+  const text = records.replayText(id) ?? daily.replayText(id);
   if (text === null) {
     json(res, 404, { ok: false, error: 'no such replay' });
     return;
@@ -285,6 +301,53 @@ function handleReplay(req: IncomingMessage, res: ServerResponse, id: string): vo
   headers['content-length'] = String(body.length);
   res.writeHead(200, headers);
   res.end(req.method === 'HEAD' ? undefined : body);
+}
+
+/**
+ * GET /api/daily: today's challenge (by the server's clock), its board and
+ * yesterday's top three. GET /api/daily/<YYYY-MM-DD>: a kept day's board.
+ * POST /api/daily: a time trial race for today's board (spec, inputs, day).
+ */
+function handleDaily(req: IncomingMessage, res: ServerResponse, day: string): void {
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    let body: unknown;
+    let cache = 'public, max-age=10';
+    if (!day) body = daily.view();
+    else {
+      const past = DAY_RE.test(day) ? daily.pastDay(day) : null;
+      if (!past) {
+        json(res, 404, { ok: false, error: 'no such day' });
+        return;
+      }
+      // A finished day doesn't change any more.
+      if (past.over) cache = 'public, max-age=3600';
+      body = past;
+    }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': cache });
+    res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body));
+    return;
+  }
+  if (req.method !== 'POST' || day) {
+    json(res, 405, { ok: false, error: 'method' });
+    return;
+  }
+  const ip = networkOf(clientIp(req));
+  const now = Date.now();
+  const recent = (dailySubmits.get(ip) ?? []).filter((t) => now - t < 60_000);
+  if (recent.length >= SUBMIT_LIMIT) {
+    json(res, 429, { ok: false, error: 'slow down' });
+    return;
+  }
+  recent.push(now);
+  dailySubmits.set(ip, recent);
+  if (dailySubmits.size > 10_000) dailySubmits.clear();
+  readJson(req, 400_000, (body) => {
+    if (!body) {
+      json(res, 400, { ok: false, error: 'bad request' });
+      return;
+    }
+    void daily.submit(body as DailySubmission).then((r) => json(res, r.ok ? 200 : 400, r));
+  });
 }
 
 /** A token from `Authorization: Bearer ...` matches `secret` (never when there is none). */
@@ -569,6 +632,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     for (const c of conns) c.ws.close(1012, 'server restarting');
     trackStore.flush();
     records.flush();
+    daily.flush();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 1000).unref();
   });

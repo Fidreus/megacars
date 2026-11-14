@@ -11,6 +11,7 @@ import { PROTOCOL_VERSION, type RaceSpec } from '../../shared/net/protocol.ts';
 import { DEFAULT_TUNING } from '../../shared/config/tuning.ts';
 import type { App } from '../app.ts';
 import type { TimeTrial } from '../game/timeTrial.ts';
+import type { DailyInfo, DailyRun } from '../game/daily.ts';
 import type { LapTape } from '../../shared/game/ghost.ts';
 import { loadWorldGhost, saveMyGhost } from '../game/ghostStore.ts';
 import { fetchBoards } from '../game/records.ts';
@@ -259,6 +260,21 @@ export function installDebugApi(app: App): void {
       saveMyGhost(boardKey(app.session.track.def.id, s.spec.league), lap);
       a.timeTrial?.setMine(lap);
       return lap.ticks;
+    },
+    /** Daily challenge: the challenge, the board as known here, your best and streak, the run being driven. */
+    daily() {
+      const a = app as unknown as { dailyInfo: DailyInfo; dailyRun: DailyRun | null };
+      const i = a.dailyInfo;
+      const r = a.dailyRun;
+      return {
+        state: i.state, online: i.online, today: i.today(), challenge: i.challenge(), board: i.board(), yesterday: i.yesterday(),
+        best: i.myBest(), streak: i.streak(), log: { ...i.log },
+        run: r ? { day: r.day, best: r.best, place: r.place, wouldPlace: r.wouldPlace(), note: r.note } : null,
+      };
+    },
+    /** Open the DAILY CHALLENGE page (as from the title menu). */
+    openDaily() {
+      (app as unknown as { openDaily(): void }).openDaily();
     },
     /** The active menu: labels and where to tap each row (CSS pixels). */
     menu() {

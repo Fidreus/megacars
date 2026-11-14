@@ -90,6 +90,7 @@ describe('reports from the page', () => {
     expect(parseBeacon(ok)).toEqual(ok);
     expect(parseBeacon({ ...ok, track: 'nonsense' })).toBeNull();
     expect(parseBeacon({ ...ok, mode: '<script>' })).toBeNull();
+    expect(parseBeacon({ ...ok, mode: 'daily' })).toEqual({ ...ok, mode: 'daily' });
     expect(parseBeacon({ ...ok, laps: 1e9 })).toBeNull();
     expect(parseBeacon({ ...ok, sid: 'x' })).toBeNull();
     expect(parseBeacon({ ...ok, name: 'extra' })).toEqual(ok);

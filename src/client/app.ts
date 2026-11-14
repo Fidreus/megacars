@@ -48,6 +48,8 @@ import { loadLocalRecords, noteLap, noteRace, submitRecord } from './game/record
 import { ghostChoiceFor, TimeTrial, timeTrialItems } from './game/timeTrial.ts';
 import { saveMyGhost } from './game/ghostStore.ts';
 import { LapTape } from '../shared/game/ghost.ts';
+import { dailyMenuLabel, DailyInfo, DailyRun } from './game/daily.ts';
+import { drawDaily } from './ui/screens/daily.ts';
 import type { RecordEntry } from '../shared/game/records.ts';
 import { loadMedals, medalTotals, noteMedalLap } from './game/medals.ts';
 import { Achievements } from './game/achievements.ts';
@@ -243,7 +245,7 @@ export class App {
   /** Single race: track, laps, opponents... and start. */
   private readonly setupMenu: Menu;
   /** Sub-menus (options, the room's race settings...): a stack, BACK pops one. */
-  private pages: { title: string; menu: Menu; hint?: string; build?: () => MenuItem[] }[] = [];
+  private pages: { title: string; menu: Menu; hint?: string; build?: () => MenuItem[]; draw?: (ctx: CanvasRenderingContext2D, W: number, H: number, dt: number) => void; close?: () => void }[] = [];
   /** The screen the last page goes back to. */
   private pageReturn: Mode = 'title';
   /** The pause menu's options page (null: the pause menu itself). */
@@ -293,6 +295,12 @@ export class App {
   private timeTrial: TimeTrial | null = null;
   /** Time trial against this board entry (from RECORDS) instead of the world record. */
   private ttEntry: { entry: RecordEntry; rank: number } | null = null;
+  /** Daily challenge: today's challenge, board and streak; the run being driven; the next session's. */
+  private readonly dailyInfo = new DailyInfo();
+  private dailyRun: DailyRun | null = null;
+  private dailyNext: { run: DailyRun | null; mood: string } | null = null;
+  /** The daily challenge's time of day is showing instead of the player's own. */
+  private moodByDaily = false;
   /** What happened to the last lap sent to the boards (shown with the results). */
   private recordNote = '';
   /** A world-board record waits for the player to type a name. */
@@ -702,6 +710,7 @@ export class App {
       ...update,
       { label: () => 'SINGLE RACE', select: () => this.toSetup() },
       { label: () => 'TIME TRIAL', select: () => this.openTimeTrial() },
+      { label: () => dailyMenuLabel(this.dailyInfo), select: () => this.openDaily() },
       { label: () => 'CHAMPIONSHIP', select: () => { this.career = null; this.mode = 'cup'; this.cupMenu.index = loadCup() ? 0 : 1; } },
       { label: () => 'CAREER', select: () => this.toCareer() },
       { label: () => 'PLAY ONLINE', select: () => this.toOnline() },
@@ -792,6 +801,78 @@ export class App {
     this.startRace({ ...this.settings, practice: true, timeTrial: true, weapons: false, players: 1, opponents: 0 });
   }
 
+  /** DAILY CHALLENGE: today's track, league and time of day, the board, your streak. */
+  private openDaily(): void {
+    if (this.mode === 'race') {
+      // Back from a run: the page shows how it went.
+      this.mode = 'title';
+      this.flashTime = 0;
+    }
+    const info = this.dailyInfo;
+    const show = () => {
+      const ch = info.challenge();
+      this.dailyNext = { run: null, mood: ch.mood };
+      this.showAttract('page', { track: ch.track, league: ch.league });
+    };
+    this.openPage('DAILY CHALLENGE', [
+      { label: () => (info.myBest() ? 'START - BEAT YOUR BEST' : 'START'), select: () => this.startDaily() },
+      {
+        label: () => `NAME: ${this.online.name}`,
+        text: { get: () => this.online.name, set: (v: string) => (this.online.name = v), max: 12, allowed: /[A-Z0-9 ._-]/ },
+        select: () => this.online.commitName(),
+      },
+    ]);
+    const page = this.pages[this.pages.length - 1];
+    page.draw = (ctx, W, H, dt) => drawDaily(ctx, W, H, dt, info, cleanName(this.online.name), page.menu, this.time, this.touch.enabled);
+    page.close = () => {
+      this.online.commitName();
+      this.showAttract('title');
+    };
+    show();
+    const track = info.challenge().track;
+    void info.refresh().then(() => {
+      // The server's day may differ from this clock's.
+      if (this.pages[this.pages.length - 1] === page && info.challenge().track !== track) show();
+    });
+  }
+
+  /** Today's challenge: a time trial on its track, league and time of day. */
+  private startDaily(): void {
+    this.online.commitName();
+    const run = new DailyRun(this.dailyInfo, () => cleanName(this.online.name));
+    run.onNote = (text) => this.flashMessage(text, 3.5);
+    // The check that put it on the day board also took it to the world board.
+    run.onWorld = () => (this.recordPending = false);
+    const ch = run.challenge;
+    this.dailyNext = { run, mood: ch.mood };
+    this.ttEntry = null;
+    this.startRace({ ...this.settings, track: ch.track, league: ch.league, practice: true, timeTrial: true, weapons: false, players: 1, opponents: 0 });
+  }
+
+  /** The daily challenge's time of day while its page or run shows, the player's own otherwise. */
+  private dailyMood(mood: string | null): void {
+    if (mood) {
+      this.moodByDaily = true;
+      if (mood !== this.mood.id) this.setMood(moodById(mood));
+    } else if (this.moodByDaily) {
+      this.moodByDaily = false;
+      this.setMood(moodById(this.settings.mood));
+    }
+  }
+
+  /** A clean lap in the daily challenge: your best of the day goes to its board at once. */
+  private dailyLap(ticks: number): boolean {
+    const run = this.dailyRun;
+    const s = this.session;
+    if (!run || !(s instanceof RaceSession) || !run.lap(ticks)) return false;
+    const rec = this.replay;
+    const stock = JSON.stringify(leagueTuning(DEFAULT_TUNING, s.spec.league));
+    if (!rec || rec.spoiled || s.tunings.some((t) => JSON.stringify(t) !== stock)) return true;
+    const name = () => cleanName(this.online.name);
+    run.send(() => ({ v: PROTOCOL_VERSION, name: name(), day: run.day, spec: s.spec, replay: rec.encode() }));
+    return true;
+  }
+
   private toSetup(): void {
     this.showAttract('setup');
     this.setupMenu.index = 9;
@@ -828,7 +909,7 @@ export class App {
 
   /** Back one page; from the first one, back to the screen it opened over. */
   private closePage(): void {
-    this.pages.pop();
+    this.pages.pop()?.close?.();
     if (!this.pages.length) this.mode = this.pageReturn;
     else this.refreshPage();
   }
@@ -1587,6 +1668,8 @@ export class App {
   /** Back to the title screen with an all-AI race running behind the menu. */
   toTitle(): void {
     if (this.testDriving) return this.backToEditor();
+    // From a daily challenge run: back to its page, with the board and your place.
+    if (this.dailyRun && this.mode === 'race') return this.openDaily();
     this.showAttract('title');
   }
 
@@ -1643,6 +1726,7 @@ export class App {
         key, league: rs.league, local: this.localOnly, entry: vs?.entry, rank: vs?.rank,
         // Against a chosen entry: that ghost, and yours too if you race both.
         choice: vs ? (choice === 'both' ? 'both' : 'world') : choice,
+        ...this.dailyRun?.ghosts(),
       });
     }
     // Achievements: a fresh race, and nothing counts if debug tools are in play.
@@ -1651,7 +1735,7 @@ export class App {
     this.achSpoiled = this.params.debug || (practice && isTuned(this.tuning));
     trackRace({
       track: rs.track.def.id,
-      mode: this.cupRace ? (this.career ? 'career' : 'cup') : practice ? 'practice' : isElimination(rs.spec) ? 'elimination' : 'quick',
+      mode: this.cupRace ? (this.career ? 'career' : 'cup') : this.dailyRun ? 'daily' : practice ? 'practice' : isElimination(rs.spec) ? 'elimination' : 'quick',
       laps: Math.max(1, Math.min(99, rs.spec.laps)),
       opponents: Math.min(8, rs.settings.opponents),
       players: Math.max(1, Math.min(4, rs.playerCars.length)),
@@ -1659,6 +1743,7 @@ export class App {
   }
 
   private restartRace(): void {
+    if (this.dailyRun) return this.startDaily();
     const s = this.session;
     if (!(s instanceof RaceSession)) return;
     this.startRace(s.settings, this.cupRace ? s.spec : undefined);
@@ -1734,6 +1819,11 @@ export class App {
     this.lapTape = null;
     this.timeTrial?.dispose();
     this.timeTrial = null;
+    // The daily challenge's run (or its page) comes with its time of day.
+    const daily = this.dailyNext;
+    this.dailyNext = null;
+    this.dailyRun = daily?.run ?? null;
+    this.dailyMood(daily?.mood ?? null);
     if (this.view) this.view.dispose();
     if (this.track !== session.track) this.setTrack(session.track);
     this.session = session;
@@ -2408,7 +2498,9 @@ export class App {
         if (record && !this.localOnly) this.recordPending = true;
         const lap = this.lapTape?.last ?? null;
         if (record && lap && lap.ticks === e.value) saveMyGhost(this.recordKey(), lap);
-        this.timeTrial?.lapDone(e.value, lap, record);
+        const dayBest = this.dailyRun && !this.replay?.spoiled ? this.dailyLap(e.value) : false;
+        if (dayBest && lap && lap.ticks === e.value) saveMyGhost(this.dailyRun!.ghostKey, lap);
+        this.timeTrial?.lapDone(e.value, lap, this.dailyRun ? dayBest : record);
         if (!!this.replay && !this.replay.spoiled && !this.achSpoiled) this.noteMedal(e.value);
         if (record) {
           this.flashMessage(`NEW LAP RECORD ${formatTime(e.value * DT)}`, 3);
@@ -2888,6 +2980,8 @@ export class App {
       drawText(ctx, 'A NEW CHAMPIONSHIP USES THE SETTINGS ABOVE', W / 2, H - 11, { color: '#8090a8', align: 'center' });
     } else if (this.mode === 'career') {
       this.drawCareer(ctx, W, H, dt);
+    } else if (this.mode === 'page' && this.pages[this.pages.length - 1]?.draw) {
+      this.pages[this.pages.length - 1].draw!(ctx, W, H, dt);
     } else if (this.mode === 'page' && this.pages.length) {
       const page = this.pages[this.pages.length - 1];
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
@@ -3013,9 +3107,11 @@ export class App {
     const [kx] = this.renderer.uiPerLow;
     for (let p = 0; p < s.playerCars.length; p++) {
       const vp = this.renderer.viewports[split ? p : 0];
-      drawPlayerHud(ctx, { x: Math.round(vp.x * kx), w: Math.round(vp.w * kx), h: H }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split, this.timeTrial ? 'TIME TRIAL' : undefined);
+      drawPlayerHud(ctx, { x: Math.round(vp.x * kx), w: Math.round(vp.w * kx), h: H }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split, this.dailyRun ? 'DAILY CHALLENGE' : this.timeTrial ? 'TIME TRIAL' : undefined);
     }
     if (!this.showingResults) this.timeTrial?.draw(ctx, W, H);
+    // Under the lap times (the speed is there on touch screens).
+    if (!this.showingResults) this.dailyRun?.draw(ctx, 6, this.touch.enabled ? 86 : 76);
     if (split) {
       ctx.fillStyle = '#000';
       ctx.fillRect(Math.round(this.renderer.viewports[1].x * kx) - 2, 0, 2, H);
