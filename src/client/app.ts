@@ -99,7 +99,7 @@ import { drawCountdown, drawPlayerHud, formatTime, Minimap } from './ui/screens/
 import { drawLockWarning } from './ui/screens/specialHud.ts';
 import { drawResults } from './ui/screens/results.ts';
 import { connText, drawLobby, inviteLink, pingColor } from './ui/screens/lobby.ts';
-import { drawLogo } from './ui/screens/title.ts';
+import { drawLogo, logoBottom } from './ui/screens/title.ts';
 import { drawStandings, ShopScreen, type ShopContext } from './ui/screens/shop.ts';
 import {
   humanDrivers, isOver, leader, loadCup, newChampionship, nextRaceSpec, saveCup, settleRace, standingsRows, type Championship,
@@ -256,6 +256,8 @@ export class App {
   private pages: { title: string; menu: Menu; hint?: string; build?: () => MenuItem[]; draw?: (ctx: CanvasRenderingContext2D, W: number, H: number, dt: number) => void; close?: () => void }[] = [];
   /** The screen the last page goes back to. */
   private pageReturn: Mode = 'title';
+  /** The pages under the records, achievements or paint screen, to go back to. */
+  private screenFrom: typeof this.pages | null = null;
   /** The pause menu's options page (null: the pause menu itself). */
   private pauseSub: Menu | null = null;
   private menuEvents: MenuEvents = {};
@@ -559,14 +561,14 @@ export class App {
     this.music.volume = this.settings.musicVolume / 10;
     this.audio.volume = (this.settings.soundVolume / 10) * 0.9;
     this.music.onSong = () => (this.songToast = 4);
-    this.recordsScreen = new RecordsScreen(() => this.toTitle(), () => playUi(this.audio, 'move'));
+    this.recordsScreen = new RecordsScreen(() => this.screenBack(), () => playUi(this.audio, 'move'));
     this.recordsScreen.onRace = (track, league, entry, rank) => {
       this.settings.track = track;
       this.settings.league = league;
       saveSettings(this.settings);
       this.startTimeTrial({ entry, rank });
     };
-    this.achievementsScreen = new AchievementsScreen(this.ach, () => this.toTitle(), () => playUi(this.audio, 'move'));
+    this.achievementsScreen = new AchievementsScreen(this.ach, () => this.screenBack(), () => playUi(this.audio, 'move'));
     this.paintId = loadPaintChoice();
     if (!isUnlocked(paintById(this.paintId), this.paintUnlocks())) this.paintId = 'stock';
     setActivePaint(paintById(this.paintId));
@@ -580,7 +582,7 @@ export class App {
         savePaintChoice(id);
       },
       look: (p) => this.showroom?.setPaint(p.body ?? CAR_COLORS[0], p.body === null ? undefined : { accent: p.accent, pattern: p.pattern }),
-      onBack: () => this.toTitle(),
+      onBack: () => this.screenBack(),
       sound: (k) => playUi(this.audio, k),
     });
     this.ach.onUnlock = (r) => {
@@ -740,30 +742,16 @@ export class App {
       : [];
     return [
       ...update,
+      // Kept short enough to fit a phone without scrolling: records live under
+      // TIME TRIAL, achievements and paints share a page.
       { label: () => 'SINGLE RACE', select: () => this.toSetup() },
-      { label: () => 'TIME TRIAL', select: () => this.openTimeTrial() },
-      { label: () => dailyMenuLabel(this.dailyInfo), select: () => this.openDaily() },
       { label: () => 'CHAMPIONSHIP', select: () => { this.career = null; this.mode = 'cup'; this.cupMenu.index = loadCup() ? 0 : 1; } },
       { label: () => 'CAREER', select: () => this.toCareer() },
       { label: () => 'PLAY ONLINE', select: () => this.toOnline() },
+      { label: () => dailyMenuLabel(this.dailyInfo), select: () => this.openDaily() },
+      { label: () => 'TIME TRIAL & RECORDS', select: () => this.openTimeTrial() },
       { label: () => 'TRACK EDITOR', select: () => this.openMyTracks() },
-      {
-        label: () => 'RECORDS',
-        select: () => {
-          this.online.commitName();
-          this.mode = 'records';
-          this.recordsScreen.me = cleanName(this.online.name);
-          this.recordsScreen.open(this.settings.track, this.settings.league);
-        },
-      },
-      {
-        label: () => `ACHIEVEMENTS ${this.ach.total.done}/${this.ach.total.all}`,
-        select: () => {
-          this.mode = 'achievements';
-          this.achievementsScreen.open();
-        },
-      },
-      { label: () => 'PAINT SHOP', select: () => this.openPaints() },
+      { label: () => 'PAINT & ACHIEVEMENTS', select: () => this.openGarage() },
       { label: () => 'OPTIONS', select: () => this.openOptions() },
       { label: () => 'DRIVING SCHOOL', select: () => this.openSchool() },
       { label: () => 'HOW TO PLAY', select: () => (this.mode = 'help') },
@@ -921,7 +909,43 @@ export class App {
         if (track) this.showAttract('page');
       },
       start: () => this.startTimeTrial(),
-    }), 'ALONE, NO WEAPONS, STOCK CAR, ENDLESS LAPS - BEAT THE GHOST');
+    }).concat({ label: () => 'RECORDS - WORLD BOARDS', select: () => this.openRecords() }), 'ALONE, NO WEAPONS, STOCK CAR, ENDLESS LAPS - BEAT THE GHOST');
+    // Returning players mostly just start: put the cursor there.
+    this.pages[this.pages.length - 1].menu.index = 3;
+  }
+
+  /** The world record boards of the chosen track (from the time trial page). */
+  private openRecords(): void {
+    this.screenFrom = this.pages;
+    this.online.commitName();
+    this.mode = 'records';
+    this.recordsScreen.me = cleanName(this.online.name);
+    this.recordsScreen.open(this.settings.track, this.settings.league);
+  }
+
+  /** Paint shop and achievements, which unlock the paints. */
+  private openGarage(): void {
+    this.openPage('PAINT & ACHIEVEMENTS', [
+      { label: () => 'PAINT SHOP', select: () => { this.screenFrom = this.pages; this.openPaints(); } },
+      {
+        label: () => `ACHIEVEMENTS ${this.ach.total.done}/${this.ach.total.all}`,
+        select: () => {
+          this.screenFrom = this.pages;
+          this.mode = 'achievements';
+          this.achievementsScreen.open();
+        },
+      },
+    ], 'ACHIEVEMENTS AND MEDALS UNLOCK NEW PAINTS');
+  }
+
+  /** Back from records, achievements or the paint shop: to the page it came from. */
+  private screenBack(): void {
+    const pages = this.screenFrom;
+    this.screenFrom = null;
+    if (!pages?.length) return this.toTitle();
+    this.showAttract('page');
+    this.pages = pages;
+    this.pageReturn = 'title';
   }
 
   /** Time trial on the chosen track and league (against a board entry, if given). */
@@ -3064,17 +3088,25 @@ export class App {
     if (this.mode === 'title') {
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(0, 0, W, H);
-      const top = drawLogo(ctx, W / 2, Math.round(H * 0.08), logoWidth(W, H), this.time);
-      this.titleMenu.draw(ctx, W / 2, top + 14, fitScale(this.titleMenu, top + 14, H - 30), dt, true, H - 30);
+      // Short screens (phones): a smaller logo rather than a scrolling menu.
+      const bottom = H - (this.touch.enabled ? 20 : 30);
+      const logoTop = Math.round(H * 0.08);
+      let lw = logoWidth(W, H);
+      const step = textWidth('MEGACARS', 1);
+      while (lw > step * 4 && logoBottom(logoTop, lw) + 14 + this.titleMenu.items.length * (LINE_H + 4) > bottom) lw -= step;
+      const top = drawLogo(ctx, W / 2, logoTop, lw, this.time);
+      this.titleMenu.draw(ctx, W / 2, top + 14, fitScale(this.titleMenu, top + 14, bottom), dt, true, bottom);
       const c = this.controls;
+      // Centred between the credit on the right and the same margin on the left.
+      const room = W - 2 * (textWidth('BY FREDRIK IDRÉUS') + 16);
       const help = this.settings.players === 2
-        ? `P1: ${driveKeys(c.p1)} ${keysLabel(c.p1, 'drift')} DRIFT   P2: ${driveKeys(c.p2)} ${keysLabel(c.p2, 'drift')} DRIFT   OR GAMEPADS`
-        : `${driveKeys(c.solo)} DRIVE   ${keysLabel(c.solo, 'drift')} DRIFT   ${keysLabel(c.solo, 'fireFront')} MISSILE   ${keysLabel(c.solo, 'fireRear')} MINE   ${keysLabel(c.solo, 'turbo')} TURBO`;
+        ? [`P1: ${driveKeys(c.p1)} ${keysLabel(c.p1, 'drift')} DRIFT`, `P2: ${driveKeys(c.p2)} ${keysLabel(c.p2, 'drift')} DRIFT`, 'OR GAMEPADS']
+        : [`${driveKeys(c.solo)} DRIVE`, `${keysLabel(c.solo, 'drift')} DRIFT`, `${keysLabel(c.solo, 'fireFront')} MISSILE`, `${keysLabel(c.solo, 'fireRear')} MINE`, `${keysLabel(c.solo, 'turbo')} TURBO`, `${keysLabel(c.solo, 'special')} ITEM`];
       if (this.touch.enabled) {
-        drawText(ctx, 'TAP TO CHOOSE   TAP THE LEFT / RIGHT END OF A SETTING TO CHANGE IT', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+        drawText(ctx, fitLine(['TAP TO CHOOSE', 'TAP THE LEFT / RIGHT END OF A SETTING TO CHANGE IT'], room), W / 2, H - 11, { align: 'center', color: '#8090a8' });
       } else {
-        drawText(ctx, help, W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
-        drawText(ctx, 'ENTER SELECT   ←→ CHANGE   M TIME OF DAY   3 CRT   4 COLOURS   5 SOUND', W / 2, H - 11, { align: 'center', color: '#8090a8' });
+        drawText(ctx, fitLine(help, room), W / 2, H - 22, { align: 'center', color: '#c8d0dc' });
+        drawText(ctx, fitLine(['ENTER SELECT', '←→ CHANGE', 'M TIME OF DAY', '3 CRT', '4 COLOURS', '5 SOUND'], room), W / 2, H - 11, { align: 'center', color: '#8090a8' });
       }
       this.drawSoundButton(ctx, W);
       drawText(ctx, `V${VERSION}`, W - 4, H - 11, { align: 'right', color: '#5a6478' });
@@ -3662,6 +3694,17 @@ export class App {
 }
 
 /** Largest text scale (2 or 1) at which the menu fits between top and bottom. */
+/** Parts joined with wide gaps, narrower ones, then fewer parts until the line fits `room`. */
+function fitLine(parts: string[], room: number): string {
+  for (let n = parts.length; n > 1; n--) {
+    for (const gap of ['   ', '  ']) {
+      const line = parts.slice(0, n).join(gap);
+      if (textWidth(line) <= room) return line;
+    }
+  }
+  return parts[0];
+}
+
 function fitScale(menu: Menu, top: number, bottom: number): number {
   return top + menu.items.length * (LINE_H * 2 + 4) <= bottom ? 2 : 1;
 }
