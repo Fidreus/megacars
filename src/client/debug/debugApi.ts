@@ -34,6 +34,7 @@ export function installDebugApi(app: App): void {
         fps: Math.round(app.fps),
         lowRes: [r.lowW, r.lowH],
         scale: r.scale,
+        uiScale: r.uiScale,
         cars: app.world.cars.map((c) => ({
           id: c.id,
           x: +c.x.toFixed(2),
@@ -298,6 +299,14 @@ export function installDebugApi(app: App): void {
         room: o.room,
         race: n ? { tick: n.world.tick, server: n.predictor.serverTick, lead: n.predictor.lead, rate: n.rate, cars: n.localCars } : null,
       };
+    },
+    /** The driving school: the running lesson's state (null outside the school), and a way to start one. */
+    school() {
+      return app.school?.debug() ?? null;
+    },
+    startSchool(lesson = 0) {
+      app.startSchool(lesson);
+      return api.school();
     },
     /** Start a race straight away, e.g. startRace({ players: 2, laps: 1 }). */
     startRace(over: Record<string, unknown> = {}) {

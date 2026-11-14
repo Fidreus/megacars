@@ -28,7 +28,7 @@ describe('achievement table', () => {
   it('has unique ids, short descriptions and about two dozen entries', () => {
     expect(ACHIEVEMENT_IDS.size).toBe(ACHIEVEMENTS.length);
     expect(ACHIEVEMENTS.length).toBeGreaterThanOrEqual(20);
-    expect(ACHIEVEMENTS.length).toBeLessThanOrEqual(25);
+    expect(ACHIEVEMENTS.length).toBeLessThanOrEqual(26);
     for (const r of ACHIEVEMENTS) {
       expect(r.desc.length, r.id).toBeLessThanOrEqual(28);
       expect(r.name.length, r.id).toBeLessThanOrEqual(17);

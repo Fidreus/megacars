@@ -78,6 +78,8 @@ export class TouchControls {
   point: { x: number; y: number } | null = null;
   /** Controls are drawn and react (racing, not paused or on the results). */
   visible = false;
+  /** Buttons to point out with a pulsing ring (the driving school), by role name. */
+  highlight: readonly string[] = [];
   steer = 0;
   /** Where the thumb says the steering should be; `steer` follows it smoothly. */
   private target = 0;
@@ -338,6 +340,15 @@ export class TouchControls {
     for (const b of this.layout) {
       if (!weapons && (b.role === 'missile' || b.role === 'mine' || b.role === 'turbo')) continue;
       const on = held.has(b.role);
+      if (this.highlight.includes(b.role)) {
+        // A ring that breathes: this is the one to press.
+        const k = 0.5 + 0.5 * Math.sin(Date.now() / 160);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r + 3 + k * 4, 0, Math.PI * 2);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = `rgba(255,216,74,${0.55 + 0.4 * k})`;
+        ctx.stroke();
+      }
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
       ctx.fillStyle = on ? 'rgba(255,216,74,0.45)' : 'rgba(10,12,26,0.35)';

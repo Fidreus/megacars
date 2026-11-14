@@ -25,7 +25,7 @@ function send(body: Record<string, unknown>): void {
 
 export interface RaceInfo {
   track: string;
-  mode: 'quick' | 'practice' | 'cup' | 'career';
+  mode: 'quick' | 'practice' | 'cup' | 'career' | 'school';
   laps: number;
   opponents: number;
   players: number;

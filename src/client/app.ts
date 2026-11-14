@@ -6,7 +6,7 @@ import { DT } from '../shared/config/constants.ts';
 import { SURFACES, Surface } from '../shared/config/surfaces.ts';
 import { cloneTuning, DEFAULT_TUNING, type CarTuning } from '../shared/config/tuning.ts';
 import { boardKey, LEAGUE_NAMES, LEAGUES, leagueOf, leagueTuning } from '../shared/game/leagues.ts';
-import { TRACKS, TRACK_LIST, raceLaps, registerTrack, trackDef, trackName } from '../shared/track/defs/index.ts';
+import { DEFAULT_TRACK, TRACKS, TRACK_LIST, raceLaps, registerTrack, trackDef, trackName } from '../shared/track/defs/index.ts';
 import type { Track } from '../shared/track/types.ts';
 import { Ev } from '../shared/sim/events.ts';
 import { copyInput, NEUTRAL_INPUT, type CarInput } from '../shared/sim/input.ts';
@@ -100,6 +100,12 @@ import { duelText, rivalCar, rivalLine } from './game/rival.ts';
 import { TOUR_MAX, type RaceSpec, type RoomInfo } from '../shared/net/protocol.ts';
 import { CATCH_UP, farBehind, leaderDistance } from '../shared/sim/catchUp.ts';
 import { setBoostPadsLit } from './render/boostMesh.ts';
+import { SCHOOL_BAR, SchoolRun, type SchoolHost } from './game/school/schoolRun.ts';
+import { makeLessons } from './game/school/lessons.ts';
+import { getTrack } from '../shared/track/builder.ts';
+import { allDone, FIRST_VISIT, loadSchool, nextLesson, saveSchool, type SchoolSave } from './game/school/progress.ts';
+import { makeLabels, type Device } from './game/school/prompts.ts';
+import { SCHOOL, SCHOOL_ID } from '../shared/track/defs/school.ts';
 
 const SHADOW_HALF = 62;
 /** Graphics levels: high, medium, low. Shadow map size 0 = no shadows. */
@@ -274,6 +280,14 @@ export class App {
   private lapTape: LapTape | null = null;
   /** Time trial: the ghosts and the gap to them. */
   private timeTrial: TimeTrial | null = null;
+  /** The driving school: lesson state while a lesson runs (null otherwise). */
+  school: SchoolRun | null = null;
+  private schoolSave: SchoolSave = loadSchool();
+  private schoolStart = 0;
+  private schoolDoneMenu!: Menu;
+  private schoolPauseItems: MenuItem[] = [];
+  /** What the player steers with now (for the wording of the lessons). */
+  private schoolDevice: Device = 'keys';
   /** Time trial against this board entry (from RECORDS) instead of the world record. */
   private ttEntry: { entry: RecordEntry; rank: number } | null = null;
   /** What happened to the last lap sent to the boards (shown with the results). */
@@ -549,6 +563,20 @@ export class App {
     this.controlsScreen = new ControlsScreen(this.controls, this.input.keyboard, { onMove: beep, onChange: change }, () => (this.mode = 'page'), (k) => playUi(this.audio, k));
     this.pauseAll = this.pauseMenu.items;
     this.tuneItem = this.pauseAll[1];
+    this.schoolPauseItems = [
+      this.pauseAll[0],
+      { label: () => 'RESTART LESSON', select: () => { this.paused = false; this.school?.begin(this.school.index); } },
+      { label: () => (this.school && this.school.index + 1 < this.school.lessons.length ? 'SKIP TO THE NEXT LESSON' : 'SKIP LESSON'), select: () => this.schoolSkip() },
+      { label: () => 'LESSON LIST', select: () => { this.toTitle(); this.openSchool(); } },
+      this.pauseAll[3],
+      { label: () => 'QUIT TO MENU', select: () => this.toTitle() },
+    ];
+    this.schoolDoneMenu = new Menu([
+      { label: () => (this.school && this.school.index + 1 < this.school.lessons.length ? 'NEXT LESSON' : 'LESSON LIST'), select: () => this.schoolNext() },
+      { label: () => 'REPEAT THIS LESSON', select: () => { this.paused = false; this.pauseSub = null; this.school?.begin(this.school.index); } },
+      { label: () => 'LESSON LIST', select: () => { this.toTitle(); this.openSchool(); } },
+      { label: () => 'QUIT TO MENU', select: () => this.toTitle() },
+    ], { onMove: beep });
     this.careerMenu = new Menu([
       {
         label: () => {
@@ -584,6 +612,8 @@ export class App {
     } else if (params.mode === 'quick') this.startRace(this.settings);
     else if (params.mode === 'practice') this.startRace({ ...this.settings, practice: true, opponents: params.aiSet ? params.ai : 0 });
     else this.toTitle();
+    // Somebody who has never played here is asked once about the driving school.
+    if (FIRST_VISIT && !this.schoolSave.asked && this.mode === 'title' && !params.trackCode) this.askSchool();
     if (params.trackCode && this.mode === 'title') {
       if (shared) {
         this.openMyTracks();
@@ -707,6 +737,7 @@ export class App {
       },
       { label: () => 'PAINT SHOP', select: () => this.openPaints() },
       { label: () => 'OPTIONS', select: () => this.openOptions() },
+      { label: () => 'DRIVING SCHOOL', select: () => this.openSchool() },
       { label: () => 'HOW TO PLAY', select: () => (this.mode = 'help') },
     ];
   }
@@ -746,6 +777,102 @@ export class App {
       { label: () => 'FREE PRACTICE', select: () => this.startRace({ ...s, practice: true, players: 1, opponents: 0 }) },
       { label: () => 'BACK', select: () => this.toTitle() },
     ];
+  }
+
+  // --------------------------------------------------------- driving school
+
+  /** DRIVING SCHOOL: the lessons, with the next one under the cursor. */
+  private openSchool(): void {
+    const lessons = this.schoolLessons();
+    this.openPage('DRIVING SCHOOL', () => lessons.map((l, i) => ({
+      label: () => `${i + 1}. ${l.name}${l.id in this.schoolSave.done ? '  - DONE' : l.id in this.schoolSave.skipped ? '  - SKIPPED' : ''}`,
+      select: () => this.startSchool(i),
+    })), 'SHORT LESSONS, ALONE ON A PRACTICE CIRCUIT - ANY ORDER');
+    const page = this.pages[this.pages.length - 1];
+    page.menu.index = nextLesson(this.schoolSave, lessons.map((l) => l.id));
+  }
+
+  private schoolLessons() {
+    return makeLessons(getTrack(SCHOOL).length);
+  }
+
+  /** The first-time question: start the school or not (asked once, whatever the answer). */
+  private askSchool(): void {
+    this.schoolSave.asked = true;
+    saveSchool(this.schoolSave);
+    this.openPage('NEW HERE?', [
+      { label: () => 'START THE DRIVING SCHOOL', select: () => { this.pages = []; this.startSchool(0); } },
+      { label: () => 'NO THANKS', select: () => this.closePage() },
+    ], 'LEARN TO DRIFT IN FIVE SHORT LESSONS - IT STAYS UNDER DRIVING SCHOOL');
+    // The page adds a BACK row; "no thanks" is enough.
+    const page = this.pages[this.pages.length - 1];
+    page.menu.items = page.menu.items.slice(0, -1);
+  }
+
+  /** Alone on the school circuit, starting at this lesson. */
+  startSchool(lesson: number): void {
+    registerTrack(SCHOOL);
+    this.schoolStart = lesson;
+    this.startRace({ ...this.settings, track: SCHOOL_ID, practice: true, weapons: false, players: 1, opponents: 0, league: 'standard', school: true });
+  }
+
+  private schoolHost(): SchoolHost {
+    const rs = this.session as RaceSession;
+    const car = rs.playerCars[0];
+    return {
+      world: rs.world,
+      track: rs.track,
+      carId: car,
+      input: () => rs.inputs[car],
+      labels: () => makeLabels(this.schoolDevice, this.controls, { gasMode: this.touch.gasMode, steerMode: this.touch.steerMode }),
+      teleported: () => {
+        this.view.snap(car);
+        this.camInit[0] = false;
+      },
+      passed: (i) => this.schoolPassed(i),
+      over: () => this.schoolOver(),
+      sound: (k) => playUi(this.audio, k === 'win' ? 'buy' : 'deny'),
+    };
+  }
+
+  /** A lesson was passed: remember it, and the achievement when all five are. */
+  private schoolPassed(i: number): void {
+    const school = this.school;
+    if (!school) return;
+    const id = school.lessons[i].id;
+    this.schoolSave.done[id] = Date.now();
+    delete this.schoolSave.skipped[id];
+    saveSchool(this.schoolSave);
+    if (allDone(this.schoolSave, school.lessons.map((l) => l.id))) this.ach.feed({ kind: 'school' });
+  }
+
+  /** The lesson is over (passed or skipped): the pause menu offers what next. */
+  private schoolOver(): void {
+    this.paused = true;
+    this.haptics.stop();
+    this.pauseSub = this.schoolDoneMenu;
+    this.schoolDoneMenu.index = 0;
+  }
+
+  /** Give up on this lesson (it stays open in the list) and go to the next. */
+  private schoolSkip(): void {
+    const school = this.school;
+    if (!school) return;
+    const id = school.lesson.id;
+    if (!(id in this.schoolSave.done)) this.schoolSave.skipped[id] = Date.now();
+    saveSchool(this.schoolSave);
+    this.schoolNext();
+  }
+
+  /** The next lesson, or the list after the last one. */
+  private schoolNext(): void {
+    const school = this.school;
+    if (!school) return;
+    if (school.index + 1 < school.lessons.length) this.startSchool(school.index + 1);
+    else {
+      this.toTitle();
+      this.openSchool();
+    }
   }
 
   /** TIME TRIAL: track, league and ghost, then alone on the track. */
@@ -1554,6 +1681,7 @@ export class App {
     const titleish: Mode[] = ['title', 'setup', 'editor', 'controls', 'help', 'records', 'achievements', 'paints', 'credits'];
     if (titleish.includes(this.mode) || (this.mode === 'page' && this.pageReturn === 'title')) return { kind: 'title' };
     if (this.mode === 'seasonEnd' || this.mode === 'standings' || this.showingResults) return { kind: 'results' };
+    if (this.mode === 'race' && this.school) return { kind: 'title' };
     if (this.mode === 'race') {
       // A player track plays the song of a game track with its theme.
       const def = this.session.track.def;
@@ -1590,7 +1718,7 @@ export class App {
     // The tuning panel's handling only drives free practice; races use the stock car.
     const practice = !!settings.practice && !spec;
     // Time trial is practice with the stock car.
-    const ownTuning = practice && !settings.timeTrial;
+    const ownTuning = practice && !settings.timeTrial && !settings.school;
     if (!ownTuning) this.tuningPanel?.hide();
     else if (isTuned(this.tuning)) this.flashMessage('TUNED HANDLING (PAUSE > TUNE HANDLING)', 3);
     const league = leagueOf(spec?.league ?? settings.league);
@@ -1625,10 +1753,12 @@ export class App {
     // Achievements: a fresh race, and nothing counts if debug tools are in play.
     this.ach.startRace();
     this.achSummarySent = false;
-    this.achSpoiled = this.params.debug || (practice && isTuned(this.tuning));
+    this.achSpoiled = this.params.debug || (practice && isTuned(this.tuning)) || !!settings.school;
+    // The driving school: lessons on its own circuit, nothing else counts.
+    this.school = settings.school ? new SchoolRun(this.schoolHost(), this.schoolStart) : null;
     trackRace({
-      track: rs.track.def.id,
-      mode: this.cupRace ? (this.career ? 'career' : 'cup') : practice ? 'practice' : 'quick',
+      track: settings.school ? DEFAULT_TRACK : rs.track.def.id,
+      mode: settings.school ? 'school' : this.cupRace ? (this.career ? 'career' : 'cup') : practice ? 'practice' : 'quick',
       laps: Math.max(1, Math.min(99, rs.spec.laps)),
       opponents: Math.min(8, rs.settings.opponents),
       players: Math.max(1, Math.min(4, rs.playerCars.length)),
@@ -1711,6 +1841,7 @@ export class App {
     this.lapTape = null;
     this.timeTrial?.dispose();
     this.timeTrial = null;
+    this.school = null;
     if (this.view) this.view.dispose();
     if (this.track !== session.track) this.setTrack(session.track);
     this.session = session;
@@ -1807,14 +1938,14 @@ export class App {
   }
 
   private syncPauseMenu(): void {
-    const want = this.pauseAll.filter((it) => it !== this.tuneItem || this.practicing);
+    const want = this.school ? this.schoolPauseItems : this.pauseAll.filter((it) => it !== this.tuneItem || this.practicing);
     if (want.length !== this.pauseMenu.items.length) this.pauseMenu.items = want;
   }
 
   /** Free practice on this device (where the tuning panel's handling applies). */
   private get practicing(): boolean {
     const s = this.session;
-    return this.mode === 'race' && !this.netRace && s instanceof RaceSession && !!s.settings.practice && !s.settings.timeTrial && !this.cupRace;
+    return this.mode === 'race' && !this.netRace && s instanceof RaceSession && !!s.settings.practice && !s.settings.timeTrial && !s.settings.school && !this.cupRace;
   }
 
   async openTuning(force = false): Promise<void> {
@@ -1975,6 +2106,7 @@ export class App {
     if (kb.wasPressed('KeyN')) this.music.next();
     const pad = this.input.firstActivePad();
     if (pad >= 0) this.padIndex = pad;
+    if (this.school) this.schoolDevice = this.touch.enabled ? 'touch' : kb.anyPressed ? 'keys' : pad >= 0 ? 'pad' : this.schoolDevice;
     // A real keyboard or pad in a race: hide the on-screen controls.
     if ((pad >= 0 || kb.anyPressed) && this.mode === 'race') this.touch.enabled = false;
 
@@ -2147,7 +2279,9 @@ export class App {
       return;
     }
     if (this.paused) {
-      if (nav.back && this.pauseSub) this.pauseSub = null;
+      if (nav.back && this.school?.finished) {
+        // The lesson menu stays until a choice is made.
+      } else if (nav.back && this.pauseSub) this.pauseSub = null;
       else if (nav.back) this.paused = false;
       else if (this.pauseSub) this.pauseSub.handle(nav);
       else {
@@ -2409,6 +2543,7 @@ export class App {
       }
     }
     this.driveAudio.events(this.audio, ev, players, this.mode === 'race');
+    this.school?.tick(ev);
     if (achOn) {
       const t = this.achTick;
       t.w = w;
@@ -2939,11 +3074,17 @@ export class App {
     const w = s.world;
     const split = this.renderer.isSplit;
     const [kx] = this.renderer.uiPerLow;
+    // The school's band takes the top of the screen: the HUD moves down below it.
+    const bar = this.school ? SCHOOL_BAR : 0;
+    ctx.save();
+    ctx.translate(0, bar);
     for (let p = 0; p < s.playerCars.length; p++) {
       const vp = this.renderer.viewports[split ? p : 0];
-      drawPlayerHud(ctx, { x: Math.round(vp.x * kx), w: Math.round(vp.w * kx), h: H }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split, this.timeTrial ? 'TIME TRIAL' : undefined);
+      drawPlayerHud(ctx, { x: Math.round(vp.x * kx), w: Math.round(vp.w * kx), h: H - bar }, w, s.playerCars[p], split ? `P${p + 1}` : null, p === 0 && this.touch.enabled && !split, this.timeTrial ? 'TIME TRIAL' : this.school ? 'SCHOOL' : undefined);
     }
+    ctx.restore();
     if (!this.showingResults) this.timeTrial?.draw(ctx, W, H);
+    if (this.school && !this.paused && (!this.school.finished || this.school.result)) this.school.draw(ctx, W, H);
     if (split) {
       ctx.fillStyle = '#000';
       ctx.fillRect(Math.round(this.renderer.viewports[1].x * kx) - 2, 0, 2, H);
@@ -2952,7 +3093,7 @@ export class App {
     const mh = Math.round(mw * 0.75);
     // Room for the touch pause button in the corner.
     const mx = split ? Math.round(W / 2 - mw / 2) : W - mw - 8 - (this.touch.enabled ? 30 : 0);
-    const my = split ? H - mh - 8 : 8;
+    const my = split ? H - mh - 8 : 8 + bar;
     const rival = s instanceof RaceSession && this.cupRace ? rivalCar(s.spec.entrants) : -1;
     this.minimap.draw(ctx, s.track, w, s.colors, s.playerCars, mx, my, mw, mh, rival);
     if (rival >= 0) this.drawRivalTag(ctx, rival);
@@ -2960,14 +3101,15 @@ export class App {
     if (this.touch.enabled && !split) {
       const me = w.cars[s.playerCars[0]];
       this.touch.arrange(W, H);
+      this.touch.highlight = this.school?.highlight() ?? [];
       if (this.touch.visible) this.touch.draw(ctx, { missiles: me.missiles, mines: me.mines, turbos: me.turbos }, !!w.race.weapons);
-      if (this.firstRace && w.tick < w.race.startTick + 60 * 12) {
+      if (this.firstRace && !this.school && w.tick < w.race.startTick + 60 * 12) {
         const gas = { thumb: 'IT GASSES WHILE YOUR THUMB IS DOWN', always: 'THE CAR ACCELERATES BY ITSELF', button: 'HOLD GAS' }[this.touch.gasMode];
         const how = { point: 'PUSH YOUR LEFT THUMB WHERE YOU WANT TO GO', slide: 'DRAG YOUR LEFT THUMB TO STEER', buttons: 'STEER WITH THE ARROWS' }[this.touch.steerMode];
         drawText(ctx, `${how} - ${gas}`, W / 2, Math.round(H * 0.62), { color: '#ffd84a', align: 'center' });
         drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, Math.round(H * 0.62) + 11, { color: '#ffd84a', align: 'center' });
       }
-    } else if (this.firstRace && w.tick < w.race.startTick + 60 * 15) {
+    } else if (this.firstRace && !this.school && w.tick < w.race.startTick + 60 * 15) {
       const hintY = split ? my - 14 : H - 36;
       const c = this.controls;
       const drift = split ? `P1 ${keysLabel(c.p1, 'drift')} / P2 ${keysLabel(c.p2, 'drift')}` : keysLabel(c.solo, 'drift');
@@ -2997,7 +3139,8 @@ export class App {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(0, 0, W, H);
       const py = Math.round(H * (H < 320 ? 0.12 : 0.3));
-      drawText(ctx, 'PAUSED', W / 2, py, { scale: H < 320 ? 3 : 4, color: '#ffd84a', align: 'center' });
+      const title = this.school?.finished ? (this.school.skipped ? 'SKIPPED' : this.schoolSave.done && allDone(this.schoolSave, this.school.lessons.map((l) => l.id)) ? 'SCHOOL COMPLETE' : 'LESSON COMPLETE') : 'PAUSED';
+      drawText(ctx, title, W / 2, py, { scale: H < 320 ? 3 : 4, color: '#ffd84a', align: 'center' });
       const my = py + (H < 320 ? 32 : 44);
       this.syncPauseMenu();
       const menu = this.pauseSub ?? this.pauseMenu;
