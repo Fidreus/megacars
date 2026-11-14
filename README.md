@@ -453,7 +453,16 @@ ditt rekord i ett snabbrace, i träning eller i en tidskörning med serienbil sk
 servern: din inmatning tick för tick (komprimerad, typiskt 30–50 kB) och
 racets uppsättning. Eftersom simuleringen är deterministisk spelar servern
 upp racet igen i en egen tråd (≈1 s för 3 minuter med 8 bilar) och mäter
-varven själv – en påhittad tid kan alltså inte komma in. Topplistan sparas i
+varven själv – en påhittad tid kan alltså inte komma in. Det kräver att
+webbläsaren och servern räknar ut exakt samma lopp, bit för bit. JavaScript
+lovar bara det för `+ - * /`, `Math.sqrt` och avrundningarna; `Math.sin`,
+`Math.atan2`, `Math.exp`, `Math.hypot`, `**` med flera ger olika sista
+siffror i Node, Chrome, Safari och Firefox, och loppet förstorar skillnaden
+tills varven inte stämmer. Därför räknar simuleringen med egna funktioner
+(`DMath` i `src/shared/math/dmath.ts`, fdlibm byggd av exakta operationer),
+och ett test stoppar inbyggda `Math.sin` och liknande i `src/shared`.
+`node scripts/detCheck.ts` kör långa lopp i Node och i Playwrights
+webbläsare och kräver samma resultat. Topplistan sparas i
 `$DATA_DIR/records/v<SIM_VERSION>/records.json` (standard `./data`); i
 produktion bör `DATA_DIR` peka på en beständig volym.
 

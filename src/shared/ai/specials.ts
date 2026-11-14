@@ -13,6 +13,7 @@ import { ShotKind, type Shot } from '../sim/weapons.ts';
 import { effectiveSkill, MineHabit, personaOf, type Persona } from './persona.ts';
 import { reactionTicks } from './reaction.ts';
 import { FOE_EAGERNESS } from './weapons.ts';
+import { DMath } from '../math/dmath.ts';
 
 export const AI_SPECIAL = {
   /** A homing missile is kept for cars at least this far ahead (closer ones get a plain missile), and not wasted on far ones. */
@@ -57,10 +58,10 @@ export function missileComing(car: CarState, shots: readonly Shot[]): boolean {
     if ((s.kind !== ShotKind.Missile && s.kind !== ShotKind.Homing) || s.owner === car.id || Math.abs(s.y - car.y) > 1.2) continue;
     const dx = car.x - s.x;
     const dz = car.z - s.z;
-    const d = Math.hypot(dx, dz);
+    const d = DMath.hypot(dx, dz);
     if (s.kind === ShotKind.Homing && s.target === car.id && d < AI_SPECIAL.homingThreat) return true;
     if (d > AI_SPECIAL.threatRange) continue;
-    const sp = Math.hypot(s.vx, s.vz) || 1;
+    const sp = DMath.hypot(s.vx, s.vz) || 1;
     const along = (dx * s.vx + dz * s.vz) / sp;
     if (along <= 0) continue;
     if (Math.abs(dx * s.vz - dz * s.vx) / sp < AI_SPECIAL.missLine) return true;
@@ -75,16 +76,16 @@ export function aiSpecial(car: CarState, cars: readonly CarState[], shots: reado
     return;
   }
   const p = personaOf(car.aiPersona);
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
-  const rx = Math.cos(car.heading);
-  const rz = Math.sin(car.heading);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
+  const rx = DMath.cos(car.heading);
+  const rz = DMath.sin(car.heading);
   let chance = 0;
   if (car.special === SpecialItem.Homing) {
     const target = car.spinTicks === 0 ? lockTarget(car, cars, track.pit) : -1;
     if (target >= 0) {
       const o = cars[target];
-      const d = Math.hypot(o.x - car.x, o.z - car.z);
+      const d = DMath.hypot(o.x - car.x, o.z - car.z);
       if (d >= AI_SPECIAL.homingMin && d <= AI_SPECIAL.homingMax) chance = 0.3 * p.aggro * (target === car.aiFoe ? FOE_EAGERNESS : 1);
     }
   } else if (car.special === SpecialItem.Oil) {
@@ -143,8 +144,8 @@ export function slickAvoid(car: CarState, track: Track, shots: readonly Shot[]):
   if (car.finished) return 0;
   let best = 0;
   let bestAhead = Infinity;
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
   for (const s of shots) {
     if (s.kind !== ShotKind.Oil || Math.abs(s.y - car.y) > 0.8 || (s.owner === car.id && s.age < SPECIAL.oilGrace)) continue;
     const dx = s.x - car.x;

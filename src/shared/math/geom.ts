@@ -1,5 +1,7 @@
 // Small 2D geometry helpers on the (x, z) ground plane.
 
+import { DMath } from './dmath.ts';
+
 export interface Closest {
   x: number;
   z: number;
@@ -35,7 +37,7 @@ export function segmentsIntersect(
   const d2 = cross(cx, cz, dx, dz, bx, bz);
   const d3 = cross(ax, az, bx, bz, cx, cz);
   const d4 = cross(ax, az, bx, bz, dx, dz);
-  const eps = 1e-7 * (Math.abs(bx - ax) + Math.abs(bz - az) + Math.abs(dx - cx) + Math.abs(dz - cz)) ** 2;
+  const eps = 1e-7 * DMath.sq(Math.abs(bx - ax) + Math.abs(bz - az) + Math.abs(dx - cx) + Math.abs(dz - cz));
   return ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) && ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps));
 }
 
@@ -51,6 +53,6 @@ export function curvature3(
   const bcx = cx - bx, bcz = cz - bz;
   const acx = cx - ax, acz = cz - az;
   const crossv = abx * bcz - abz * bcx; // > 0 means clockwise on screen (x east, z south)
-  const denom = Math.hypot(abx, abz) * Math.hypot(bcx, bcz) * Math.hypot(acx, acz);
+  const denom = DMath.hypot(abx, abz) * DMath.hypot(bcx, bcz) * DMath.hypot(acx, acz);
   return denom > 1e-9 ? (2 * crossv) / denom : 0;
 }

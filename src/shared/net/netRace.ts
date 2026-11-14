@@ -10,6 +10,7 @@ import type { World } from '../sim/world.ts';
 import type { Track } from '../track/types.ts';
 import { Predictor, LeadControl } from './predictor.ts';
 import { encodeInput, INPUT_SIZE, type RaceSpec } from './protocol.ts';
+import { DMath } from '../math/dmath.ts';
 
 export interface StepHooks {
   /** Fill the input of local player p for the coming tick. */
@@ -204,7 +205,7 @@ export class NetRace {
       d.dh += c.dh;
     }
     for (const i of this.localCars) {
-      const m = Math.hypot(p.corrections[i].dx, p.corrections[i].dz);
+      const m = DMath.hypot(p.corrections[i].dx, p.corrections[i].dz);
       this.corrAcc += m;
       this.corrMaxAcc = Math.max(this.corrMaxAcc, m);
       if (this.world.tick > this.world.race.startTick + 120) {

@@ -11,6 +11,7 @@ import { buildPit, laneOffset, PIT, pitLocal, pitWallOffset, sampleU, type Pit }
 import { placeBoostPads } from '../sim/catchUp.ts';
 import { placeCrates } from '../sim/crates.ts';
 import type { Bridge, GridSlot, SurfaceGrid, Track, TrackDef, Walls } from './types.ts';
+import { DMath } from '../math/dmath.ts';
 
 /** Target spacing between centreline samples, metres. */
 const SAMPLE_DS = 1;
@@ -106,15 +107,15 @@ export function buildTrack(def: TrackDef, opts: { lite?: boolean } = {}): Track 
     for (let k = 0; k < m; k++) {
       const u = (p.len * k) / m;
       if (!p.arc) {
-        xs.push(p.ax + Math.sin(p.h0) * u);
-        zs.push(p.az - Math.cos(p.h0) * u);
+        xs.push(p.ax + DMath.sin(p.h0) * u);
+        zs.push(p.az - DMath.cos(p.h0) * u);
         hs.push(p.h0);
         ks.push(0);
       } else {
         const h = p.h0 + (p.turn * u) / p.len;
         const sgn = p.turn > 0 ? -1 : 1;
-        xs.push(p.cx + sgn * Math.cos(h) * p.r);
-        zs.push(p.cz + sgn * Math.sin(h) * p.r);
+        xs.push(p.cx + sgn * DMath.cos(h) * p.r);
+        zs.push(p.cz + sgn * DMath.sin(h) * p.r);
         hs.push(h);
         ks.push(p.turn > 0 ? 1 / p.r : -1 / p.r);
       }
@@ -146,10 +147,10 @@ export function buildTrack(def: TrackDef, opts: { lite?: boolean } = {}): Track 
     }
   }
   for (let i = 0; i < n; i++) {
-    tx[i] = Math.sin(hs[i]);
-    tz[i] = -Math.cos(hs[i]);
-    nx[i] = Math.cos(hs[i]);
-    nz[i] = Math.sin(hs[i]);
+    tx[i] = DMath.sin(hs[i]);
+    tz[i] = -DMath.cos(hs[i]);
+    nx[i] = DMath.cos(hs[i]);
+    nz[i] = DMath.sin(hs[i]);
   }
 
   let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
@@ -205,7 +206,7 @@ export function buildTrack(def: TrackDef, opts: { lite?: boolean } = {}): Track 
     let best = 0;
     let bestD = Infinity;
     for (let i = 0; i < n; i++) {
-      const d = (px[i] - r.x) ** 2 + (pz[i] - r.z) ** 2;
+      const d = DMath.sq(px[i] - r.x) + DMath.sq(pz[i] - r.z);
       if (d < bestD) {
         bestD = d;
         best = i;
@@ -222,10 +223,10 @@ export function buildTrack(def: TrackDef, opts: { lite?: boolean } = {}): Track 
 }
 
 function dirX(h: number): number {
-  return Math.sin(h);
+  return DMath.sin(h);
 }
 function dirZ(h: number): number {
-  return -Math.cos(h);
+  return -DMath.cos(h);
 }
 
 function buildPrims(def: TrackDef, errors: string[]): Prim[] {
@@ -243,7 +244,7 @@ function buildPrims(def: TrackDef, errors: string[]): Prim[] {
     hin[i] = headingOf(cur.x - prev.x, cur.z - prev.z);
     hout[i] = headingOf(next.x - cur.x, next.z - cur.z);
     turn[i] = wrapAngle(hout[i] - hin[i]);
-    tl[i] = Math.abs(turn[i]) > 1e-6 ? cur.r * Math.tan(Math.abs(turn[i]) / 2) : 0;
+    tl[i] = Math.abs(turn[i]) > 1e-6 ? cur.r * DMath.tan(Math.abs(turn[i]) / 2) : 0;
     if (Math.abs(turn[i]) > 1e-6 && cur.r < minR) {
       errors.push(`corner ${i}: radius ${cur.r} m is below ${minR.toFixed(1)} m (inner barrier would fold)`);
     }
@@ -251,7 +252,7 @@ function buildPrims(def: TrackDef, errors: string[]): Prim[] {
   }
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    const segLen = Math.hypot(P[j].x - P[i].x, P[j].z - P[i].z);
+    const segLen = DMath.hypot(P[j].x - P[i].x, P[j].z - P[i].z);
     if (tl[i] + tl[j] > segLen + 1e-6) {
       errors.push(`straight ${i}->${j}: corners need ${(tl[i] + tl[j]).toFixed(1)} m but only ${segLen.toFixed(1)} m available`);
     }
@@ -266,7 +267,7 @@ function buildPrims(def: TrackDef, errors: string[]): Prim[] {
   const sz = bz(last) + (az(0) - bz(last)) * def.startAt;
   const prims: Prim[] = [];
   const line = (x0: number, z0: number, x1: number, z1: number) => {
-    const len = Math.hypot(x1 - x0, z1 - z0);
+    const len = DMath.hypot(x1 - x0, z1 - z0);
     prims.push({ arc: false, ax: x0, az: z0, h0: headingOf(x1 - x0, z1 - z0), len, r: 0, turn: 0, cx: 0, cz: 0 });
   };
   line(sx, sz, ax(0), az(0));
@@ -279,8 +280,8 @@ function buildPrims(def: TrackDef, errors: string[]): Prim[] {
       const z0 = az(i);
       prims.push({
         arc: true, ax: x0, az: z0, h0, len: r * Math.abs(turn[i]), r, turn: turn[i],
-        cx: x0 + sgn * Math.cos(h0) * r,
-        cz: z0 + sgn * Math.sin(h0) * r,
+        cx: x0 + sgn * DMath.cos(h0) * r,
+        cz: z0 + sgn * DMath.sin(h0) * r,
       });
     }
     if (i < last) line(bx(i), bz(i), ax(i + 1), az(i + 1));
@@ -322,7 +323,7 @@ function buildWalls(track: Track): Walls {
     let start = 0;
     const emit = (i0: number, i1: number) => {
       const x0 = ox[i0], z0 = oz[i0], x1 = ox[i1], z1 = oz[i1];
-      const len = Math.hypot(x1 - x0, z1 - z0);
+      const len = DMath.hypot(x1 - x0, z1 - z0);
       if (len < 1e-6) return;
       const dx = (x1 - x0) / len;
       const dz = (z1 - z0) / len;
@@ -347,9 +348,9 @@ function buildWalls(track: Track): Walls {
     for (let i = 1; i <= n; i++) {
       const cur = i % n;
       const next = (i + 1) % n;
-      const h1 = Math.atan2(oz[cur] - oz[start], ox[cur] - ox[start]);
-      const h2 = Math.atan2(oz[next] - oz[cur], ox[next] - ox[cur]);
-      const runLen = Math.hypot(ox[cur] - ox[start], oz[cur] - oz[start]);
+      const h1 = DMath.atan2(oz[cur] - oz[start], ox[cur] - ox[start]);
+      const h2 = DMath.atan2(oz[next] - oz[cur], ox[next] - ox[cur]);
+      const runLen = DMath.hypot(ox[cur] - ox[start], oz[cur] - oz[start]);
       if (i === n || Math.abs(wrapAngle(h2 - h1)) > 0.004 || runLen > 40 || wallClass(track, cur) !== wallClass(track, start)) {
         emit(start, cur);
         start = cur;
@@ -451,8 +452,8 @@ export function bridgeProfile(b: Bridge, s: number, L: number, out: { h: number;
     if (a <= b.span) out.h = H;
     else if (a < b.span + b.ramp) {
       const v = (a - b.span) / b.ramp;
-      out.h = (H * (1 + Math.cos(Math.PI * v))) / 2;
-      out.slope = ((-H * Math.PI) / (2 * b.ramp)) * Math.sin(Math.PI * v) * Math.sign(u);
+      out.h = (H * (1 + DMath.cos(Math.PI * v))) / 2;
+      out.slope = ((-H * Math.PI) / (2 * b.ramp)) * DMath.sin(Math.PI * v) * Math.sign(u);
     }
     return;
   }
@@ -461,8 +462,8 @@ export function bridgeProfile(b: Bridge, s: number, L: number, out: { h: number;
     const a = -b.span - u;
     if (a < b.ramp) {
       const v = 1 - a / b.ramp;
-      out.h = H * (1 - Math.cos((v * Math.PI) / 2));
-      out.slope = ((H * Math.PI) / (2 * b.ramp)) * Math.sin((v * Math.PI) / 2);
+      out.h = H * (1 - DMath.cos((v * Math.PI) / 2));
+      out.slope = ((H * Math.PI) / (2 * b.ramp)) * DMath.sin((v * Math.PI) / 2);
     }
   } else if (u <= b.span) {
     out.gap = 1;
@@ -471,8 +472,8 @@ export function bridgeProfile(b: Bridge, s: number, L: number, out: { h: number;
     if (a < b.ramp) {
       const L0 = H * GAP_LANDING;
       const v = a / b.ramp;
-      out.h = (L0 * (1 + Math.cos(Math.PI * v))) / 2;
-      out.slope = ((-L0 * Math.PI) / (2 * b.ramp)) * Math.sin(Math.PI * v);
+      out.h = (L0 * (1 + DMath.cos(Math.PI * v))) / 2;
+      out.slope = ((-L0 * Math.PI) / (2 * b.ramp)) * DMath.sin(Math.PI * v);
     }
   }
 }
@@ -500,7 +501,7 @@ function buildBridges(track: Track): void {
   const { n, px, pz, s, def, errors } = track;
   for (const bd of def.bridges ?? []) {
     // Runs of samples close to the crossing point: one per pass.
-    const near = (i: number) => (px[i] - bd.x) ** 2 + (pz[i] - bd.z) ** 2 < 36;
+    const near = (i: number) => DMath.sq(px[i] - bd.x) + DMath.sq(pz[i] - bd.z) < 36;
     let first = 0;
     while (first < n && near(first)) first++;
     const passes: number[] = [];
@@ -509,7 +510,7 @@ function buildBridges(track: Track): void {
     for (let k = 1; k <= n; k++) {
       const i = (first + k) % n;
       if (near(i)) {
-        const d = (px[i] - bd.x) ** 2 + (pz[i] - bd.z) ** 2;
+        const d = DMath.sq(px[i] - bd.x) + DMath.sq(pz[i] - bd.z);
         if (d < bestD) {
           bestD = d;
           best = i;

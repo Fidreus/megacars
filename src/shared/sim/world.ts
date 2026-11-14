@@ -10,6 +10,7 @@ import { giveStartAmmo, type Shot } from './weapons.ts';
 import { clearDriftBoost } from './driftBoost.ts';
 import type { WeatherPlan } from './weather.ts';
 import type { ElimPlan } from './elimination.ts';
+import { DMath } from '../math/dmath.ts';
 
 export const RacePhase = { Countdown: 0, Racing: 1, Finished: 2 } as const;
 
@@ -120,7 +121,7 @@ export function respawnCar(car: CarState, track: Track, s: number): void {
   car.airborne = 0;
   car.turboTicks = 0;
   car.wreckTicks = 0;
-  car.heading = Math.atan2(track.tx[i], -track.tz[i]);
+  car.heading = DMath.atan2(track.tx[i], -track.tz[i]);
   car.angVel = 0;
   car.steer = 0;
   car.sliding = 0;

@@ -6,6 +6,7 @@
 import { DT } from '../config/constants.ts';
 import type { SurfaceMix } from '../config/surfaces.ts';
 import type { CarState } from './car.ts';
+import { DMath } from '../math/dmath.ts';
 
 export const SLIPSTREAM = {
   /** Wake from this far behind the other car's centre to this far (m). */
@@ -26,7 +27,7 @@ export const SLIPSTREAM = {
   accel: 0.08,
 };
 
-const COS_MAX = Math.cos((SLIPSTREAM.maxAngleDeg * Math.PI) / 180);
+const COS_MAX = DMath.cos((SLIPSTREAM.maxAngleDeg * Math.PI) / 180);
 
 function usable(c: CarState): boolean {
   return c.wreckTicks === 0 && c.ghostTicks === 0 && c.airborne === 0;
@@ -35,11 +36,11 @@ function usable(c: CarState): boolean {
 /** True when `car` is in the wake of `o`. */
 export function inWake(car: CarState, o: CarState): boolean {
   if (!usable(o) || Math.abs(o.y - car.y) > 1.5) return false;
-  const so = Math.hypot(o.vx, o.vz);
+  const so = DMath.hypot(o.vx, o.vz);
   if (so < SLIPSTREAM.minSpeed) return false;
   const ux = o.vx / so;
   const uz = o.vz / so;
-  const sc = Math.hypot(car.vx, car.vz);
+  const sc = DMath.hypot(car.vx, car.vz);
   if ((car.vx * ux + car.vz * uz) / sc < COS_MAX) return false;
   const dx = car.x - o.x;
   const dz = car.z - o.z;
@@ -54,7 +55,7 @@ export function inWake(car: CarState, o: CarState): boolean {
 export function stepSlipstream(cars: readonly CarState[]): void {
   for (const car of cars) {
     let wake = false;
-    if (usable(car) && Math.hypot(car.vx, car.vz) >= SLIPSTREAM.minSpeed) {
+    if (usable(car) && DMath.hypot(car.vx, car.vz) >= SLIPSTREAM.minSpeed) {
       for (const o of cars) {
         if (o !== car && inWake(car, o)) {
           wake = true;

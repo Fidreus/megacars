@@ -1,6 +1,8 @@
 // Angle and scalar helpers. Headings are measured clockwise from north,
 // with x pointing east and z pointing south (north = -z = up on screen).
 
+import { DMath } from './dmath.ts';
+
 export const TAU = Math.PI * 2;
 export const DEG = Math.PI / 180;
 
@@ -14,7 +16,7 @@ export function wrapAngle(a: number): number {
 
 /** Heading (clockwise from north) of a planar vector. */
 export function headingOf(x: number, z: number): number {
-  return Math.atan2(x, -z);
+  return DMath.atan2(x, -z);
 }
 
 export function clamp(v: number, lo: number, hi: number): number {
@@ -41,5 +43,5 @@ export function sign(v: number): number {
 
 /** Exponential smoothing factor for a rate `k` (1/s) over `dt` seconds. */
 export function expFactor(k: number, dt: number): number {
-  return 1 - Math.exp(-k * dt);
+  return 1 - DMath.exp(-k * dt);
 }

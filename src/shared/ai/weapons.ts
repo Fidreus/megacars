@@ -7,6 +7,7 @@ import type { CarState } from '../sim/car.ts';
 import { Btn, type CarInput } from '../sim/input.ts';
 import { MineHabit, TurboHabit, effectiveSkill, personaOf } from './persona.ts';
 import { notice, Sense } from './reaction.ts';
+import { DMath } from '../math/dmath.ts';
 
 /** How much harder a driver goes for its rival (its foe) than for anybody else. */
 export const FOE_EAGERNESS = 1.6;
@@ -25,10 +26,10 @@ export function lateInRace(lap: number, laps: number): boolean {
 export function aiWeapons(car: CarState, cars: readonly CarState[], track: Track, tick: number, vTop: number, out: CarInput, laps = 0, danger = 0): void {
   if (car.finished || car.wreckTicks > 0 || car.ghostTicks > 0) return;
   const p = personaOf(car.aiPersona);
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
-  const rx = Math.cos(car.heading);
-  const rz = Math.sin(car.heading);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
+  const rx = DMath.cos(car.heading);
+  const rz = DMath.sin(car.heading);
   const fwd = car.vx * fx + car.vz * fz;
   // A mine layer waits until somebody is right on its tail.
   const close = p.mines === MineHabit.Close;

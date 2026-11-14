@@ -15,6 +15,7 @@ import type { CarState } from './car.ts';
 import { Ev, pushEvent, type EventBuffer } from './events.ts';
 import { Btn, type CarInput } from './input.ts';
 import { allocShot, ShotKind, WEAPON, type Shot } from './weapons.ts';
+import { DMath } from '../math/dmath.ts';
 
 /** What the special slot holds (also the shop's and the HUD's order). */
 export const SpecialItem = { None: 0, Homing: 1, Oil: 2, Shield: 3 } as const;
@@ -59,8 +60,8 @@ function targetable(c: CarState): boolean {
 
 /** The car a homing missile fired now would lock onto, or -1. */
 export function lockTarget(car: CarState, cars: readonly CarState[], pit: Pit | null): number {
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
   let best = -1;
   let bestD = SPECIAL.lockRange;
   for (const o of cars) {
@@ -69,10 +70,10 @@ export function lockTarget(car: CarState, cars: readonly CarState[], pit: Pit | 
     const dz = o.z - car.z;
     const ahead = dx * fx + dz * fz;
     if (ahead < SPECIAL.lockMin) continue;
-    const d = Math.hypot(dx, dz);
+    const d = DMath.hypot(dx, dz);
     if (d >= bestD) continue;
     const side = Math.abs(dx * fz - dz * fx);
-    if (Math.atan2(side, ahead) > SPECIAL.lockCone) continue;
+    if (DMath.atan2(side, ahead) > SPECIAL.lockCone) continue;
     if (inPitArea(pit, o.x, o.z)) continue;
     best = o.id;
     bestD = d;
@@ -90,8 +91,8 @@ export function useSpecial(
   if (car.shieldTicks > 0) car.shieldTicks--;
   if (!allowed || car.special === SpecialItem.None || car.finished || car.wreckTicks > 0 || car.ghostTicks > 0) return;
   if (!(inp.buttons & ~car.prevButtons & Btn.Special)) return;
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
   const item = car.special;
   car.special = SpecialItem.None;
   if (item === SpecialItem.Shield) {
@@ -138,9 +139,9 @@ export function steerHoming(s: Shot, cars: readonly CarState[], dt: number): voi
   }
   const turn = SPECIAL.homingTurn * dt;
   s.heading = wrapAngle(s.heading + Math.max(-turn, Math.min(turn, err)));
-  const sp = Math.hypot(s.vx, s.vz);
-  s.vx = Math.sin(s.heading) * sp;
-  s.vz = -Math.cos(s.heading) * sp;
+  const sp = DMath.hypot(s.vx, s.vz);
+  s.vx = DMath.sin(s.heading) * sp;
+  s.vz = -DMath.cos(s.heading) * sp;
 }
 
 /**
@@ -167,8 +168,8 @@ export function knockFactor(car: CarState): number {
  */
 export function slickUnder(car: CarState, t: CarTuning, shots: readonly Shot[], ev: EventBuffer, wasOil: boolean): void {
   if (car.airborne) return;
-  const fx = Math.sin(car.heading);
-  const fz = -Math.cos(car.heading);
+  const fx = DMath.sin(car.heading);
+  const fz = -DMath.cos(car.heading);
   const reach = SPECIAL.oilRadius + t.circleOffset;
   const r2 = SPECIAL.oilRadius * SPECIAL.oilRadius;
   for (const s of shots) {
@@ -179,11 +180,11 @@ export function slickUnder(car: CarState, t: CarTuning, shots: readonly Shot[], 
     if (Math.abs(dx) > reach || Math.abs(dz) > reach) continue;
     const off = t.circleOffset;
     let hit = false;
-    if ((dx + fx * off) ** 2 + (dz + fz * off) ** 2 < r2) {
+    if (DMath.sq(dx + fx * off) + DMath.sq(dz + fz * off) < r2) {
       car.surfFront = Surface.Oil;
       hit = true;
     }
-    if ((dx - fx * off) ** 2 + (dz - fz * off) ** 2 < r2) {
+    if (DMath.sq(dx - fx * off) + DMath.sq(dz - fz * off) < r2) {
       car.surfRear = Surface.Oil;
       hit = true;
     }

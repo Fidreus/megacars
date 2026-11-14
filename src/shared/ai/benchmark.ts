@@ -9,6 +9,7 @@ import type { TrackDef } from '../track/types.ts';
 import { Ev } from '../sim/events.ts';
 import { stepWorld } from '../sim/step.ts';
 import { createWorld } from '../sim/world.ts';
+import { DMath } from '../math/dmath.ts';
 
 export interface SegmentResult {
   time: number;
@@ -28,8 +29,8 @@ export function runSegment(def: TrackDef, mode: number, s0: number, s1: number, 
   car.x = track.line.x[i];
   car.z = track.line.z[i];
   car.heading = h;
-  car.vx = Math.sin(h) * v0;
-  car.vz = -Math.cos(h) * v0;
+  car.vx = DMath.sin(h) * v0;
+  car.vz = -DMath.cos(h) * v0;
   car.trackIdx = i;
   car.trackS = track.s[i];
   car.aiDriven = 1;
@@ -48,7 +49,7 @@ export function runSegment(def: TrackDef, mode: number, s0: number, s1: number, 
     if (ds < -track.length / 2) ds += track.length;
     travelled += ds;
     lastS = car.trackS;
-    const v = Math.hypot(car.vx, car.vz);
+    const v = DMath.hypot(car.vx, car.vz);
     minSpeed = Math.min(minSpeed, v);
     maxSlip = Math.max(maxSlip, Math.abs(car.slip));
     for (let e = 0; e < world.events.count; e++) if (world.events.list[e].kind === Ev.WallHit) wallHits++;
@@ -56,7 +57,7 @@ export function runSegment(def: TrackDef, mode: number, s0: number, s1: number, 
   return {
     time: ticks * DT,
     minSpeed,
-    exitSpeed: Math.hypot(car.vx, car.vz),
+    exitSpeed: DMath.hypot(car.vx, car.vz),
     maxSlipDeg: (maxSlip * 180) / Math.PI,
     wallHits,
   };
