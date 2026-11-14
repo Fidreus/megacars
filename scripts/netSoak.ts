@@ -73,6 +73,8 @@ class Bot {
   n = 0;
   leads: number[] = [];
   late = 0;
+  private aware = 0;
+  private react = 0;
   private surf = makeSurfaceMix();
   private last = performance.now();
   readonly name: string;
@@ -139,9 +141,14 @@ class Bot {
     race.update(dt, {
       sample: (p, out) => {
         const car = { ...race.world.cars[race.localCars[p]] };
+        // The driver's reaction state lives with the bot (a person's car has none of its own).
+        car.aiAware = this.aware;
+        car.aiReact = this.react;
         sampleCarSurface(car, race.track, DEFAULT_TUNING);
         mixSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, this.surf);
         aiDrive(car, race.track, DEFAULT_TUNING, this.surf, race.world.cars, race.world.tick, out);
+        this.aware = car.aiAware;
+        this.react = car.aiReact;
         out.buttons = 0;
       },
       corrected: () => {
