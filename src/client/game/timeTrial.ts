@@ -12,7 +12,7 @@ import type { League } from '../../shared/game/leagues.ts';
 import type { RecordEntry } from '../../shared/game/records.ts';
 import type { World } from '../../shared/sim/world.ts';
 import { CarView } from '../render/carMesh.ts';
-import { drawText } from '../ui/font.ts';
+import { drawText, textWidth } from '../ui/font.ts';
 import { formatTime } from '../ui/screens/hud.ts';
 import { loadMyGhost, loadWorldGhost } from './ghostStore.ts';
 import { fetchBoards } from './records.ts';
@@ -255,7 +255,8 @@ export class TimeTrial {
     let y = t ? 41 : 8;
     for (const msg of [this.mine ? '' : this.mineStatus, this.world ? '' : this.worldStatus]) {
       if (!msg) continue;
-      drawText(ctx, msg, cx, y, { color: '#8090a8', align: 'center' });
+      // Narrow screens: just the first part, clear of the lap box and the minimap.
+      drawText(ctx, textWidth(msg) <= W - 300 ? msg : msg.split(' - ')[0], cx, y, { color: '#8090a8', align: 'center' });
       y += 10;
     }
     if (this.opts.choice === 'off' && !t) drawText(ctx, 'TIME TRIAL - NO GHOST', cx, 8, { color: '#8090a8', align: 'center' });

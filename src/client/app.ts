@@ -2616,7 +2616,10 @@ export class App {
     if (this.replay && (this.input.overrideTicks > 0 || this.player.aiDriven)) this.replay.spoiled = true;
     if (this.input.overrideTicks > 0 || (this.player.aiDriven && !this.player.finished)) this.achSpoiled = true;
     s.playerCars.forEach((id, p) => this.input.sample(players[p], s.inputs[id], p === 0));
+    const counting = !!this.replay && !this.replay.spoiled;
     this.replay?.add(s.inputs[s.playerCars[0]]);
+    // The recording stops after 20 minutes: say so rather than stop counting laps silently.
+    if (counting && this.replay!.spoiled) this.flashMessage('20 MIN UP - RESTART FOR RECORDS', 6);
     this.view.beforeStep();
     s.step();
     this.lapTape?.sample(this.world.cars[s.playerCars[0]], this.world.tick);
@@ -3234,7 +3237,7 @@ export class App {
     }
     if (this.flashTime > 0) {
       this.flashTime -= dt;
-      drawText(ctx, this.flash, W / 2, Math.round(H * 0.18), { scale: 2, color: '#ffd84a', align: 'center' });
+      drawText(ctx, this.flash, W / 2, Math.round(H * 0.18), { scale: textWidth(this.flash, 2) <= W * 0.6 ? 2 : 1, color: '#ffd84a', align: 'center' });
     }
     if (this.params.debug) {
       const c = this.online.conn;
@@ -3321,8 +3324,10 @@ export class App {
       if (this.firstRace && !this.school && w.tick < w.race.startTick + 60 * 12) {
         const gas = { thumb: 'IT GASSES WHILE YOUR THUMB IS DOWN', always: 'THE CAR ACCELERATES BY ITSELF', button: 'HOLD GAS' }[this.touch.gasMode];
         const how = { point: 'PUSH YOUR LEFT THUMB WHERE YOU WANT TO GO', slide: 'DRAG YOUR LEFT THUMB TO STEER', buttons: 'STEER WITH THE ARROWS' }[this.touch.steerMode];
-        drawText(ctx, `${how} - ${gas}`, W / 2, Math.round(H * 0.62), { color: '#ffd84a', align: 'center' });
-        drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, Math.round(H * 0.62) + 11, { color: '#ffd84a', align: 'center' });
+        // One line if it fits, else the steering and the gas on lines of their own.
+        const lines = textWidth(`${how} - ${gas}`) <= W - 8 ? [`${how} - ${gas}`] : [how, gas];
+        lines.push('HOLD DRIFT WHILE TURNING TO SLIDE');
+        lines.forEach((l, i) => drawText(ctx, l, W / 2, Math.round(H * 0.62) + i * 11, { color: '#ffd84a', align: 'center' }));
       }
     } else if (this.firstRace && !this.school && w.tick < w.race.startTick + 60 * 15) {
       // Above the weapons panel and the special slot when weapons are on; in
