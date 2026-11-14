@@ -16,6 +16,7 @@ import { Btn, NEUTRAL_INPUT, neutralInput, type CarInput } from './input.ts';
 import { resetProgress, updateProgress } from './race.ts';
 import { RacePhase, respawnCar, standings, type World } from './world.ts';
 import { fellOff, groundUnder, makeGround, safeRespawnS, stepRamps } from './ramps.ts';
+import { plannedWetness, wetnessAt, wetSurfaces } from './weather.ts';
 import { inPitArea, inPitBox, pitRepair } from '../track/pit.ts';
 import { leaderDistance, stepBoostPads } from './catchUp.ts';
 import { breakDriftCharge, isCornering, stepDriftCharge } from './driftBoost.ts';
@@ -61,6 +62,8 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
   w.events.count = 0;
   const race = w.race;
   const cars = w.cars;
+  const wet = wetnessAt(w.weather, w.tick);
+  const wetPlan = plannedWetness(w.weather, w.tick);
 
   if (race.phase === RacePhase.Countdown) {
     if (w.tick + 1 >= race.startTick) {
@@ -100,6 +103,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     }
     sampleCarSurface(car, track, t);
     mixSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, surfMix);
+    if (wetPlan > 0) wetSurfaces(car.surfFront as SurfaceId, car.surfRear as SurfaceId, wet, wetPlan, surfMix);
     applyDamage(surfMix, car.damage, t);
     applySlipstream(surfMix, car.draft);
     if (car.aiDriven) {

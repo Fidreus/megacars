@@ -151,6 +151,8 @@ export function specProblem(spec: RaceSpec): string | null {
   if (spec.entrants.some((e) => typeof e.skill !== 'number' || !(e.skill >= 0 && e.skill <= 1.5))) return 'bad field';
   if (spec.league !== undefined && !LEAGUES.includes(spec.league)) return 'bad league';
   if (spec.damageSlows !== undefined && spec.damageSlows !== true) return 'damage must count';
+  // Lap records are set in the dry.
+  if (spec.weather !== undefined && spec.weather !== 'dry') return 'dry races only';
   return null;
 }
 

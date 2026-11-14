@@ -190,7 +190,7 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
   let reversing = 0;
   if (brake > 0) {
     if (vF > 0.5) {
-      aLong -= brake * t.brakeDecel;
+      aLong -= brake * t.brakeDecel * surf.brake;
       braking = brake;
     } else {
       const r = Math.max(0, -vF) / t.reverseMax;
@@ -224,7 +224,7 @@ export function stepCarDynamics(car: CarState, inp: CarInput, t: CarTuning, surf
   // 3. Yaw: steering sets a target yaw rate; rotation lags behind it, more so
   //    in a slide (that inertia is what counter-steering fights).
   const dirSign = fwd >= 0 ? 1 : -1;
-  const omegaMax = car.sliding ? slideOmegaMax(t, s) : gripOmegaMax(t, s, budget, slippery);
+  const omegaMax = car.sliding ? slideOmegaMax(t, s) : gripOmegaMax(t, s, budget * surf.steerAsk, slippery);
   let omegaT = car.steer * omegaMax * dirSign;
   if (car.sliding) {
     const b = car.slip;

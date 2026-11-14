@@ -16,6 +16,7 @@ import { loadWorldGhost, saveMyGhost } from '../game/ghostStore.ts';
 import { fetchBoards } from '../game/records.ts';
 import { boardKey, type League } from '../../shared/game/leagues.ts';
 import { moodById } from '../render/mood.ts';
+import { rainAt, wetnessAt } from '../../shared/sim/weather.ts';
 import type { PaletteModeId } from '../render/palette.ts';
 
 export function installDebugApi(app: App): void {
@@ -34,6 +35,8 @@ export function installDebugApi(app: App): void {
         fps: Math.round(app.fps),
         lowRes: [r.lowW, r.lowH],
         scale: r.scale,
+        /** Race weather: plan (ticks) and the wetness and rain now. */
+        weather: app.world.weather ? { ...app.world.weather, wet: +wetnessAt(app.world.weather, app.world.tick).toFixed(3), rain: +rainAt(app.world.weather, app.world.tick).toFixed(3) } : null,
         cars: app.world.cars.map((c) => ({
           id: c.id,
           x: +c.x.toFixed(2),

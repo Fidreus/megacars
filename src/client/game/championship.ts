@@ -14,6 +14,7 @@ import { TRACK_LIST, raceLaps } from '../../shared/track/defs/index.ts';
 import type { StandingsRow } from '../ui/screens/shop.ts';
 import type { RaceSettings } from './settings.ts';
 import { driverNotes, recordDuel, type Duel } from './rival.ts';
+import { seasonWeather, weatherField, type Weather } from '../../shared/game/weather.ts';
 
 const KEY = 'megacars.cup.v1';
 
@@ -118,7 +119,13 @@ export function nextRaceSpec(c: Championship): RaceSpec {
     weapons: c.weapons,
     entrants,
     league: leagueOf(c.league),
+    ...weatherField(cupWeather(c)),
   };
+}
+
+/** The next race's weather, decided by the season's seed (mostly dry). */
+export function cupWeather(c: Championship): Weather {
+  return seasonWeather(c.seed, c.race);
 }
 
 /** Points and prize money once a race is over. */

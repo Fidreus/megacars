@@ -16,6 +16,7 @@ import { activePaint, paintGrid, type PaintLook } from './paints.ts';
 import type { GameSession } from './session.ts';
 import type { RaceSettings } from './settings.ts';
 import { raceLaps } from '../../shared/track/defs/index.ts';
+import { pickWeather, weatherField } from '../../shared/game/weather.ts';
 
 export class RaceSession implements GameSession {
   readonly settings: RaceSettings;
@@ -97,6 +98,8 @@ function specFromSettings(settings: RaceSettings, seed: number): RaceSpec {
     weapons: settings.weapons,
     entrants,
     league: settings.league,
+    // Practice and time trial are always dry.
+    ...weatherField(settings.practice ? 'dry' : pickWeather(settings.weather, seed)),
   };
 }
 

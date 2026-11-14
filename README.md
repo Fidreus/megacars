@@ -99,6 +99,46 @@ kurva. Datorförarna styr gärna över en meter eller två för en låda nära
 sin linje, men aldrig tvärs över vägen. `npm run track` och banskaparens
 statusrad visar raderna. Nya sorters innehåll läggs till som en rad i
 `CRATE_ITEMS` i `src/shared/sim/crates.ts`.
+## Väder
+
+Ett lopp har ett väder: **DRY**, **RAIN** eller **CHANGING**. I regn blir
+vägen våt: asfalt och kantstenar får ungefär samma grepp som de våta
+fläckarna på Manhattan Sprint (80 % grepp, 85 % i sladd), bromssträckan blir
+ungefär en fjärdedel längre, och styr du med fullt utslag ber ratten om mer
+än däcken orkar, så bakvagnen kommer tidigare. Grus och gräs blir bara lite
+halare; snö, is, olja och vatten är som förut. Accelerationen är som i torrt
+(en bil som sätts tillbaka före en trasig bro ska klara hoppet). Ett regnlopp
+är 2–8 % långsammare för datorförarna.
+
+**CHANGING**: vädret ändras under loppet, utspritt över den väntade
+racetiden (banans längd, varv och klass), så det händer även i ett lopp på
+tre varv. Antingen torr start och regn som kommer och stannar, en skur som
+kommer och går, eller våt start som torkar upp. Vägen blir våt på 14–30 s
+och torkar på 24–55 s; regnet syns några sekunder innan vägen hunnit bli
+hal. Hur vått det är räknas fram ur tick och racets seed varje tick (inget
+skickas och inget sparas i världen), så servern, klienterna och
+rekordkontrollen får exakt samma väg. Datorförarnas fartplanering räknar
+med det våta greppet, och med vätan tre sekunder framåt, så en skur inte
+kör hela fältet i väggen.
+
+Det syns och hörs: regn (eller snö på Frost Ring) faller över skärmen,
+mindre ju lägre GRAPHICS, mörkare och gråare ljus i alla tre tider på
+dygnet, vatten som sprutar bakom bilarna, vattenpölar och mörk asfalt
+(slask på vinterbanan), regnljud, och ibland blixt och åska. Under
+minikartan står vädret (RAIN SOON blinkar innan det kommer) och när regnet
+kommer eller slutar står det en stund mitt på skärmen.
+
+Var det väljs: **WEATHER** i SINGLE RACE (DRY / RAIN / CHANGING / RANDOM,
+sparas med de andra inställningarna); i onlinelobbyn under **RACE
+SETTINGS** (värden väljer; publika rum lottar vädret varje lopp). I
+mästerskap och karriär bestämmer säsongens seed vädret per lopp – oftast
+torrt, ungefär vart fjärde lopp vått eller växlande – och det står på
+skärmen före loppet. Tidskörning och fri träning är alltid torra.
+**Varvrekord gäller bara i torrt**: ett vått lopp kommer inte in på
+topplistorna och ersätter inte ditt personbästa eller ditt spöke.
+
+`npm run sim -- --weather rain|changing` och
+`npm run soak -- --weather rain|changing` kör med väder.
 
 ## Datorförarna
 

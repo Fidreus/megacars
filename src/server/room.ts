@@ -5,6 +5,7 @@
 import type { CarTuning } from '../shared/config/tuning.ts';
 import { AI_NAMES, AI_SKILL, CAR_COLORS } from '../shared/game/roster.ts';
 import { leagueOf } from '../shared/game/leagues.ts';
+import { pickWeather, weatherChoiceOf, weatherField } from '../shared/game/weather.ts';
 import { createRaceWorld } from '../shared/game/raceSetup.ts';
 import { makeRng } from '../shared/math/rng.ts';
 import {
@@ -258,6 +259,7 @@ export class Room {
     if (Number.isFinite(c.difficulty)) cfg.difficulty = Math.max(0, Math.min(2, Math.round(c.difficulty!)));
     if (typeof c.public === 'boolean') cfg.public = c.public;
     if (c.league !== undefined) cfg.league = leagueOf(c.league);
+    if (c.weather !== undefined) cfg.weather = weatherChoiceOf(c.weather);
     this.broadcastRoom();
     return null;
   }
@@ -451,6 +453,8 @@ export class Room {
       entrants,
       league: this.config.league,
       damageSlows: this.config.damageSlows,
+      // Public rooms: a different sky every race.
+      ...weatherField(pickWeather(this.config.public ? 'random' : this.config.weather, seed)),
     };
     const { world, track, tunings } = createRaceWorld(spec);
     const drivers: Driver[] = [];

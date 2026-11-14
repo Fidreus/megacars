@@ -13,6 +13,8 @@ import { Particles } from '../render/particles.ts';
 import { ShotView } from '../render/shotView.ts';
 import { CrateView } from '../render/crateView.ts';
 import { SkidMarks } from '../render/skidmarks.ts';
+import { WeatherView } from '../render/weather.ts';
+import { themeOf } from '../render/theme.ts';
 import { drawText } from '../ui/font.ts';
 import type { GameSession } from './session.ts';
 
@@ -33,6 +35,8 @@ export class RaceView {
   private readonly shots = new ShotView();
   private readonly crates: CrateView;
   readonly effects: Effects;
+  /** Rain or snow, spray and the wet road. */
+  readonly weather: WeatherView;
   private readonly prev: Pose[] = [];
   /** Visual offset left over from network corrections; decays to zero. */
   private readonly offset: Pose[] = [];
@@ -49,6 +53,7 @@ export class RaceView {
     this.session = session;
     this.effects = new Effects(this.particles, session.track);
     this.crates = new CrateView(session.track);
+    this.weather = new WeatherView(session.world, !!themeOf(session.track.def.theme).snow);
     for (const car of session.world.cars) {
       const model = session.models[car.id] ?? -1;
       const view = new CarView(session.colors[car.id], car.id + 1, model >= 0 ? MODEL_STYLE[model] : undefined, session.league, session.looks?.[car.id]);
@@ -58,7 +63,7 @@ export class RaceView {
       this.prev.push({ x: car.x, z: car.z, y: car.y, heading: car.heading });
       this.offset.push({ x: 0, z: 0, y: 0, heading: 0 });
     }
-    this.group.add(this.skid.mesh, this.particles.points, this.shots.group, this.crates.group);
+    this.group.add(this.skid.mesh, this.particles.points, this.shots.group, this.crates.group, this.weather.object);
     session.playerCars.forEach((car, p) => {
       const text = session.playerCars.length > 1 ? `P${p + 1}` : 'YOU';
       // P1 yellow, P2 cyan (like their HUD labels).
@@ -85,6 +90,7 @@ export class RaceView {
 
   dispose(): void {
     this.scene.remove(this.group);
+    this.weather.dispose();
     for (const m of this.lamps) m.color.set('#3a0d0d');
   }
 
@@ -113,6 +119,7 @@ export class RaceView {
   afterStep(): void {
     for (const car of this.session.world.cars) this.emitSkids(car);
     this.effects.tick(this.session.world);
+    this.weather.tick(this.particles);
   }
 
   /** Teleports (respawn, reset) should not interpolate or leave a skid trail. */
@@ -186,6 +193,7 @@ export class RaceView {
     this.particles.time.value = (world.tick + alpha) * DT;
     this.particles.pxScale.value = pxScale;
     this.particles.dither.value = particleDither ? 1 : 0;
+    this.weather.update(alpha, pxScale, this.particles.density, this.particles.light.value);
     this.particles.flush();
     this.updateStartLights();
     this.updateMarkers();

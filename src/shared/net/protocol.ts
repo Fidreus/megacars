@@ -5,6 +5,7 @@ import { SIM_VERSION } from '../config/constants.ts';
 import type { CarInput } from '../sim/input.ts';
 import type { League } from '../game/leagues.ts';
 import type { Loadout, Profile, ShopItem } from '../game/shop.ts';
+import type { Weather, WeatherChoice } from '../game/weather.ts';
 
 /** Bump when messages change incompatibly. Clients and server must match. */
 // The +3: tournaments and player tracks in rooms.
@@ -79,6 +80,8 @@ export interface RoomConfig {
   league: League;
   /** Damage wears the car (otherwise a wreck's tow is the only cost). */
   damageSlows: boolean;
+  /** Weather of the races (absent = dry; public rooms pick one per race). */
+  weather?: WeatherChoice;
 }
 
 /** A public room in the room list. */
@@ -157,6 +160,8 @@ export interface RaceSpec {
   league?: League;
   /** false = damage doesn't wear the car, only wrecks cost time (absent = it does). */
   damageSlows?: boolean;
+  /** Rain, or rain coming and going (absent = dry). */
+  weather?: Weather;
 }
 
 export type ClientMsg =
