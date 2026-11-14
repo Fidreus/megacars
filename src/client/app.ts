@@ -31,6 +31,8 @@ import { DIFFICULTIES, loadSettings, saveSettings, type RaceSettings } from './g
 import { keysLabel, loadControls, type KeyBinding } from './input/bindings.ts';
 import { ControlsScreen } from './ui/screens/controls.ts';
 import { DriveAudio } from './audio/driveSfx.ts';
+import { crateSounds } from './audio/crateSfx.ts';
+import { noteCratePickups } from './ui/screens/crateHud.ts';
 import { TouchControls } from './input/touch.ts';
 import { Haptics, PULSE } from './input/haptics.ts';
 import { feelItems } from './game/feelOptions.ts';
@@ -2416,6 +2418,8 @@ export class App {
       t.track = this.session.track;
       this.ach.feed(t);
     }
+    crateSounds(this.audio, w, ev, players, this.mode === 'race');
+    noteCratePickups(ev, w.tick);
     // Taking off from a ramp.
     players.forEach((id, p) => {
       const car = w.cars[id];

@@ -8,6 +8,7 @@ import { RacePhase } from '../../../shared/sim/world.ts';
 import { lightsOn } from '../../game/raceView.ts';
 import { drawText, textWidth } from '../font.ts';
 import { drawDriveMeter } from './driveHud.ts';
+import { drawCrateReadout } from './crateHud.ts';
 
 export function ordinal(n: number): string {
   const s = n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] ?? 'TH';
@@ -64,6 +65,8 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
     // Touch: the ammo is on the buttons, so only a small damage bar here.
     if (touch) drawDamageBar(ctx, x, top, car);
     else drawArsenal(ctx, x, r.h - 46, car);
+    // What a crate just gave: above the weapons panel (touch: under the speed).
+    drawCrateReadout(ctx, x, touch ? top + 32 : r.h - 82, carId, world.tick);
   }
   const grace = race.startTick + 180 - world.tick;
   if (race.weapons && race.phase === RacePhase.Racing && grace > -90 && !practice) {

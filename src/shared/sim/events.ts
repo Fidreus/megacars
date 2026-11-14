@@ -26,6 +26,10 @@ export const Ev = {
   DriftBoost: 16,
   /** A drift charge was lost (hard hit or spin); `value` = level it had. */
   DriftLost: 17,
+  /** A crate was taken: `other` = CrateItem, `value` = amount (repair: percent mended); x, z = the crate. */
+  CratePickup: 18,
+  /** A taken crate is back: `other` = crate index. */
+  CrateBack: 19,
 } as const;
 
 export interface SimEvent {
