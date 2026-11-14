@@ -43,8 +43,9 @@ export interface SnapshotMeta {
   lastInputTick: number;
 }
 
-export function snapshotSize(cars: number, shots = 0): number {
-  return HEADER + cars * (PER_CAR + 1) + 1 + shots * PER_SHOT;
+/** Crates: a count byte, then each crate's ticks until it is back (uint16). */
+export function snapshotSize(cars: number, shots = 0, crates = 0): number {
+  return HEADER + cars * (PER_CAR + 1) + 1 + shots * PER_SHOT + 1 + crates * 2;
 }
 
 /**
@@ -55,7 +56,7 @@ export function encodeSnapshot(w: World, lastInputs: readonly CarInput[], meta: 
   const n = w.cars.length;
   let live = 0;
   for (const sh of w.shots) if (sh.kind !== ShotKind.None) live++;
-  const buf = new ArrayBuffer(snapshotSize(n, live));
+  const buf = new ArrayBuffer(snapshotSize(n, live, w.crates.length));
   const v = new DataView(buf);
   let o = 0;
   v.setUint8(o, MsgType.Snapshot); o += 1;
@@ -92,6 +93,8 @@ export function encodeSnapshot(w: World, lastInputs: readonly CarInput[], meta: 
     v.setInt32(o, sh.age, true); o += 4;
     for (const x of [sh.x, sh.z, sh.y, sh.vx, sh.vz, sh.heading]) { v.setFloat64(o, x, true); o += 8; }
   });
+  v.setUint8(o, w.crates.length); o += 1;
+  for (const c of w.crates) { v.setUint16(o, c, true); o += 2; }
   return new Uint8Array(buf);
 }
 
@@ -106,9 +109,12 @@ export function peekSnapshot(data: Uint8Array): DecodedSnapshot | null {
   if (data.byteLength < HEADER || data[0] !== MsgType.Snapshot) return null;
   const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const carCount = v.getUint8(11);
-  const shotsAt = snapshotSize(carCount) - 1;
+  const shotsAt = snapshotSize(carCount) - 2;
   if (data.byteLength <= shotsAt) return null;
-  if (data.byteLength !== snapshotSize(carCount, v.getUint8(shotsAt))) return null;
+  const live = v.getUint8(shotsAt);
+  const cratesAt = snapshotSize(carCount, live) - 1;
+  if (data.byteLength <= cratesAt) return null;
+  if (data.byteLength !== snapshotSize(carCount, live, v.getUint8(cratesAt))) return null;
   return { tick: v.getUint32(1, true), meta: { lead: v.getInt16(5, true), lastInputTick: v.getUint32(7, true) }, carCount };
 }
 
@@ -161,6 +167,9 @@ export function applySnapshot(data: Uint8Array, w: World, lastInputs: CarInput[]
     sh.vz = v.getFloat64(o, true); o += 8;
     sh.heading = v.getFloat64(o, true); o += 8;
   }
+  const crates = v.getUint8(o); o += 1;
+  w.crates.length = crates;
+  for (let k = 0; k < crates; k++) { w.crates[k] = v.getUint16(o, true); o += 2; }
   w.events.count = 0;
   return head.tick;
 }
@@ -180,6 +189,8 @@ export function copyWorld(dst: World, src: World): void {
     Object.assign(dst.shots[i], src.shots[i]);
   }
   dst.shots.length = src.shots.length;
+  dst.crates.length = src.crates.length;
+  for (let i = 0; i < src.crates.length; i++) dst.crates[i] = src.crates[i];
 }
 
 export function cloneInputs(src: readonly CarInput[]): CarInput[] {

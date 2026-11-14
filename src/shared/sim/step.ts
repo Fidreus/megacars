@@ -20,6 +20,7 @@ import { inPitArea, inPitBox, pitRepair } from '../track/pit.ts';
 import { leaderDistance, stepBoostPads } from './catchUp.ts';
 import { breakDriftCharge, isCornering, stepDriftCharge } from './driftBoost.ts';
 import { applySlipstream, stepSlipstream } from './slipstream.ts';
+import { crateLean, stepCrates } from './crates.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
@@ -102,7 +103,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     applyDamage(surfMix, car.damage, t);
     applySlipstream(surfMix, car.draft);
     if (car.aiDriven) {
-      aiDrive(car, track, t, surfMix, cars, w.tick, aiInput);
+      aiDrive(car, track, t, surfMix, cars, w.tick, aiInput, race.weapons ? crateLean(car, track, w.crates) : 0);
       if (armed) aiWeapons(car, cars, track, w.tick, t.vTop, aiInput, race.laps);
       inp = aiInput;
     } else if (inp.buttons & Btn.Reset && !(car.prevButtons & Btn.Reset) && race.phase === RacePhase.Racing && !car.finished) {
@@ -179,6 +180,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
   if (race.weapons && race.phase === RacePhase.Racing) {
     applyImpactDamage(cars, tunings, w.events, knocks);
     for (const car of cars) checkWreck(car, cars, w.events);
+    stepCrates(w.crates, track, cars, tunings, w.rng, w.tick, w.events);
   }
   for (let i = 0; i < cars.length; i++) {
     const car = cars[i];

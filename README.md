@@ -75,13 +75,30 @@ längre. I luften går det inte att styra; en hård landning kostar lite fart
 (och lite skada när vapnen är på).
 
 **Vapen** (kan stängas av i menyn och i onlinelobbyn): varje bil startar med
-5 missiler, 3 minor och 3 turbo. Missiler flyger rakt fram och snurrar runt
+3 missiler, 2 minor och 2 turbo, och fyller på från lådorna på banan. Missiler flyger rakt fram och snurrar runt
 den de träffar, minor läggs bakom bilen, gillrar sig efter en halv sekund och
 kastar upp bilen i luften. Turbo ger 1,5 s extra kraft och högre toppfart.
 Vapnen låses upp tre sekunder efter start. Krockar och träffar ger skada;
 över 40 % skada går bilen långsammare, och vid 100 % exploderar den, brinner
 en stund och kommer tillbaka lappad (30 % skada). Datorförarna använder också
 vapen – oftare ju svårare de är.
+
+**Lådor** (bara med vapen på): på några ställen runt varvet står en rad med
+två eller tre glödande lådor tvärs över vägen, så du får välja spår. Kör
+igenom en så får du något: 2 missiler, 2 minor, 1 turbo eller en lagning
+(30 % skada). Lådan kommer tillbaka efter 6 sekunder. Vad den ger avgörs av
+banan (fröet, lådan och tick), lite viktat efter placering: de som ligger
+sist får oftare turbo, missiler och lagning, ledaren oftare minor. Taket är
+detsamma som i butiken (12 missiler, 8 minor, 6 turbo); är du full på något
+får du något annat, och är du full på allt står lådan kvar åt nästa. HUD:en
+visar vad du fick ("+2 MISSILES") ovanför vapenpanelen. Banbyggaren lägger
+ut lådorna själv utifrån banans form – 3–5 rader på en vanlig bana, färre
+på de korta – aldrig i depån, på startrutorna, på ramper, broar eller
+landningen efter ett hopp, på pilarna eller i inbromsningen före en snäv
+kurva. Datorförarna styr gärna över en meter eller två för en låda nära
+sin linje, men aldrig tvärs över vägen. `npm run track` och banskaparens
+statusrad visar raderna. Nya sorters innehåll läggs till som en rad i
+`CRATE_ITEMS` i `src/shared/sim/crates.ts`.
 
 ## Datorförarna
 
@@ -258,7 +275,7 @@ Kortkommandon:
 | piltangenter eller WASD | panorera |
 
 Varje ändring kontrolleras direkt. Problem markeras på kartan, och
-statusraden visar längd, depå och antal pilar.
+statusraden visar längd, depå, antal pilar och lådrader.
 
 - **AI TEST** kör åtta datorbilar i två korta lopp i en egen tråd.
 - **TEST DRIVE** kör fri träning på banan. Paus → **BACK TO THE EDITOR**
@@ -369,8 +386,8 @@ för spel mot datorn.
 **Vibration:** handkontroller (dual-rumble, där webbläsaren och kontrollen
 stöder det) och Android-mobiler (`navigator.vibrate`; iPhone saknar det och
 får ingenting) ger korta pulser för vägg- och bilkrockar, träffar av missil
-och mina, att bli totalad, hårda landningar, turbo som startar samt
-startljusen och GO. Styrkan följer hur hårt det small. I delad skärm känner
+och mina, att bli totalad, hårda landningar, turbo som startar, lådor du
+plockar samt startljusen och GO. Styrkan följer hur hårt det small. I delad skärm känner
 varje kontroll bara sin egen bil (kontroll 1 = spelare 1, kontroll 2 =
 spelare 2). Nya händelser får en vibration med en rad i `RULES` i
 `src/client/input/haptics.ts`. Av/på under **OPTIONS → GAME FEEL → VIBRATION**

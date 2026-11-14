@@ -34,6 +34,8 @@ export interface World {
   race: RaceState;
   /** Missiles and mines (slots with kind 0 are free). */
   shots: Shot[];
+  /** Item crates, one per track.crates spot: 0 = standing, else ticks until it is back. */
+  crates: number[];
   events: EventBuffer;
 }
 
@@ -72,6 +74,7 @@ export function createWorld(track: Track, carCount: number, seed: number, opts: 
       weapons: opts.weapons ? 1 : 0,
     },
     shots: [],
+    crates: new Array<number>(track.crates.length).fill(0),
     events: makeEventBuffer(),
   };
 }

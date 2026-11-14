@@ -1,5 +1,6 @@
 // Top-down debug overlay: barriers (red), racing line coloured by planned
-// speed (red slow → green fast), checkpoints (yellow) and the centreline.
+// speed (red slow → green fast), checkpoints (yellow), item crates (amber)
+// and the centreline.
 
 import * as THREE from 'three';
 import type { CarTuning } from '../../shared/config/tuning.ts';
@@ -60,6 +61,14 @@ export function buildTrackDebugView(track: Track, t: CarTuning): THREE.Group {
   const cpGeo = new THREE.BufferGeometry();
   cpGeo.setAttribute('position', new THREE.BufferAttribute(cpPos, 3));
   g.add(new THREE.LineSegments(cpGeo, lineMat('#ffd60a')));
+
+  // Item crates: amber crosses.
+  const cr = track.crates;
+  const crPos = new Float32Array(cr.length * 12);
+  cr.forEach((c, k) => crPos.set([c.x - 1, y, c.z - 1, c.x + 1, y, c.z + 1, c.x - 1, y, c.z + 1, c.x + 1, y, c.z - 1], k * 12));
+  const crGeo = new THREE.BufferGeometry();
+  crGeo.setAttribute('position', new THREE.BufferAttribute(crPos, 3));
+  g.add(new THREE.LineSegments(crGeo, lineMat('#ffb21e')));
 
   g.traverse((o) => (o.renderOrder = 10));
   g.visible = false;

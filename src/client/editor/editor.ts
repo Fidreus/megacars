@@ -869,6 +869,13 @@ export class TrackEditor {
         ctx.lineTo(...this.toScreen(t.px[i1], t.pz[i1]));
         ctx.stroke();
       }
+      // Item crates: small amber squares.
+      ctx.fillStyle = '#ffb21e';
+      const box = Math.max(3, Math.min(6, 1.5 * zoom));
+      for (const c of t.crates) {
+        const [sx, sy] = this.toScreen(c.x, c.z);
+        ctx.fillRect(Math.round(sx - box / 2), Math.round(sy - box / 2), box, box);
+      }
       ctx.fillStyle = '#e6e6e0';
       for (const g of t.grid) {
         const [sx, sy] = this.toScreen(g.x, g.z);
@@ -1030,7 +1037,7 @@ export class TrackEditor {
       const why = c.missing[0].includes('pit') ? 'TO RACE ONLINE: LONGER START STRAIGHT FOR A PIT LANE (ABOUT 110 M)' : 'TO RACE ONLINE: MORE STRAIGHTS FOR CATCH-UP ARROWS';
       return { text: `${facts}  -  ${why}`, color: '#ffd84a' };
     }
-    return { text: `${facts}   READY TO RACE`, color: '#9cff9c' };
+    return { text: `${facts}   ${new Set(t.crates.map((c) => c.row)).size} CRATE ROWS   READY TO RACE`, color: '#9cff9c' };
   }
 
   private button(x: number, y: number, label: string, act: () => void, opts: { on?: boolean; off?: boolean; w?: number } = {}): number {

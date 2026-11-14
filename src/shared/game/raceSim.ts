@@ -24,6 +24,8 @@ export interface SimRaceResult {
   shots: number;
   hits: number;
   wrecks: number;
+  /** Item crates taken. */
+  pickups: number;
   order: number[];
 }
 
@@ -44,6 +46,7 @@ export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number;
   let shots = 0;
   let hits = 0;
   let wrecks = 0;
+  let pickups = 0;
   const maxTicks = 60 * 60 * 8;
   while (world.race.phase !== RacePhase.Finished && world.tick < maxTicks) {
     stepWorld(world, track, [], tunings);
@@ -54,6 +57,7 @@ export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number;
       else if (e.kind === Ev.Fire) shots++;
       else if (e.kind === Ev.Explosion && e.value !== 3) hits++;
       else if (e.kind === Ev.Wreck) wrecks++;
+      else if (e.kind === Ev.CratePickup) pickups++;
     }
   }
   const best = Math.min(...world.cars.map((c) => c.bestLapTicks || Infinity));
@@ -71,6 +75,7 @@ export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number;
     shots,
     hits,
     wrecks,
+    pickups,
     order: standings(world),
   };
 }

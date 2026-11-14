@@ -28,7 +28,7 @@ for (let seed = 1; seed <= seeds; seed++) {
     `seed ${String(seed).padStart(2)}  ${ok ? 'OK  ' : 'FAIL'} finished ${r.finished}/${r.cars}  ` +
       `winner ${r.winnerSeconds.toFixed(1)}s  best lap ${r.bestLapSeconds.toFixed(2)}s  ` +
       `respawns ${r.respawns}  wall hits ${r.wallHits}  car hits ${r.carHits}` +
-      (weapons ? `  shots ${r.shots}  hits ${r.hits}  wrecks ${r.wrecks}` : ''),
+      (weapons ? `  shots ${r.shots}  hits ${r.hits}  wrecks ${r.wrecks}  crates ${r.pickups}` : ''),
   );
 }
 console.log(`\n${def.name}: ${seeds - failures}/${seeds} races with every car finishing, ${respawns} respawns, ${((performance.now() - t0) / 1000).toFixed(1)} s wall time`);

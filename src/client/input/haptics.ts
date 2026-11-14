@@ -56,6 +56,7 @@ export const RULES: Record<number, Rule> = {
   // value 1: a catch-up pad rather than a turbo from the stock.
   [Ev.Turbo]: { rumble: (e) => (e.value === 1 ? { strong: 0.2, weak: 0.4, ms: 120 } : { strong: 0.35, weak: 0.6, ms: 160 }) },
   [Ev.RaceStart]: { felt: 'all', rumble: () => PULSE.go },
+  [Ev.CratePickup]: { rumble: () => ({ strong: 0.1, weak: 0.45, ms: 70 }) },
 };
 
 /** Where the rumble goes: the browser side, replaceable in tests. */

@@ -11,6 +11,7 @@ import type { World } from '../../shared/sim/world.ts';
 import type { Particles } from './particles.ts';
 import type { SteamSource } from './industry.ts';
 import { driftBoostBurst, driveFx } from './driveFx.ts';
+import { crateFx } from './crateView.ts';
 
 const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
 const R = Math.random;
@@ -150,6 +151,7 @@ export class Effects {
         continue;
       }
       if (e.kind === Ev.DriftBoost && world.cars[e.car]) driftBoostBurst(p, world.cars[e.car], e.value);
+      if (e.kind === Ev.CratePickup || e.kind === Ev.CrateBack) crateFx(p, e, 0);
       if ((e.kind === Ev.WallHit || e.kind === Ev.CarHit) && e.value > 2.5) {
         const car = world.cars[e.car];
         const n = Math.min(26, Math.round(e.value * 2));

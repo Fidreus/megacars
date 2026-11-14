@@ -79,6 +79,8 @@ console.log(`  errors: ${errors.length ? `\n    - ${errors.join('\n    - ')}` : 
 console.log(`  start straight: ${before} m before the line, ${after} m after`);
 console.log(`  pit: ${track.pit ? `${track.pit.side > 0 ? 'right' : 'left'} side, repair zone ${(track.pit.zone1 - track.pit.zone0).toFixed(0)} m` : 'none'}`);
 console.log(`  boost pads: ${track.boosts.length ? track.boosts.map((s) => s.toFixed(0)).join(', ') + ' (s, m)' : 'none'}`);
+const crateRows = [...new Set(track.crates.map((c) => c.row))].map((r) => track.crates.filter((c) => c.row === r));
+console.log(`  crate rows: ${crateRows.length ? crateRows.map((r) => `${r[0].s.toFixed(0)} (${r.length})`).join(', ') + ' (s, m; crates across)' : 'none'}`);
 console.log(`  sections: ${sections.join(' ')}`);
 console.log(`  bounds: x ${track.bounds.minX.toFixed(0)}..${track.bounds.maxX.toFixed(0)}, z ${track.bounds.minZ.toFixed(0)}..${track.bounds.maxZ.toFixed(0)}`);
 
@@ -135,6 +137,7 @@ function svg(t: Track): string {
     const i = Math.round((s / t.length) * t.n) % t.n;
     parts.push(`<circle cx="${t.px[i].toFixed(1)}" cy="${t.pz[i].toFixed(1)}" r="3" fill="#33d6ff"/>`);
   }
+  for (const c of t.crates) parts.push(`<rect x="${(c.x - 0.9).toFixed(1)}" y="${(c.z - 0.9).toFixed(1)}" width="1.8" height="1.8" fill="#ffb21e" stroke="#7a3a06" stroke-width="0.3"/>`);
   for (const g of t.grid) parts.push(`<circle cx="${g.x.toFixed(1)}" cy="${g.z.toFixed(1)}" r="1.2" fill="#222"/>`);
   const a = (side: number) => [t.px[0] + t.nx[0] * t.hw[0] * side, t.pz[0] + t.nz[0] * t.hw[0] * side].map((v) => v.toFixed(1));
   parts.push(`<line x1="${a(-1)[0]}" y1="${a(-1)[1]}" x2="${a(1)[0]}" y2="${a(1)[1]}" stroke="#000" stroke-width="1.5"/>`);

@@ -11,6 +11,7 @@ import { CarView, MODEL_STYLE } from '../render/carMesh.ts';
 import { Effects } from '../render/effects.ts';
 import { Particles } from '../render/particles.ts';
 import { ShotView } from '../render/shotView.ts';
+import { CrateView } from '../render/crateView.ts';
 import { SkidMarks } from '../render/skidmarks.ts';
 import { drawText } from '../ui/font.ts';
 import type { GameSession } from './session.ts';
@@ -30,6 +31,7 @@ export class RaceView {
   readonly particles = new Particles();
   private readonly skid = new SkidMarks();
   private readonly shots = new ShotView();
+  private readonly crates: CrateView;
   readonly effects: Effects;
   private readonly prev: Pose[] = [];
   /** Visual offset left over from network corrections; decays to zero. */
@@ -46,6 +48,7 @@ export class RaceView {
     this.scene = scene;
     this.session = session;
     this.effects = new Effects(this.particles, session.track);
+    this.crates = new CrateView(session.track);
     for (const car of session.world.cars) {
       const model = session.models[car.id] ?? -1;
       const view = new CarView(session.colors[car.id], car.id + 1, model >= 0 ? MODEL_STYLE[model] : undefined, session.league);
@@ -55,7 +58,7 @@ export class RaceView {
       this.prev.push({ x: car.x, z: car.z, y: car.y, heading: car.heading });
       this.offset.push({ x: 0, z: 0, y: 0, heading: 0 });
     }
-    this.group.add(this.skid.mesh, this.particles.points, this.shots.group);
+    this.group.add(this.skid.mesh, this.particles.points, this.shots.group, this.crates.group);
     session.playerCars.forEach((car, p) => {
       const text = session.playerCars.length > 1 ? `P${p + 1}` : 'YOU';
       // P1 yellow, P2 cyan (like their HUD labels).
@@ -179,6 +182,7 @@ export class RaceView {
       this.cars[i].root.visible = c.ghostTicks === 0 || c.finished === 1 || Math.floor(world.tick / 6) % 2 === 0;
     }
     this.shots.update(world.shots, alpha, world.tick);
+    this.crates.update(world, (world.tick + alpha) * DT);
     this.particles.time.value = (world.tick + alpha) * DT;
     this.particles.pxScale.value = pxScale;
     this.particles.dither.value = particleDither ? 1 : 0;

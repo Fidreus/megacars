@@ -86,6 +86,10 @@ export function installDebugApi(app: App): void {
         car.z = z;
         car.vx = car.vz = car.angVel = 0;
       },
+      /** Item crates: where they stand and which are there (0) or coming back (ticks). */
+      crates() {
+        return app.session.track.crates.map((c, k) => ({ x: c.x, z: c.z, row: c.row, away: app.world.crates[k] ?? 0 }));
+      },
       /** Zoom the camera out (k > 1) or in, for looking at the scenery. */
       zoom(k = 1) {
         app.debugZoom = k;

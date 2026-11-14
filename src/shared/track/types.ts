@@ -1,6 +1,7 @@
 import type { SurfaceId } from '../config/surfaces.ts';
 import type { SegmentGrid } from '../math/spatialHash.ts';
 import type { Pit } from './pit.ts';
+import type { CrateSpot } from '../sim/crates.ts';
 
 /** A corner of the closed track polygon; `r` is the fillet radius of the centreline. */
 export interface PathPoint {
@@ -173,6 +174,8 @@ export interface Track {
   pit: Pit | null;
   /** Catch-up boost pads (start of each along s; see sim/catchUp.ts). */
   boosts: number[];
+  /** Item crates, row by row (see sim/crates.ts). */
+  crates: CrateSpot[];
   bounds: { minX: number; minZ: number; maxX: number; maxZ: number };
   /** Problems found while building (empty when the track is valid). */
   errors: string[];

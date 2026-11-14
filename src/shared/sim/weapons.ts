@@ -14,8 +14,8 @@ import { stepDriftBoost } from './driftBoost.ts';
 
 export const ShotKind = { None: 0, Missile: 1, Mine: 2 } as const;
 
-/** What each car starts a race with when weapons are on. */
-export const START_AMMO = { missiles: 5, mines: 3, turbos: 3 };
+/** What each car starts a race with when weapons are on (crates on the track give more). */
+export const START_AMMO = { missiles: 3, mines: 2, turbos: 2 };
 
 export const WEAPON = {
   /** No shooting for this long after the start (the grid is too crowded). */
