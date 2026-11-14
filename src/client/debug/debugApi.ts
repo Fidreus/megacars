@@ -35,6 +35,7 @@ export function installDebugApi(app: App): void {
         lowRes: [r.lowW, r.lowH],
         scale: r.scale,
         uiScale: r.uiScale,
+        menuIndex: app.activeMenu?.index ?? -1,
         cars: app.world.cars.map((c) => ({
           id: c.id,
           x: +c.x.toFixed(2),

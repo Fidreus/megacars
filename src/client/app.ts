@@ -3141,6 +3141,10 @@ export class App {
       const py = Math.round(H * (H < 320 ? 0.12 : 0.3));
       const title = this.school?.finished ? (this.school.skipped ? 'SKIPPED' : this.schoolSave.done && allDone(this.schoolSave, this.school.lessons.map((l) => l.id)) ? 'SCHOOL COMPLETE' : 'LESSON COMPLETE') : 'PAUSED';
       drawText(ctx, title, W / 2, py, { scale: H < 320 ? 3 : 4, color: '#ffd84a', align: 'center' });
+      if (this.school?.finished) {
+        const all = allDone(this.schoolSave, this.school.lessons.map((l) => l.id));
+        drawText(ctx, all ? 'YOU EARNED THE L-PLATE PAINT AND LICENSED TO DRIFT' : this.school.skipped ? this.school.lesson.name : `LESSON ${this.school.index + 1} OF ${this.school.lessons.length}: ${this.school.lesson.name}`, W / 2, Math.max(2, py - 12), { color: '#9cff9c', align: 'center' });
+      }
       const my = py + (H < 320 ? 32 : 44);
       this.syncPauseMenu();
       const menu = this.pauseSub ?? this.pauseMenu;
