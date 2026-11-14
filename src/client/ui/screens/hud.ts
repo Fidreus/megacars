@@ -52,7 +52,7 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
     drawText(ctx, title, x, 6, { scale: 2, color: YELLOW });
     drawText(ctx, car.lap > 0 ? `LAP ${car.lap}` : 'START', x, 24, { scale: 2 });
   }
-  const lapTime = car.lap > 0 && !car.finished ? (world.tick - car.lapStartTick) * DT : 0;
+  const lapTime = car.lap > 0 && !car.finished && !car.outOrder ? (world.tick - car.lapStartTick) * DT : 0;
   let y = practice ? 44 : 58;
   drawText(ctx, formatTime(lapTime), x, y);
   y += 9;
