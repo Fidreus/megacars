@@ -572,7 +572,7 @@ export class App {
       { label: () => 'QUIT TO MENU', select: () => this.toTitle() },
     ];
     this.schoolDoneMenu = new Menu([
-      { label: () => (this.school && this.school.index + 1 < this.school.lessons.length ? 'NEXT LESSON' : 'LESSON LIST'), select: () => this.schoolNext() },
+      { label: () => (this.school && this.school.index + 1 < this.school.lessons.length ? 'NEXT LESSON' : 'BACK TO THE LESSON LIST'), select: () => this.schoolNext() },
       { label: () => 'REPEAT THIS LESSON', select: () => { this.paused = false; this.pauseSub = null; this.school?.begin(this.school.index); } },
       { label: () => 'LESSON LIST', select: () => { this.toTitle(); this.openSchool(); } },
       { label: () => 'QUIT TO MENU', select: () => this.toTitle() },
