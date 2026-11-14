@@ -67,9 +67,9 @@ export function playHomingLaunch(audio: AudioSystem, level: number, pan: number)
   const ctx = running(audio);
   if (!ctx || level <= 0.02) return;
   const t = ctx.currentTime;
-  sweep(audio, 'sawtooth', 300, 1400, t, 0.45, 0.06 * level, pan, 0.25, 2600);
-  sweep(audio, 'square', 450, 2100, t + 0.04, 0.4, 0.03 * level, pan, 0.25, 3000);
-  noise(audio, t, 0.5, 0.12 * level, pan, 'bandpass', 1800, 0.8);
+  sweep(audio, 'sawtooth', 300, 1400, t, 0.45, 0.18 * level, pan, 0.25, 2600);
+  sweep(audio, 'square', 450, 2100, t + 0.04, 0.4, 0.09 * level, pan, 0.25, 3000);
+  noise(audio, t, 0.5, 0.3 * level, pan, 'bandpass', 1800, 0.8);
 }
 
 /** Oil slick dropped: a wet, low glug. */
@@ -87,8 +87,8 @@ export function playOilSlip(audio: AudioSystem, level: number, pan: number): voi
   const ctx = running(audio);
   if (!ctx || level <= 0.02) return;
   const t = ctx.currentTime;
-  noise(audio, t, 0.3, 0.12 * level, pan, 'bandpass', 900, 0.5);
-  sweep(audio, 'triangle', 500, 180, t, 0.18, 0.05 * level, pan, 0.1);
+  noise(audio, t, 0.3, 0.2 * level, pan, 'bandpass', 900, 0.5);
+  sweep(audio, 'triangle', 500, 180, t, 0.18, 0.08 * level, pan, 0.1);
 }
 
 /** Shield up: a rising shimmer of three notes. */
@@ -96,8 +96,8 @@ export function playShieldUp(audio: AudioSystem, level: number, pan: number): vo
   const ctx = running(audio);
   if (!ctx || level <= 0.02) return;
   const t = ctx.currentTime;
-  [523, 784, 1047].forEach((f, k) => sweep(audio, 'triangle', f, f * 1.5, t + k * 0.05, 0.35, 0.06 * level, pan, 0.45));
-  sweep(audio, 'sine', 2093, 3136, t + 0.12, 0.4, 0.025 * level, pan, 0.5);
+  [523, 784, 1047].forEach((f, k) => sweep(audio, 'triangle', f, f * 1.5, t + k * 0.05, 0.35, 0.12 * level, pan, 0.45));
+  sweep(audio, 'sine', 2093, 3136, t + 0.12, 0.4, 0.05 * level, pan, 0.5);
 }
 
 /** A hit bouncing off a shield: a bright metallic ting and a short zap. */
@@ -117,7 +117,7 @@ function playLockBeep(audio: AudioSystem, urgency: number): void {
   if (!ctx) return;
   const t = ctx.currentTime;
   const f = 1200 + urgency * 800;
-  sweep(audio, 'square', f, f, t, 0.07, 0.05 + 0.03 * urgency, 0, 0, 4000);
+  sweep(audio, 'square', f, f, t, 0.09, 0.14 + 0.08 * urgency, 0, 0, 4000);
 }
 
 /** Play the special item sounds for this tick's events, heard from the first local player's car. */

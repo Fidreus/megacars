@@ -45,7 +45,7 @@ export function playCratePickup(audio: AudioSystem, level: number, pan: number):
   const ctx = running(audio);
   if (!ctx || level <= 0.02) return;
   const t = ctx.currentTime;
-  [988, 1319, 1976].forEach((f, k) => tone(audio, 'square', f, t + k * 0.045, 0.1, 0.075 * level, pan, 0.25));
+  [988, 1319, 1976].forEach((f, k) => tone(audio, 'square', f, t + k * 0.045, 0.1, 0.15 * level, pan, 0.25));
   const src = ctx.createBufferSource();
   src.buffer = audio.noiseBuffer();
   src.playbackRate.value = 1.4;
@@ -54,7 +54,7 @@ export function playCratePickup(audio: AudioSystem, level: number, pan: number):
   hp.frequency.value = 2500;
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.09 * level, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.16 * level, t + 0.004);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
   out(audio, src.connect(hp).connect(g), pan, 0.1);
   src.start(t, Math.random() * 0.5);
