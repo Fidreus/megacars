@@ -66,6 +66,8 @@ export class Analytics {
   private readonly retentionDays: number;
   private readonly now: () => number;
   private ready: Promise<unknown> | null = null;
+  /** The last line written (lines are appended one after another). */
+  private tail: Promise<unknown> = Promise.resolve();
 
   constructor(dataDir: string, opts: AnalyticsOptions = {}) {
     this.enabled = opts.enabled ?? true;
@@ -151,8 +153,15 @@ export class Analytics {
   log(who: Who | null, event: Event): void {
     if (!this.enabled) return;
     const line = JSON.stringify({ ts: this.now(), ...(who ? { h: who.h, c: who.c } : {}), ...event });
+    const file = join(this.dir, `${this.day()}.jsonl`);
     this.ready ??= mkdir(this.dir, { recursive: true });
-    void this.ready.then(() => appendFile(join(this.dir, `${this.day()}.jsonl`), `${line}\n`)).catch(() => {});
+    const ready = this.ready;
+    this.tail = this.tail.then(() => ready).then(() => appendFile(file, `${line}\n`)).catch(() => {});
+  }
+
+  /** Resolves once every line logged so far is on disk. */
+  flush(): Promise<void> {
+    return this.tail.then(() => {});
   }
 
   /** Delete days older than the retention time. */
