@@ -2996,12 +2996,13 @@ export class App {
         drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, Math.round(H * 0.62) + 11, { color: '#ffd84a', align: 'center' });
       }
     } else if (this.firstRace && w.tick < w.race.startTick + 60 * 15) {
-      const hintY = split ? my - 14 : H - 36;
+      // Above the weapons panel and the special slot when weapons are on.
+      const hintY = split ? my - 14 : H - (w.race.weapons ? 100 : 36);
       const c = this.controls;
       const drift = split ? `P1 ${keysLabel(c.p1, 'drift')} / P2 ${keysLabel(c.p2, 'drift')}` : keysLabel(c.solo, 'drift');
       drawText(ctx, `DRIFT: HOLD ${drift} WHILE TURNING (OR LIFT OFF + GAS AGAIN)`, W / 2, hintY, { color: '#ffd84a', align: 'center' });
       if (w.race.weapons) {
-        const weap = (b: KeyBinding) => `${keysLabel(b, 'fireFront')} MISSILE  ${keysLabel(b, 'fireRear')} MINE  ${keysLabel(b, 'turbo')} TURBO`;
+        const weap = (b: KeyBinding) => `${keysLabel(b, 'fireFront')} MISSILE  ${keysLabel(b, 'fireRear')} MINE  ${keysLabel(b, 'turbo')} TURBO${split ? '' : `  ${keysLabel(b, 'special')} ITEM`}`;
         const keys = split ? `P1 ${weap(c.p1)}   P2 ${weap(c.p2)}` : weap(c.solo);
         drawText(ctx, `WEAPONS: ${keys}`, W / 2, hintY - 11, { color: '#ffd84a', align: 'center' });
       }
