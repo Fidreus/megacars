@@ -6,6 +6,7 @@ import type { CarInput } from '../sim/input.ts';
 import type { League } from '../game/leagues.ts';
 import type { Loadout, Profile, ShopItem } from '../game/shop.ts';
 import type { Weather, WeatherChoice } from '../game/weather.ts';
+import type { RaceMode } from '../game/raceMode.ts';
 
 /** Bump when messages change incompatibly. Clients and server must match. */
 // The +3: tournaments and player tracks in rooms.
@@ -82,6 +83,8 @@ export interface RoomConfig {
   damageSlows: boolean;
   /** Weather of the races (absent = dry; public rooms pick one per race). */
   weather?: WeatherChoice;
+  /** RACE or ELIMINATION (absent = race; public rooms always race). */
+  mode?: RaceMode;
 }
 
 /** A public room in the room list. */
@@ -162,6 +165,8 @@ export interface RaceSpec {
   damageSlows?: boolean;
   /** Rain, or rain coming and going (absent = dry). */
   weather?: Weather;
+  /** Elimination: the last car is out each time the leader completes a lap (absent = a normal race). */
+  mode?: RaceMode;
 }
 
 export type ClientMsg =

@@ -140,6 +140,52 @@ topplistorna och ersätter inte ditt personbästa eller ditt spöke.
 `npm run sim -- --weather rain|changing` och
 `npm run soak -- --weather rain|changing` kör med väder.
 
+## Utslagning (ELIMINATION)
+
+**MODE: ELIMINATION** i SINGLE RACE (sparas med de andra inställningarna)
+och i onlinelobbyns **RACE SETTINGS** (värden väljer, och det står i
+lobbyns sammanfattning). Varje gång ledaren går över mållinjen är bilen
+som ligger sist ute – den med kortast körd sträcka, även om den är vrakad
+eller bärgas just då; vid exakt lika går den som startade längre bak. Sista
+bilen kvar vinner, och placeringarna följer ordningen de åkte ut i (först
+ute blir sist). Antal varv gäller inte (LAPS visar det). På de korta
+banorna (Tivoli Twist, Manhattan Sprint: var tredje varv, Cigar Circuit:
+vartannat) är det inte varje varv: intervallet räknas av banans längd
+(ungefär en utslagning per 2,1 km av ledarens sträcka, högst var tredje
+varv), så ett lopp tar ungefär lika lång tid som på en fullstor bana
+(3,5–7 min med åtta bilar beroende på klass). Det gäller även egna banor.
+
+Bilen som åker ut exploderar, brinner två sekunder och plockas sedan bort
+från vägen (ingen bärgning, ingen spökbil). Ett lopp tar alltid slut: kommer
+ingen runt i tid (alla fast, vrakade eller stillastående) åker den sista ut
+ändå när en bil i 15 m/s hade hunnit köra intervallet, och när alla
+människor är ute åker datorbilarna ut en i taget var sjätte sekund. Tre
+sekunder efter sista utslagningen är loppet slut. Lådor, draft, depå,
+vapen och boostpilarna är som vanligt – pilarna hjälper den som ligger
+långt efter ledaren, vilket i utslagning just är den som är i fara, så de
+håller striden i botten vid liv. Datorförarna som ligger sist eller näst
+sist depåar först vid mer skada (en depå sist är slutet) och använder
+turbo, missiler och minor oftare (även TURBO TOM, vars "slutet av loppet"
+då har kommit).
+
+HUD:en visar hur många som är kvar och när nästa åker ut ("5 LEFT – OUT
+THIS LAP"). Ligger du sist blinkar **LAST PLACE!** med tiden till bilen
+före, och ett pip som går fortare och högre ju närmare mållinjen ledaren
+är. När någon åker ut står det ("TURBO TOM IS OUT"), det smäller och hörs.
+Åker du ut: **ELIMINATED** med placering och varv, kort slow motion och
+vibration, och kameran följer ledaren (i delad skärm den andra spelaren så
+länge den är kvar). Offline tar ENTER (eller RESULTS NOW på pekskärm) dig
+direkt till resultatet – resten av loppet räknas fram på en gång, samma
+resultat som om du tittat. Online tittar du klart. Resultatlistan visar
+vilket varv var och en åkte ut, pallen de tre sista kvar.
+
+Mästerskap, karriär och publika rum kör vanliga lopp. Varv i utslagning
+räknas inte till topplistor, personbästa eller medaljer. Två prestationer:
+LAST CAR STANDING (vinn en utslagning) och SURVIVOR (bland de två sista
+från sista startplats, minst sex bilar). `npm run sim -- --elimination
+[--track all] [--league all] [--weapons]` kör utslagningslopp och
+kontrollerar att varje lopp slutar med exakt en vinnare.
+
 ## Datorförarna
 
 De tio datorförarna har var sin personlighet som syns i hur de kör. Inom en
@@ -429,7 +475,7 @@ SINGLE RACE och som en kort banderoll ("GOLD MEDAL!") när en vinns.
 
 ## Prestationer
 
-**ACHIEVEMENTS** i titelmenyn listar 25 prestationer, från sådant man gör de
+**ACHIEVEMENTS** i titelmenyn listar 27 prestationer, från sådant man gör de
 första tio minuterna (köra klart ett race, vinna, vraka en bil, hoppa 40 m,
 hålla en drift i 4 s, åka i mörker) via några kvällar (tio pallplatser,
 vinna från sista plats, vinna utan att skjuta, avsluta med under 5 %

@@ -153,6 +153,8 @@ export function specProblem(spec: RaceSpec): string | null {
   if (spec.damageSlows !== undefined && spec.damageSlows !== true) return 'damage must count';
   // Lap records are set in the dry.
   if (spec.weather !== undefined && spec.weather !== 'dry') return 'dry races only';
+  // Elimination laps are ordinary laps, but the boards stay with normal races.
+  if (spec.mode !== undefined && spec.mode !== 'race') return 'normal races only';
   return null;
 }
 

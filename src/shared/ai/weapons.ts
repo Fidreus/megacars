@@ -21,7 +21,8 @@ export function lateInRace(lap: number, laps: number): boolean {
   return laps <= 0 || lap > laps - Math.max(1, Math.round(laps * 0.4));
 }
 
-export function aiWeapons(car: CarState, cars: readonly CarState[], track: Track, tick: number, vTop: number, out: CarInput, laps = 0): void {
+/** `danger`: 0..1, how close the car is to going out of an elimination race: it fights harder to get off the bottom. */
+export function aiWeapons(car: CarState, cars: readonly CarState[], track: Track, tick: number, vTop: number, out: CarInput, laps = 0, danger = 0): void {
   if (car.finished || car.wreckTicks > 0 || car.ghostTicks > 0) return;
   const p = personaOf(car.aiPersona);
   const fx = Math.sin(car.heading);
@@ -52,7 +53,7 @@ export function aiWeapons(car: CarState, cars: readonly CarState[], track: Track
   const slot = tick >> 3;
   if ((tick & 7) !== (car.id & 7)) return;
   const eager = eagerness(effectiveSkill(car, p));
-  const roll = (salt: number, k: number) => hash3(car.id, slot, salt) < Math.min(0.7, eager * k);
+  const roll = (salt: number, k: number) => hash3(car.id, slot, salt) < Math.min(0.7, eager * k * (1 + danger));
 
   if (car.missiles > 0 && car.fireCool === 0 && car.spinTicks === 0 && seeFront) {
     if (roll(1, p.aggro * (front === car.aiFoe ? FOE_EAGERNESS : 1))) out.buttons |= Btn.FireFront;
@@ -61,7 +62,8 @@ export function aiWeapons(car: CarState, cars: readonly CarState[], track: Track
     if (roll(2, p.aggro * (close ? 2.5 : 1) * (rear === car.aiFoe ? FOE_EAGERNESS : 1))) out.buttons |= Btn.FireRear;
   }
   const hoard = p.turbo === TurboHabit.Late;
-  const keen = p.turbo === TurboHabit.Eager || (hoard && lateInRace(car.lap, laps));
+  // In danger of elimination even a hoarder's "end of the race" has come.
+  const keen = p.turbo === TurboHabit.Eager || danger > 0 || (hoard && lateInRace(car.lap, laps));
   if (car.turbos > 0 && car.turboTicks === 0 && car.sliding === 0 && fwd > 22 && fwd < vTop * 0.98 && !(hoard && !keen)) {
     // Only with a long straight ahead (turbo lovers settle for a shorter one).
     let straight = true;

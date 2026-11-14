@@ -107,6 +107,10 @@ import { duelText, rivalCar, rivalLine } from './game/rival.ts';
 import { TOUR_MAX, type RaceSpec, type RoomInfo } from '../shared/net/protocol.ts';
 import { CATCH_UP, farBehind, leaderDistance } from '../shared/sim/catchUp.ts';
 import { setBoostPadsLit } from './render/boostMesh.ts';
+import { elimLapsLabel, raceModeItem, roomElimNote, roomModeItem } from './game/elimUi.ts';
+import { allOut, canSkip, drawElimNews, drawElimWatching, spectateCars } from './ui/screens/elimHud.ts';
+import { ElimSfx } from './audio/elimSfx.ts';
+import { isElimination } from '../shared/game/raceMode.ts';
 
 const SHADOW_HALF = 62;
 /** Graphics levels: high, medium, low. Shadow map size 0 = no shadows. */
@@ -253,6 +257,9 @@ export class App {
   private readonly textBridge: TextBridge;
   /** The touch BACK button (UI pixels), when shown. */
   private backRect: { x: number; y: number; w: number; h: number } | null = null;
+  /** Elimination: the touch button to skip to the results once every local player is out. */
+  private elimSkipRect: { x: number; y: number; w: number; h: number } | null = null;
+  private readonly elimSfx = new ElimSfx();
   private readonly recordsScreen: RecordsScreen;
   /** A newer build on the server (offered on the title screen). */
   readonly update = new UpdateCheck();
@@ -736,7 +743,7 @@ export class App {
           this.showAttract('setup');
         },
       },
-      { label: () => lapsLabel(s.track, s.laps), change: (d: number) => { s.laps = 1 + cycle(s.laps - 1, 9, d); changed(); } },
+      { label: () => elimLapsLabel(s.mode, s.track) ?? lapsLabel(s.track, s.laps), change: (d: number) => { s.laps = 1 + cycle(s.laps - 1, 9, d); changed(); } },
       {
         label: () => `OPPONENTS: ${s.opponents}`,
         change: (d: number) => { s.opponents = cycle(s.opponents, 9 - s.players, d); changed(); },
@@ -745,6 +752,7 @@ export class App {
       { label: () => `WEAPONS: ${s.weapons ? 'ON' : 'OFF'}`, change: () => { s.weapons = !s.weapons; changed(); } },
       { label: () => `LEAGUE: ${LEAGUE_NAMES[s.league]}`, change: (d: number) => { s.league = LEAGUES[cycle(LEAGUES.indexOf(s.league), LEAGUES.length, d)]; changed(); } },
       weatherSettingItem(s, changed),
+      raceModeItem(s, changed),
       {
         label: () => (s.players === 1 ? 'PLAYERS: 1' : 'PLAYERS: 2 SPLIT SCREEN'),
         change: () => {
@@ -786,7 +794,7 @@ export class App {
 
   private toSetup(): void {
     this.showAttract('setup');
-    this.setupMenu.index = 8;
+    this.setupMenu.index = 9;
   }
 
   /** New championships: laps, difficulty, weapons and class (shared with the single race). */
@@ -1158,7 +1166,7 @@ export class App {
     const notHost = () => !o().isHost;
     const pub = () => !!cfg()?.public;
     return [
-      { label: () => lapsLabel(cfg()?.track ?? '', cfg()?.laps ?? 3), disabled: notHost, change: (d: number) => o().configure({ laps: 1 + cycle((cfg()?.laps ?? 3) - 1, 9, d) }) },
+      { label: () => elimLapsLabel(cfg()?.public ? 'race' : cfg()?.mode, cfg()?.track ?? '') ?? lapsLabel(cfg()?.track ?? '', cfg()?.laps ?? 3), disabled: notHost, change: (d: number) => o().configure({ laps: 1 + cycle((cfg()?.laps ?? 3) - 1, 9, d) }) },
       { label: () => `COMPUTER CARS: ${cfg()?.ai ?? 0}`, disabled: notHost, change: (d: number) => o().configure({ ai: cycle(cfg()?.ai ?? 0, 8, d) }) },
       {
         label: () => `DIFFICULTY: ${DIFFICULTIES[cfg()?.difficulty ?? 1]}`,
@@ -1178,6 +1186,7 @@ export class App {
         change: (d: number) => o().configure({ league: LEAGUES[cycle(LEAGUES.indexOf(leagueOf(cfg()?.league)), LEAGUES.length, d)] }),
       },
       roomWeatherItem(cfg, notHost, (c) => o().configure(c)),
+      roomModeItem(cfg, notHost, (c) => o().configure(c)),
       { label: () => `UPGRADES: ${cfg()?.upgrades === false ? 'OFF' : 'ON'}`, disabled: notHost, change: () => o().configure({ upgrades: cfg()?.upgrades === false }) },
       {
         label: () => `ROOM: ${pub() ? 'PUBLIC - IN THE ROOM LIST' : 'PRIVATE - CODE ONLY'}`,
@@ -1251,7 +1260,7 @@ export class App {
     const c = room.config;
     const track = (room.tourNames[Math.min(room.tourIndex, c.tour.length - 1)] ?? trackName(c.track)).toUpperCase();
     const sky = weatherNote(roomWeather(c), snowyTrack(c.track));
-    return `${track}   ${raceLaps(c.track, c.laps)} LAPS   ${c.ai} AI   WEAPONS ${c.weapons === false ? 'OFF' : 'ON'}   ${LEAGUE_NAMES[leagueOf(c.league)]}${sky ? `   ${sky}` : ''}`;
+    return `${track}   ${roomElimNote(c) ?? `${raceLaps(c.track, c.laps)} LAPS`}   ${c.ai} AI   WEAPONS ${c.weapons === false ? 'OFF' : 'ON'}   ${LEAGUE_NAMES[leagueOf(c.league)]}${sky ? `   ${sky}` : ''}`;
   }
 
   /** The public room list (refreshed every few seconds while shown). */
@@ -1642,7 +1651,7 @@ export class App {
     this.achSpoiled = this.params.debug || (practice && isTuned(this.tuning));
     trackRace({
       track: rs.track.def.id,
-      mode: this.cupRace ? (this.career ? 'career' : 'cup') : practice ? 'practice' : 'quick',
+      mode: this.cupRace ? (this.career ? 'career' : 'cup') : practice ? 'practice' : isElimination(rs.spec) ? 'elimination' : 'quick',
       laps: Math.max(1, Math.min(99, rs.spec.laps)),
       opponents: Math.min(8, rs.settings.opponents),
       players: Math.max(1, Math.min(4, rs.playerCars.length)),
@@ -2151,6 +2160,7 @@ export class App {
       else this.nameMenu.handle(nav);
       return;
     }
+    if (this.elimSkip(nav)) return;
     if (this.showingResults) {
       if (nav.confirm || nav.click || nav.back) {
         if (this.cupRace && this.cup) this.finishCupRace();
@@ -2176,6 +2186,28 @@ export class App {
       this.pauseSub = null;
       this.pauseMenu.index = 0;
     }
+  }
+
+  /**
+   * Every local player is out of an offline elimination race: Enter (not the
+   * missile key) or the touch button runs the rest of the race at once. The
+   * race is deterministic, so the result is the one watching it would give.
+   */
+  private elimSkip(nav: NavState): boolean {
+    const s = this.session;
+    if (this.mode !== 'race' || this.paused || this.netRace || !(s instanceof RaceSession)) return false;
+    const w = s.world;
+    if (w.race.phase === RacePhase.Finished || !canSkip(w, s.playerCars)) return false;
+    const kb = this.input.keyboard;
+    const r = this.elimSkipRect;
+    const tapped = !!r && nav.click && nav.pointerX >= r.x && nav.pointerX < r.x + r.w && nav.pointerY >= r.y && nav.pointerY < r.y + r.h;
+    if (!(tapped || (nav.confirm && !kb.wasPressed('Space')))) return false;
+    for (let k = 0; k < 60 * 60 * 30 && w.race.phase !== RacePhase.Finished; k++) s.step();
+    w.tick = Math.max(w.tick, w.race.endTick + 72);
+    for (let i = 0; i < w.cars.length; i++) this.view.snap(i);
+    this.slowmo.reset();
+    this.elimSkipRect = null;
+    return true;
   }
 
   /** After typing a name for the world board (or skipping it): send the record. */
@@ -2259,6 +2291,9 @@ export class App {
       kills: car.kills,
       damage: car.damage,
       live: !online,
+      elimination: !!s.world.elim,
+      eliminated: car.outOrder > 0,
+      start: car.id + 1,
     };
     this.ach.feed({ kind: 'race', r });
   }
@@ -2384,6 +2419,8 @@ export class App {
           playUi(this.audio, best ? 'buy' : 'select');
           this.crowd?.cheer(this.crowdCloseness(car) * 0.8 + 0.1, 1.6);
         }
+      } else if (e.kind === Ev.Eliminated) {
+        this.elimEvent(e.car, e.other, e.x, e.z, achOn);
       } else if (e.kind === Ev.Finish && players.includes(e.car)) {
         if (achOn) this.achRaceSummary(e.other, w.cars[e.car], false);
         playFanfare(this.audio, e.other <= 3);
@@ -2423,6 +2460,7 @@ export class App {
       }
     }
     this.driveAudio.events(this.audio, ev, players, this.mode === 'race');
+    if (w.elim) this.elimSfx.events(this.audio, ev, players, me);
     if (achOn) {
       const t = this.achTick;
       t.w = w;
@@ -2531,6 +2569,16 @@ export class App {
     this.slowmo.trigger(p, !this.netRace && players.length === 1);
   }
 
+  /** A car went out of an elimination race: the blast shakes the view, and a local player's race is over. */
+  private elimEvent(car: number, place: number, x: number, z: number, achOn: boolean): void {
+    const me = this.player;
+    const dist = Math.hypot(x - me.x, z - me.z);
+    this.shake = Math.max(this.shake, 1.2 * Math.max(0, 1 - dist / 45));
+    if (!this.session.playerCars.includes(car) || this.mode !== 'race') return;
+    if (achOn) this.achRaceSummary(place, this.world.cars[car], false);
+    this.wreckBeat(car, -1, 0);
+  }
+
   /** Sounds and messages for weapons, louder close to the (first) player. */
   private weaponEvent(kind: number, car: number, other: number, value: number, x: number, z: number): void {
     const me = this.player;
@@ -2572,6 +2620,9 @@ export class App {
       // Attract mode and spectators: follow the leaders, switching cars now and then.
       const order = standings(this.world);
       this.viewCar[0] = order[Math.floor(this.time / 9) % Math.min(3, order.length)];
+    } else if (this.world.elim) {
+      // Out of an elimination race: watch the leader (or the other player).
+      if (spectateCars(this.world, this.session.playerCars, this.viewCar, standings(this.world)[0])) this.camInit[0] = this.camInit[1] = false;
     }
     this.shake = Math.max(0, this.shake - dt * 2.2);
     if (this.fireworks > 0 && this.mode === 'race') {
@@ -2708,7 +2759,7 @@ export class App {
     this.engines.forEach((engine, p) => {
       const tyres = this.tyres[p];
       const id = players[p];
-      if (id === undefined) {
+      if (id === undefined || this.world.cars[id].outOrder > 0) {
         engine.silence(now);
         tyres.silence(now);
         return;
@@ -2759,6 +2810,7 @@ export class App {
       engine.update(countdown ? grid : speed01, countdown ? 0.3 : throttle, fall * fall * 0.8, dx / 25, now, doppler * this.slowmo.pitch);
     });
     this.crowd.update(me ? this.crowdCloseness(me) : 0, now);
+    this.elimSfx.update(this.audio, this.world, players, racing && !this.showingResults, now);
     this.rainSound ??= new RainSound(this.audio);
     this.rainSound.update(this.mode === 'race' ? this.view.weather.rain : 0, this.view.weather.snow, this.weatherLight.thunder, now);
     this.weatherLight.thunder = 0;
@@ -2999,6 +3051,8 @@ export class App {
         drawText(ctx, `WEAPONS: ${keys}`, W / 2, hintY - 11, { color: '#ffd84a', align: 'center' });
       }
     }
+    drawElimNews(ctx, W, H, w, s.names, s.playerCars, split);
+    this.elimSkipRect = drawElimWatching(ctx, W, H, w, s.playerCars, !!this.netRace, this.touch.enabled);
     if (this.showTelemetry && s.playerCars.length) this.drawTelemetry(ctx, 8, 92);
     if (this.netRace) this.drawOnlineRaceUi(ctx, W, H);
     if (this.showingResults) {

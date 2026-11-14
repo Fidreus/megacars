@@ -30,6 +30,8 @@ export const Ev = {
   CratePickup: 18,
   /** A taken crate is back: `other` = crate index. */
   CrateBack: 19,
+  /** Elimination race: `car` is out; `other` = its final place, `value` = the leader's lap it went out on. */
+  Eliminated: 25,
 } as const;
 
 export interface SimEvent {

@@ -26,6 +26,7 @@ const I32: readonly CarKey[] = [
   'respawns', 'surfFront', 'surfRear', 'missiles', 'mines', 'turbos', 'turboTicks', 'fireCool', 'mineCool',
   'wreckTicks', 'hits', 'kills', 'wrecks', 'pitTicks', 'lastHitBy',
   'driftBoostTicks', 'driftBoostLevel',
+  'outOrder', 'outTick', 'outLap',
 ];
 
 /** Every CarState key except `id` must be listed above (checked by tests). */
@@ -179,6 +180,7 @@ export function copyWorld(dst: World, src: World): void {
   dst.tick = src.tick;
   dst.rng = src.rng;
   dst.weather = src.weather;
+  dst.elim = src.elim;
   Object.assign(dst.race, src.race, { finishOrder: [...src.race.finishOrder] });
   for (let i = 0; i < src.cars.length; i++) {
     if (!dst.cars[i]) dst.cars[i] = createCar(i, 0, 0, 0);

@@ -101,6 +101,10 @@ export interface CarState {
   /** Ticks left without car-to-car collisions (after a respawn). */
   ghostTicks: number;
   respawns: number;
+  /** Elimination races (sim/elimination.ts): 1 = first out, 0 = still in; tick and leader lap it went out on. */
+  outOrder: number;
+  outTick: number;
+  outLap: number;
   // Derived each tick (recomputed, never authoritative)
   slip: number;
   latAccel: number;
@@ -120,6 +124,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
     finishTick: 0, place: id + 1, stuckTicks: 0, ghostTicks: 0, respawns: 0,
     slip: 0, latAccel: 0, longAccel: 0, surfFront: 0, surfRear: 0,
     driftCharge: 0, driftBoostTicks: 0, driftBoostLevel: 0, draft: 0,
+    outOrder: 0, outTick: 0, outLap: 0,
   };
 }
 

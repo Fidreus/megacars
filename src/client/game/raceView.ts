@@ -16,6 +16,7 @@ import { SkidMarks } from '../render/skidmarks.ts';
 import { WeatherView } from '../render/weather.ts';
 import { themeOf } from '../render/theme.ts';
 import { drawText } from '../ui/font.ts';
+import { isCleared } from '../../shared/sim/elimination.ts';
 import type { GameSession } from './session.ts';
 
 const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
@@ -186,7 +187,7 @@ export class RaceView {
       );
       this.cars[i].setWreck(c.wreckTicks > 0);
       // Ghosts (just respawned) blink.
-      this.cars[i].root.visible = c.ghostTicks === 0 || c.finished === 1 || Math.floor(world.tick / 6) % 2 === 0;
+      this.cars[i].root.visible = !isCleared(c, world.tick) && (c.ghostTicks === 0 || c.finished === 1 || Math.floor(world.tick / 6) % 2 === 0);
     }
     this.shots.update(world.shots, alpha, world.tick);
     this.crates.update(world, (world.tick + alpha) * DT);

@@ -57,6 +57,8 @@ export const RULES: Record<number, Rule> = {
   [Ev.Turbo]: { rumble: (e) => (e.value === 1 ? { strong: 0.2, weak: 0.4, ms: 120 } : { strong: 0.35, weak: 0.6, ms: 160 }) },
   [Ev.RaceStart]: { felt: 'all', rumble: () => PULSE.go },
   [Ev.CratePickup]: { rumble: () => ({ strong: 0.1, weak: 0.45, ms: 70 }) },
+  // Out of an elimination race: a long double blast.
+  [Ev.Eliminated]: { rumble: () => ({ strong: 1, weak: 1, ms: 700, pattern: [220, 80, 380] }) },
 };
 
 /** Where the rumble goes: the browser side, replaceable in tests. */

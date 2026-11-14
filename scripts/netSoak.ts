@@ -1,6 +1,6 @@
 // Headless online clients against a running server over real WebSockets:
 // create a room, race with N bots driving like people, report sync health.
-//   node scripts/netSoak.ts --url ws://localhost:8787/ws --clients 3 --laps 1 --track dustbowl [--weather rain|changing]
+//   node scripts/netSoak.ts --url ws://localhost:8787/ws --clients 3 --laps 1 --track dustbowl [--weather rain|changing] [--elimination]
 // Bad networks: --lag 60 --jitter 40 --loss 0.02 (one-way ms; a lost TCP
 // packet holds everything behind it for a retransmit, ~200 ms).
 // Slow devices: --hitch 150 --hitchEvery 90 (a frame that blocks for 150 ms
@@ -28,6 +28,7 @@ const { values } = parseArgs({
     track: { type: 'string', default: 'greenvalley' },
     league: { type: 'string', default: 'standard' },
     weather: { type: 'string', default: 'dry' },
+    elimination: { type: 'boolean', default: false },
     lag: { type: 'string', default: '0' },
     jitter: { type: 'string', default: '0' },
     loss: { type: 'string', default: '0' },
@@ -159,7 +160,7 @@ bots[0].send({ t: 'create' });
 while (!bots[0].room) await sleep(50);
 for (const b of bots.slice(1)) b.send({ t: 'join', code: bots[0].room.code });
 await sleep(500);
-bots[0].send({ t: 'config', config: { laps: Number(values.laps), ai: Number(values.ai), track: values.track, weapons: true, league: leagueOf(values.league), weather: weatherChoiceOf(values.weather) } });
+bots[0].send({ t: 'config', config: { laps: Number(values.laps), ai: Number(values.ai), track: values.track, weapons: true, league: leagueOf(values.league), weather: weatherChoiceOf(values.weather), ...(values.elimination ? { mode: 'elimination' as const } : {}) } });
 for (const b of bots.slice(1)) b.send({ t: 'ready', ready: true });
 await sleep(500);
 bots[0].send({ t: 'start' });

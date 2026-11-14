@@ -22,6 +22,7 @@ import { leaderDistance, stepBoostPads } from './catchUp.ts';
 import { breakDriftCharge, isCornering, stepDriftCharge } from './driftBoost.ts';
 import { applySlipstream, stepSlipstream } from './slipstream.ts';
 import { crateLean, stepCrates } from './crates.ts';
+import { elimDanger, stepElimination, stepOutCar } from './elimination.ts';
 import {
   applyImpactDamage, checkWreck, stepBoostAndAir, stepShots, stepWreck, useWeapons, WEAPON,
 } from './weapons.ts';
@@ -90,7 +91,8 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
         groundUnder(car, track, ground);
         stepBoostAndAir(car, t, DT, w.events, false, ground.gap ? 0 : ground.h);
       }
-      if (--car.wreckTicks === 0) {
+      if (car.outOrder > 0) stepOutCar(car, w.tick);
+      else if (--car.wreckTicks === 0) {
         // Towed back onto the track, patched up.
         respawnCar(car, track, safeRespawnS(track, car.trackS - 4));
         car.damage = WEAPON.wreckRepair;
@@ -107,8 +109,9 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     applyDamage(surfMix, car.damage, t);
     applySlipstream(surfMix, car.draft);
     if (car.aiDriven) {
-      aiDrive(car, track, t, surfMix, cars, w.tick, aiInput, race.weapons ? crateLean(car, track, w.crates) : 0);
-      if (armed) aiWeapons(car, cars, track, w.tick, t.vTop, aiInput, race.laps);
+      const danger = w.elim ? elimDanger(w, car) : 0;
+      aiDrive(car, track, t, surfMix, cars, w.tick, aiInput, race.weapons ? crateLean(car, track, w.crates) : 0, danger);
+      if (armed) aiWeapons(car, cars, track, w.tick, t.vTop, aiInput, race.laps, danger);
       inp = aiInput;
     } else if (inp.buttons & Btn.Reset && !(car.prevButtons & Btn.Reset) && race.phase === RacePhase.Racing && !car.finished) {
       // The driver asked to be put back on the track.
@@ -191,7 +194,7 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     clampSpeed(car);
     const lapsBefore = car.lap;
     updateProgress(car, track, w.tick, w.events);
-    if (race.laps > 0 && !car.finished && car.lap > lapsBefore && lapsBefore >= race.laps) finishCar(w, car);
+    if (race.laps > 0 && !w.elim && !car.finished && car.lap > lapsBefore && lapsBefore >= race.laps) finishCar(w, car);
     const lost = car.stuckTicks > STUCK_RESPAWN_TICKS || (car.aiDriven && car.wrongWayTicks > AI_WRONG_WAY_TICKS);
     if (lost && !car.finished && car.wreckTicks === 0) {
       respawnCar(car, track, safeRespawnS(track, car.trackS - 4));
@@ -200,8 +203,10 @@ export function stepWorld(w: World, track: Track, inputs: readonly (CarInput | u
     }
   }
 
+  // Elimination: the last car goes at the leader's line; its own end rules.
+  if (w.elim) stepElimination(w, track);
   // Race end: all people done (or everybody), or the post-finish timeout.
-  if (race.phase === RacePhase.Racing && race.laps > 0 && race.finishOrder.length > 0) {
+  else if (race.phase === RacePhase.Racing && race.laps > 0 && race.finishOrder.length > 0) {
     let humans = 0;
     let humansDone = 0;
     let latestHumanFinish = 0;

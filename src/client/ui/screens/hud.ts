@@ -8,6 +8,7 @@ import { RacePhase } from '../../../shared/sim/world.ts';
 import { lightsOn } from '../../game/raceView.ts';
 import { drawText, textWidth } from '../font.ts';
 import { drawDriveMeter } from './driveHud.ts';
+import { drawElimAlerts, drawElimStatus, elimFinishText, fieldSize } from './elimHud.ts';
 import { drawCrateReadout } from './crateHud.ts';
 
 export function ordinal(n: number): string {
@@ -43,9 +44,9 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
     drawText(ctx, pos, x, 6, { scale: 4, color: YELLOW });
     const px = x + textWidth(pos, 4) + 3;
     drawText(ctx, ordinal(car.place).slice(pos.length), px, 6, { scale: 2, color: YELLOW });
-    drawText(ctx, `/${world.cars.length}`, px, 22, { color: '#d0d0d0' });
+    drawText(ctx, `/${fieldSize(world, carId)}`, px, 22, { color: '#d0d0d0' });
     const lap = Math.max(1, Math.min(race.laps, car.lap));
-    drawText(ctx, `LAP ${lap}/${race.laps}`, x, 40, { scale: 2 });
+    if (!drawElimStatus(ctx, x, 40, world, carId)) drawText(ctx, `LAP ${lap}/${race.laps}`, x, 40, { scale: 2 });
   } else {
     drawText(ctx, title, x, 6, { scale: 2, color: YELLOW });
     drawText(ctx, car.lap > 0 ? `LAP ${car.lap}` : 'START', x, 24, { scale: 2 });
@@ -83,10 +84,11 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
 
   const cx = r.x + r.w / 2;
   if (car.finished) {
-    drawText(ctx, `FINISHED ${ordinal(race.finishOrder.indexOf(carId) + 1)}!`, cx, r.h * 0.28, { scale: 3, color: YELLOW, align: 'center' });
+    drawText(ctx, elimFinishText(world) ?? `FINISHED ${ordinal(race.finishOrder.indexOf(carId) + 1)}!`, cx, r.h * 0.28, { scale: 3, color: YELLOW, align: 'center' });
   } else if (car.wrongWayTicks > 90 && race.phase === RacePhase.Racing) {
     if (Math.floor(world.tick / 15) % 2 === 0) drawText(ctx, 'WRONG WAY!', cx, r.h * 0.3, { scale: 3, color: '#ff4a3a', align: 'center' });
   }
+  drawElimAlerts(ctx, r, world, carId);
 }
 
 function damageColor(car: World['cars'][number]): string {
@@ -202,7 +204,7 @@ export class Minimap {
       ctx.fillStyle = '#ff2b1c';
       ctx.fillRect(px - 4, py - 4, 8, 8);
     }
-    for (const c of world.cars) if (!players.includes(c.id)) plot(c.id, 2);
+    for (const c of world.cars) if (!players.includes(c.id) && c.outOrder === 0) plot(c.id, 2);
     for (const id of players) plot(id, 4);
   }
 

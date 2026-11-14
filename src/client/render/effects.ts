@@ -11,6 +11,7 @@ import type { World } from '../../shared/sim/world.ts';
 import type { Particles } from './particles.ts';
 import type { SteamSource } from './industry.ts';
 import { driftBoostBurst, driveFx } from './driveFx.ts';
+import { isCleared } from '../../shared/sim/elimination.ts';
 import { crateFx } from './crateView.ts';
 
 const PAVED = new Set<number>([Surface.Asphalt, Surface.Curb, Surface.Wet]);
@@ -98,7 +99,7 @@ export class Effects {
       }
       driveFx(p, car, s, fx, fz, rx, rz);
       // A burning wreck, or smoke from a badly damaged engine.
-      if (car.wreckTicks > 0) {
+      if (car.wreckTicks > 0 && !isCleared(car, world.tick)) {
         p.spawn(car.x + (R() - 0.5), car.y + 1, car.z + (R() - 0.5), (R() - 0.5) * 1.5, 3 + R() * 2, (R() - 0.5) * 1.5,
           1.6 + R(), 3, 16, 0.12, 0.11, 0.12, -0.5, 0.8);
         if (R() < 0.7) {
@@ -144,10 +145,10 @@ export class Effects {
     const ev = world.events;
     for (let k = 0; k < ev.count; k++) {
       const e = ev.list[k];
-      if (e.kind === Ev.Explosion || e.kind === Ev.Wreck) {
+      if (e.kind === Ev.Explosion || e.kind === Ev.Wreck || e.kind === Ev.Eliminated) {
         // Height: the car hit, or (a missile into a wall) whoever fired it.
         const who = world.cars[e.car] ?? world.cars[e.other];
-        this.explosion(e.x, e.z, e.kind === Ev.Wreck ? 1.6 : e.value === 3 ? 0.7 : 1, who?.y ?? 0);
+        this.explosion(e.x, e.z, e.kind === Ev.Eliminated ? 2 : e.kind === Ev.Wreck ? 1.6 : e.value === 3 ? 0.7 : 1, who?.y ?? 0);
         continue;
       }
       if (e.kind === Ev.DriftBoost && world.cars[e.car]) driftBoostBurst(p, world.cars[e.car], e.value);

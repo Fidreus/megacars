@@ -30,6 +30,11 @@ export interface RaceSummary {
   damage: number;
   /** The rules saw the whole race (not so online: the world there is predicted). */
   live: boolean;
+  /** An elimination race, and the grid slot the player started from (1 = front). */
+  elimination?: boolean;
+  start?: number;
+  /** Out of an elimination race (not a finish: no clean-finish achievements). */
+  eliminated?: boolean;
 }
 
 export type AchInput =
@@ -165,7 +170,7 @@ export const ACHIEVEMENTS: readonly AchievementRule[] = [
   },
   {
     id: 'untouched', name: 'UNTOUCHED', desc: 'FINISH WITH UNDER 5% DAMAGE',
-    feed: (m, i) => { if (i.kind === 'race' && i.r.cars >= 2 && i.r.laps >= 2 && i.r.damage < 0.05) m.set(1); },
+    feed: (m, i) => { if (i.kind === 'race' && i.r.cars >= 2 && i.r.laps >= 2 && i.r.damage < 0.05 && !i.r.eliminated) m.set(1); },
   },
   {
     id: 'medalSet', name: 'FULL SET', desc: 'BRONZE, SILVER AND GOLD', goal: 3,
@@ -214,6 +219,15 @@ export const ACHIEVEMENTS: readonly AchievementRule[] = [
   {
     id: 'goldAll', name: 'MIDAS TOUCH', desc: 'ALL GOLD IN ALL LEAGUES', goal: GAME_TRACKS * 3,
     feed: (m, i) => { if (i.kind === 'medal') m.max(i.totals.gold.standard + i.totals.gold.super + i.totals.gold.mega); },
+  },
+  // Elimination races.
+  {
+    id: 'elimWin', name: 'LAST CAR STANDING', desc: 'WIN AN ELIMINATION RACE',
+    feed: (m, i) => { if (i.kind === 'race' && i.r.elimination && won(i.r)) m.set(1); },
+  },
+  {
+    id: 'elimSurvivor', name: 'SURVIVOR', desc: 'FINAL TWO FROM LAST ON GRID',
+    feed: (m, i) => { if (i.kind === 'race' && i.r.elimination && i.r.cars >= 6 && i.r.start === i.r.cars && i.r.place <= 2) m.set(1); },
   },
 ];
 
