@@ -74,6 +74,11 @@ import { countPlay, liked, likeTrack, listTracks, publishTrack, type PublishedTr
 import type { TrackDef } from '../shared/track/types.ts';
 import { drawText, LINE_H, textWidth } from './ui/font.ts';
 import { cycle, Menu, type MenuEvents, type MenuItem } from './ui/menu.ts';
+import { cupWeatherNote, roomWeather, roomWeatherItem, snowyTrack, weatherNote, weatherSettingItem } from './game/weatherUi.ts';
+import { weatherOf } from '../shared/game/weather.ts';
+import { WeatherLight } from './render/weather.ts';
+import { RainSound } from './audio/rain.ts';
+import { drawWeatherCue } from './ui/weatherCue.ts';
 import { drawCountdown, drawPlayerHud, formatTime, Minimap } from './ui/screens/hud.ts';
 import { drawResults } from './ui/screens/results.ts';
 import { connText, drawLobby, inviteLink, pingColor } from './ui/screens/lobby.ts';
@@ -189,6 +194,9 @@ export class App {
   private tyres: TyreSound[] = [];
   private farEngines: EngineSound[] = [];
   private crowd: Crowd | null = null;
+  private rainSound: RainSound | null = null;
+  /** Greyer light and lightning while it rains. */
+  private readonly weatherLight = new WeatherLight();
   /** Airborne flag of each player car last tick (for the take-off whoosh). */
   private wasAirborne = [false, false];
   private tuningPanel: TuningPanel | null = null;
@@ -675,6 +683,7 @@ export class App {
       { label: () => `DIFFICULTY: ${DIFFICULTIES[s.difficulty]}`, change: (d: number) => { s.difficulty = cycle(s.difficulty, 3, d); changed(); } },
       { label: () => `WEAPONS: ${s.weapons ? 'ON' : 'OFF'}`, change: () => { s.weapons = !s.weapons; changed(); } },
       { label: () => `LEAGUE: ${LEAGUE_NAMES[s.league]}`, change: (d: number) => { s.league = LEAGUES[cycle(LEAGUES.indexOf(s.league), LEAGUES.length, d)]; changed(); } },
+      weatherSettingItem(s, changed),
       {
         label: () => (s.players === 1 ? 'PLAYERS: 1' : 'PLAYERS: 2 SPLIT SCREEN'),
         change: () => {
@@ -716,7 +725,7 @@ export class App {
 
   private toSetup(): void {
     this.showAttract('setup');
-    this.setupMenu.index = 7;
+    this.setupMenu.index = 8;
   }
 
   /** New championships: laps, difficulty, weapons and class (shared with the single race). */
@@ -1104,6 +1113,7 @@ export class App {
         disabled: notHost,
         change: (d: number) => o().configure({ league: LEAGUES[cycle(LEAGUES.indexOf(leagueOf(cfg()?.league)), LEAGUES.length, d)] }),
       },
+      roomWeatherItem(cfg, notHost, (c) => o().configure(c)),
       { label: () => `UPGRADES: ${cfg()?.upgrades === false ? 'OFF' : 'ON'}`, disabled: notHost, change: () => o().configure({ upgrades: cfg()?.upgrades === false }) },
       {
         label: () => `ROOM: ${pub() ? 'PUBLIC - IN THE ROOM LIST' : 'PRIVATE - CODE ONLY'}`,
@@ -1176,7 +1186,8 @@ export class App {
   private raceSummary(room: RoomInfo): string {
     const c = room.config;
     const track = (room.tourNames[Math.min(room.tourIndex, c.tour.length - 1)] ?? trackName(c.track)).toUpperCase();
-    return `${track}   ${raceLaps(c.track, c.laps)} LAPS   ${c.ai} AI   WEAPONS ${c.weapons === false ? 'OFF' : 'ON'}   ${LEAGUE_NAMES[leagueOf(c.league)]}`;
+    const sky = weatherNote(roomWeather(c), snowyTrack(c.track));
+    return `${track}   ${raceLaps(c.track, c.laps)} LAPS   ${c.ai} AI   WEAPONS ${c.weapons === false ? 'OFF' : 'ON'}   ${LEAGUE_NAMES[leagueOf(c.league)]}${sky ? `   ${sky}` : ''}`;
   }
 
   /** The public room list (refreshed every few seconds while shown). */
@@ -1544,7 +1555,8 @@ export class App {
       countPlay(rs.track.def.id);
     }
     const checked = specProblem(this.localOnly ? { ...rs.spec, track: TRACK_LIST[0].id } : rs.spec) === null;
-    const fair = !this.localOnly || !(ownTuning && isTuned(this.tuning));
+    // Lap records are set in the dry.
+    const fair = (!this.localOnly || !(ownTuning && isTuned(this.tuning))) && weatherOf(rs.spec) === 'dry';
     this.replay = !spec && rs.playerCars.length === 1 && checked && fair ? new ReplayRecorder() : null;
     this.recordPending = false;
     this.recordNote = '';
@@ -1584,7 +1596,7 @@ export class App {
     const d = humans[p];
     this.showAttract('shop');
     this.shop = this.makeShop({
-      title: () => `${this.career ? `DIV ${this.career.division} - ` : ''}${humans.length > 1 ? `${d.name} - ` : ''}RACE ${cup.race + 1} OF ${cup.tracks.length}: ${trackName(cup.tracks[cup.race]).toUpperCase()}`,
+      title: () => `${this.career ? `DIV ${this.career.division} - ` : ''}${humans.length > 1 ? `${d.name} - ` : ''}RACE ${cup.race + 1} OF ${cup.tracks.length}: ${trackName(cup.tracks[cup.race]).toUpperCase()}${cupWeatherNote(cup)}`,
       profile: () => d.profile,
       buy: (item) => {
         const err = buy(d.profile, item);
@@ -2412,6 +2424,7 @@ export class App {
     this.view.update(alpha, dt, 0.19 / cam0.metersPerPixel, this.renderer.paletteMode !== PaletteMode.Off);
     this.timeTrial?.update(this.world, this.session.playerCars[0], this.lapTape, alpha, dt);
     this.view.particles.light.value = this.mood.particleLight;
+    this.weatherLight.update(this.mood, this.view.weather.rain, this.view.weather.snow, dt, { hemi: this.hemi, sun: this.sun, grade: this.renderer.grade, scene: this.scene });
     animTime.value = performance.now() / 1000;
     this.sceneryAnimate?.(animTime.value);
     this.updateAudio();
@@ -2569,6 +2582,9 @@ export class App {
       engine.update(countdown ? grid : speed01, countdown ? 0.3 : throttle, fall * fall * 0.8, dx / 25, now, doppler * this.slowmo.pitch);
     });
     this.crowd.update(me ? this.crowdCloseness(me) : 0, now);
+    this.rainSound ??= new RainSound(this.audio);
+    this.rainSound.update(this.mode === 'race' ? this.view.weather.rain : 0, this.view.weather.snow, this.weatherLight.thunder, now);
+    this.weatherLight.thunder = 0;
   }
 
   private drawUi(dt: number): void {
@@ -2777,6 +2793,7 @@ export class App {
     const rival = s instanceof RaceSession && this.cupRace ? rivalCar(s.spec.entrants) : -1;
     this.minimap.draw(ctx, s.track, w, s.colors, s.playerCars, mx, my, mw, mh, rival);
     if (rival >= 0) this.drawRivalTag(ctx, rival);
+    if (!this.showingResults) drawWeatherCue(ctx, W, H, mx + mw / 2, split ? my - 13 : my + mh + (this.netRace ? 16 : 4), w, this.view.weather.snow);
     drawCountdown(ctx, W, w);
     if (this.touch.enabled && !split) {
       const me = w.cars[s.playerCars[0]];

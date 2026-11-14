@@ -16,6 +16,7 @@ import { gripBudget, gripOmegaMax, powerOversteer, slideOmegaMax, type CarState 
 import { Btn, type CarInput } from '../sim/input.ts';
 import { effectiveSkill, personaOf } from './persona.ts';
 import { expect, notice, PLANNED_SLIDE, Sense } from './reaction.ts';
+import { roadBrakeScale, roadGripScale, roadSlideScale } from '../sim/weather.ts';
 
 export const AiMode = { Grip: 0, Drift: 1 } as const;
 
@@ -85,17 +86,22 @@ function lineStep(track: Track, i: number): number {
   return j === 0 ? line.length - line.s[i] : line.s[j] - line.s[i];
 }
 
-/** Highest speed from which the car can still slow for every corner ahead. */
-export function plannedSpeed(track: Track, from: number, aLat: number, aBrake: number, vCap: number): number {
+/**
+ * Highest speed from which the car can still slow for every corner ahead.
+ * `aGentle` caps the lateral grip planned for bends gentler than a straight's
+ * (driven with grip, never slid; see straightR).
+ */
+export function plannedSpeed(track: Track, from: number, aLat: number, aBrake: number, vCap: number, aGentle = Infinity): number {
   const line = track.line;
   const n = track.n;
+  const gentle = 1 / AI_PARAMS.straightR;
   let vAllowed = vCap;
   let dist = 0;
   let k = from;
   while (dist < AI_PARAMS.planAhead) {
     const kap = Math.abs(line.curv[k]);
     if (kap > 1e-4) {
-      const vt = Math.sqrt(aLat / kap);
+      const vt = Math.sqrt((kap < gentle ? Math.min(aLat, aGentle) : aLat) / kap);
       const va = Math.sqrt(vt * vt + 2 * aBrake * dist);
       if (va < vAllowed) vAllowed = va;
     }
@@ -175,7 +181,7 @@ export function aiDrive(
       if (ahead < 1 || ahead > 16) continue;
       if (fwd - theirs <= 0.5) continue;
       dodge += (side > 0 ? -1 : 1) * (1 - ahead / 16) * 4 * persona.give;
-      if (ahead < 8 * Math.min(1, persona.give)) vTraffic = Math.min(vTraffic, theirs + ahead * 0.8);
+      if (ahead < 8 * Math.min(1, persona.give)) vTraffic = Math.min(vTraffic, theirs + ahead * 0.8 * roadBrakeScale(surf.wet));
     }
   }
   if (!notice(car, persona, Sense.Traffic, near, tick)) {
@@ -197,12 +203,13 @@ export function aiDrive(
     }
   }
 
-  // --- Speed: brake early enough for every corner within planning range.
-  const aLat = (drift ? t.aSlide * AI_PARAMS.latSlide : t.aGrip * AI_PARAMS.latGrip) * skill;
-  let vAllowed = Math.min(
-    vTraffic,
-    plannedSpeed(track, car.trackIdx, aLat, t.brakeDecel * AI_PARAMS.brakeUse * persona.brake * (1 - lack * SKILL_PARAMS.brake), t.vTop * 1.5),
-  );
+  // --- Speed: brake early enough for every corner within planning range (on a wet road, with wet grip).
+  const wet = surf.wet;
+  const aLat = (drift ? t.aSlide * AI_PARAMS.latSlide * roadSlideScale(wet) : t.aGrip * AI_PARAMS.latGrip * roadGripScale(wet)) * skill;
+  const aBrake = t.brakeDecel * AI_PARAMS.brakeUse * persona.brake * (1 - lack * SKILL_PARAMS.brake) * roadBrakeScale(wet);
+  // Gentle bends are driven with grip (never slid), and the wetter, the more carefully.
+  const aGentle = wet > 0 ? (t.aGrip * AI_PARAMS.straightGrip * roadGripScale(wet) * skill) / (wet * wet) : Infinity;
+  let vAllowed = Math.min(vTraffic, plannedSpeed(track, car.trackIdx, aLat, aBrake, t.vTop * 1.5, aGentle));
   let throttle = 1;
   let brake = 0;
   if (pitting && pit) {
@@ -282,7 +289,12 @@ export function aiDrive(
     // On a straight never ask the tyres for more than they give (weaving round
     // traffic, ice): that is what tips a gripping car into a slide.
     if (calm && s > 5) omegaDes = clamp(omegaDes, (-budget * AI_PARAMS.straightGrip) / s, (budget * AI_PARAMS.straightGrip) / s);
-    omegaMax = gripOmegaMax(t, s, budget, surf.slippery > 0);
+    omegaMax = gripOmegaMax(t, s, budget * surf.steerAsk, surf.slippery > 0);
+    // On a wet road full lock asks more than the tyres give: never ask for more than there is.
+    if (surf.steerAsk > 1) {
+      const cap = gripOmegaMax(t, s, budget, surf.slippery > 0);
+      omegaDes = clamp(omegaDes, -cap, cap);
+    }
   } else {
     omegaMax = slideOmegaMax(t, s);
     // The power slide depends on the steering being solved for: use the wheel as it is now.

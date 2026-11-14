@@ -3,6 +3,7 @@
 import type { SteerMode } from '../input/touch.ts';
 import { leagueOf, type League } from '../../shared/game/leagues.ts';
 import { DEFAULT_TRACK, trackDef } from '../../shared/track/defs/index.ts';
+import type { WeatherChoice } from '../../shared/game/weather.ts';
 
 export const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD'] as const;
 
@@ -46,6 +47,8 @@ export interface RaceSettings {
   vibration?: boolean;
   /** A slow-motion beat when a car is wrecked (offline races). */
   slowMotion?: boolean;
+  /** Single races: dry, rain, changing or random (absent = dry). */
+  weather?: WeatherChoice;
 }
 
 /** Current default-volume revision (2: music starts on the second lowest step). */

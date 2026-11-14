@@ -10,6 +10,7 @@ import { createWorld, type World } from '../sim/world.ts';
 import { leagueTuning } from './leagues.ts';
 import { defaultLoadout, tuningFor } from './shop.ts';
 import { applyPersona } from './personaSetup.ts';
+import { weatherPlanFor } from './weather.ts';
 
 export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING): { track: Track; world: World; tunings: CarTuning[] } {
   const def = trackDef(spec.track);
@@ -20,6 +21,7 @@ export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING
     countdownTicks: spec.countdownTicks,
     weapons: spec.weapons,
   });
+  world.weather = weatherPlanFor(spec, track);
   const tunings: CarTuning[] = [];
   base = leagueTuning(base, spec.league);
   if (spec.damageSlows === false) base = { ...base, damageSlow: 0 };

@@ -10,6 +10,9 @@ import { stepWorld } from '../sim/step.ts';
 import { createWorld, RacePhase, standings, type World } from '../sim/world.ts';
 import { PERSONAS } from '../ai/persona.ts';
 import { setPersona } from './personaSetup.ts';
+import { makeWeatherPlan, type Weather } from '../sim/weather.ts';
+import { expectedRaceTicks } from './weather.ts';
+import type { League } from './leagues.ts';
 
 export interface SimRaceResult {
   seed: number;
@@ -27,10 +30,11 @@ export interface SimRaceResult {
   order: number[];
 }
 
-export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number; laps?: number; tuning?: CarTuning; weapons?: boolean; personas?: boolean } = {}): SimRaceResult {
+export function simulateRace(def: TrackDef, seed: number, opts: { cars?: number; laps?: number; tuning?: CarTuning; weapons?: boolean; personas?: boolean; weather?: Weather; league?: League } = {}): SimRaceResult {
   const track = getTrack(def);
   const carCount = opts.cars ?? 8;
   const world: World = createWorld(track, carCount, seed, { laps: opts.laps ?? 3, countdownTicks: 1, weapons: opts.weapons });
+  if (opts.weather) world.weather = makeWeatherPlan(opts.weather, seed, world.race.startTick, expectedRaceTicks(track, { laps: world.race.laps, league: opts.league }));
   const rnd = makeRng(seed * 7 + 1);
   for (const c of world.cars) {
     c.aiDriven = 1;

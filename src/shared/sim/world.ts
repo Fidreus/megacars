@@ -7,6 +7,7 @@ import { createCar, type CarState } from './car.ts';
 import { makeEventBuffer, type EventBuffer } from './events.ts';
 import { resetProgress } from './race.ts';
 import { giveStartAmmo, type Shot } from './weapons.ts';
+import type { WeatherPlan } from './weather.ts';
 
 export const RacePhase = { Countdown: 0, Racing: 1, Finished: 2 } as const;
 
@@ -29,6 +30,8 @@ export interface RaceState {
 export interface World {
   tick: number;
   rng: number;
+  /** Rain during the race (absent = dry). Fixed by the race spec, so it is not in snapshots. */
+  weather?: WeatherPlan;
   cars: CarState[];
   race: RaceState;
   /** Missiles and mines (slots with kind 0 are free). */

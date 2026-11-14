@@ -11,6 +11,7 @@ import { buildBridges } from './bridgeMesh.ts';
 import { buildPitView } from './pitMesh.ts';
 import { buildBoostPads } from './boostMesh.ts';
 import { themeOf } from './theme.ts';
+import { roadWeather } from './weather.ts';
 import { animTime, toon } from './materials.ts';
 
 export const SURFACE_COLORS: Record<number, string> = {
@@ -226,6 +227,7 @@ function buildRoad(track: Track): THREE.Mesh {
     uCurbA: { value: new THREE.Color('#d42a24') },
     uCurbB: { value: new THREE.Color('#ececec') },
     uLength: { value: track.length },
+    ...roadWeather,
   };
   const theme = themeOf(track.def.theme);
   const mowed = theme.mowed && (track.def.runoffSurface ?? Surface.Grass) === Surface.Grass && !theme.runoff;
@@ -271,7 +273,10 @@ function buildRoad(track: Track): THREE.Mesh {
         uniform vec3 uLine;
         uniform vec3 uCurbA;
         uniform vec3 uCurbB;
-        uniform float uLength;`,
+        uniform float uLength;
+        uniform float uWet;
+        uniform vec3 uSheen;
+        uniform float uSlush;`,
       )
       .replace(
         '#include <color_fragment>',
@@ -313,6 +318,12 @@ function buildRoad(track: Track): THREE.Mesh {
               if (k >= uPatchCount) break;
               if (uPatch[k].w > 0.5 && patchEdge(k, vWPos.xz) < 1.0) col = uPatchColor[k] * (0.84 + 0.2 * n1);
             }
+          }
+          if (uWet > 0.0) {
+            // Rain: a darker road with puddles catching the sky (slush on snow tracks).
+            float pud = smoothstep(0.56, 0.74, valueNoise(vWPos.xz * 0.23 + 7.0)) * step(a, hwv);
+            col = mix(col, uSlush > 0.5 ? mix(col, vec3(0.78, 0.82, 0.88), 0.25) : col * 0.62 + uSheen * 0.06, uWet * (a <= hwv ? 1.0 : 0.4));
+            col = mix(col, uSlush > 0.5 ? vec3(0.62, 0.66, 0.72) : uSheen * 0.62 + col * 0.25, uWet * pud * 0.6);
           }
           #ifdef CLOUDS
           col *= cloudShade(vWPos.xz, uTime);

@@ -167,6 +167,7 @@ export function applySnapshot(data: Uint8Array, w: World, lastInputs: CarInput[]
 export function copyWorld(dst: World, src: World): void {
   dst.tick = src.tick;
   dst.rng = src.rng;
+  dst.weather = src.weather;
   Object.assign(dst.race, src.race, { finishOrder: [...src.race.finishOrder] });
   for (let i = 0; i < src.cars.length; i++) {
     if (!dst.cars[i]) dst.cars[i] = createCar(i, 0, 0, 0);

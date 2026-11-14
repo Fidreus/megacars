@@ -1,4 +1,4 @@
-// Headless AI races: `npm run sim -- --seeds 20 --laps 3 --track greenvalley [--weapons] [--league super]`
+// Headless AI races: `npm run sim -- --seeds 20 --laps 3 --track greenvalley [--weapons] [--league super] [--weather rain|changing]`
 import { DEFAULT_TUNING } from '../src/shared/config/tuning.ts';
 import { leagueOf, leagueTuning } from '../src/shared/game/leagues.ts';
 import { simulateRace } from '../src/shared/game/raceSim.ts';
@@ -13,14 +13,16 @@ const seeds = Number(arg('seeds', '20'));
 const laps = Number(arg('laps', '3'));
 const def = TRACKS[arg('track', DEFAULT_TRACK)];
 const weapons = args.includes('--weapons');
-const tuning = leagueTuning(DEFAULT_TUNING, leagueOf(arg('league', 'standard')));
+const weather = arg('weather', 'dry') as 'dry' | 'rain' | 'changing';
+const league = leagueOf(arg('league', 'standard'));
+const tuning = leagueTuning(DEFAULT_TUNING, league);
 if (!def) throw new Error('unknown track');
 
 let failures = 0;
 let respawns = 0;
 const t0 = performance.now();
 for (let seed = 1; seed <= seeds; seed++) {
-  const r = simulateRace(def, seed, { laps, weapons, tuning });
+  const r = simulateRace(def, seed, { laps, weapons, tuning, weather, league });
   respawns += r.respawns;
   const ok = r.finished === r.cars;
   if (!ok) failures++;

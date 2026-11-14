@@ -60,6 +60,12 @@ export interface SurfaceMix {
   accel: number;
   /** Share of contact patches on slippery ground (0, 0.5 or 1). */
   slippery: number;
+  /** Share of full braking (below 1 only on a wet road, see weather.ts). */
+  brake: number;
+  /** Road wetness the computer drivers plan for (0 = dry). */
+  wet: number;
+  /** Grip full lock asks for, over what the tyres give (above 1 on a wet road: the tail steps out). */
+  steerAsk: number;
 }
 
 export function mixSurfaces(a: SurfaceId, b: SurfaceId, out: SurfaceMix): SurfaceMix {
@@ -72,9 +78,12 @@ export function mixSurfaces(a: SurfaceId, b: SurfaceId, out: SurfaceMix): Surfac
   out.vTop = (sa.vTop + sb.vTop) * 0.5;
   out.accel = (sa.accel + sb.accel) * 0.5;
   out.slippery = ((sa.slippery ? 1 : 0) + (sb.slippery ? 1 : 0)) * 0.5;
+  out.brake = 1;
+  out.wet = 0;
+  out.steerAsk = 1;
   return out;
 }
 
 export function makeSurfaceMix(): SurfaceMix {
-  return { grip: 1, slide: 1, scrub: 1, drag: 0, dragLinear: 0, vTop: 1, accel: 1, slippery: 0 };
+  return { grip: 1, slide: 1, scrub: 1, drag: 0, dragLinear: 0, vTop: 1, accel: 1, slippery: 0, brake: 1, wet: 0, steerAsk: 1 };
 }
