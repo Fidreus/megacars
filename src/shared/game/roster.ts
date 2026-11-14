@@ -10,4 +10,4 @@ export const AI_NAMES = [
 ];
 
 /** AI skill by difficulty (EASY, MEDIUM, HARD); 1 is the flawless driver, HARD a little below it. */
-export const AI_SKILL = [0.72, 0.86, 0.97];
+export const AI_SKILL = [0.67, 0.86, 0.97];
