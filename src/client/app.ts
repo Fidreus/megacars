@@ -258,6 +258,8 @@ export class App {
   private pageReturn: Mode = 'title';
   /** The pages under the records, achievements or paint screen, to go back to. */
   private screenFrom: typeof this.pages | null = null;
+  private helpPage = 0;
+  private helpPages = 1;
   /** The pause menu's options page (null: the pause menu itself). */
   private pauseSub: Menu | null = null;
   private menuEvents: MenuEvents = {};
@@ -2366,7 +2368,12 @@ export class App {
       return;
     }
     if (this.mode === 'help') {
-      if (nav.back || nav.confirm || nav.click || nav.left || nav.right) this.mode = 'title';
+      // Short screens: the tips come in pages.
+      if (!nav.back && (nav.confirm || nav.click || nav.right) && this.helpPage + 1 < this.helpPages) this.helpPage++;
+      else if (nav.back || nav.confirm || nav.click || nav.left || nav.right) {
+        this.mode = 'title';
+        this.helpPage = 0;
+      }
       return;
     }
     if (this.mode === 'credits') {
@@ -3176,7 +3183,7 @@ export class App {
     } else if (this.mode === 'setup') {
       this.drawSetup(ctx, W, H, dt);
     } else if (this.mode === 'help') {
-      drawHelp(ctx, W, H, this.controls);
+      this.helpPages = drawHelp(ctx, W, H, this.controls, this.touch.enabled, this.helpPage);
     } else if (this.mode === 'records') {
       this.recordsScreen.draw(ctx, W, H);
     } else if (this.mode === 'achievements') {
