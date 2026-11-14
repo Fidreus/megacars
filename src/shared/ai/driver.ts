@@ -178,7 +178,20 @@ export function aiDrive(
   if (car.aiReverseTicks > 0) {
     car.aiReverseTicks--;
     const j = (car.trackIdx + 12) % n;
-    const err = wrapAngle(headingOf(line.x[j] - car.x, line.z[j] - car.z) - car.heading);
+    let tx = line.x[j];
+    let tz = line.z[j];
+    const pit = track.pit;
+    if (pit) {
+      // Off the road at the pit entry (nose against the island): turn toward the lane, not back toward the road.
+      pitLocal(pit, car.x, car.z, pitLoc);
+      if (pitLoc.u >= pit.a && pitLoc.u < pit.b - 15 && pitLoc.lat > pit.barrier && pitLoc.lat <= pitWallOffset(pit, pitLoc.u) + 1) {
+        const ut = pitLoc.u + 15;
+        const lat = laneOffset(pit, ut) * pit.side;
+        tx = pit.ox + pit.tx * ut + pit.nx * lat;
+        tz = pit.oz + pit.tz * ut + pit.nz * lat;
+      }
+    }
+    const err = wrapAngle(headingOf(tx - car.x, tz - car.z) - car.heading);
     out.steer = err > 0 ? -1 : 1;
     out.throttle = 0;
     out.brake = 1;
