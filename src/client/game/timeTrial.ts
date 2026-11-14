@@ -252,10 +252,11 @@ export class TimeTrial {
       drawText(ctx, 'CROSS THE LINE TO START', cx, 19, { color: '#c8d0dc', align: 'center' });
     }
     // What isn't there (yet), under the gap.
-    let y = t ? 41 : 8;
+    // Narrow screens: no room between the lap box and the minimap, so at the bottom, short.
+    const narrow = W < 500;
+    let y = narrow ? H - 36 : t ? 41 : 8;
     for (const msg of [this.mine ? '' : this.mineStatus, this.world ? '' : this.worldStatus]) {
       if (!msg) continue;
-      // Narrow screens: just the first part, clear of the lap box and the minimap.
       drawText(ctx, textWidth(msg) <= W - 300 ? msg : msg.split(' - ')[0], cx, y, { color: '#8090a8', align: 'center' });
       y += 10;
     }
