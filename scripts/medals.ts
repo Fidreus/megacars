@@ -1,13 +1,12 @@
 // Regenerates src/shared/game/medalTimes.ts: `npm run medals`.
 // A medal lap is set from how fast the computer drivers lap alone on each
-// track, in each league: BRONZE from the EASY driver, SILVER from MEDIUM and
-// GOLD a little faster than the best HARD lap. Deterministic: the same
-// simulation always writes the same table. Run it again after the physics or
+// track, in each league: BRONZE from a slow driver (skill 0.72), SILVER from
+// MEDIUM (0.86) and GOLD a little faster than the flawless driver's best lap.
+// Deterministic: the same simulation always writes the same table. Run it again after the physics or
 // the tracks change.
 import { writeFileSync } from 'node:fs';
 import { DEFAULT_TUNING } from '../src/shared/config/tuning.ts';
 import { leagueTuning, LEAGUES } from '../src/shared/game/leagues.ts';
-import { AI_SKILL } from '../src/shared/game/roster.ts';
 import { getTrack } from '../src/shared/track/builder.ts';
 import { TRACK_LIST } from '../src/shared/track/defs/index.ts';
 import { stepWorld } from '../src/shared/sim/step.ts';
@@ -38,7 +37,11 @@ function bestSoloLap(track: Track, tuning: CarTuning, skill: number): number {
   return best;
 }
 
-const [easy, medium, hard] = AI_SKILL;
+// The medal drivers' skills are fixed, not the difficulties' (AI_SKILL), so
+// tuning a difficulty never moves the medals: GOLD from the flawless driver
+// (1.0), SILVER from MEDIUM's 0.86, BRONZE from 0.72 (EASY before it was made
+// slower).
+const [easy, medium, hard] = [0.72, 0.86, 1];
 const rows: string[] = [];
 for (const def of TRACK_LIST) {
   const track = getTrack(def);

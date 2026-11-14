@@ -46,12 +46,17 @@ eller motstyr för att räta upp. Is, olja och snö sladdar av sig själva.
 **Driftboost:** en sladd genom en kurva laddar en boost i tre nivåer, efter
 ungefär 0,6, 1,3 och 2,2 sekunders drift (mätaren bredvid hastigheten, gnistor
 från bakhjulen i blått, orange och lila). När bilen greppar igen får den en
-kort knuff framåt: nivå 1 är en liten puff, nivå 3 (en lång hårnål på Cigar
-Circuit) ungefär som en turbo. Det räknas bara när bilen verkligen svänger,
+kort knuff framåt: nivå 1 är en liten puff (0,6 s), nivå 2 längre och
+starkare (1,2 s), nivå 3 (en lång hårnål på Cigar Circuit) lite bättre än en
+turbo (2 s). Så länge du håller driftknappen genom en laddad drift nöter
+däcken bara en fjärdedel så mycket fart, så en lång ren drift lönar sig mer
+än en kort: i kurvrika banor med långa kurvor vinner den som håller kvar
+driften 1–3 % av ett varv mot den som bara slänger in bilen. Det räknas bara när bilen verkligen svänger,
 i en kurva och strax efter den; att sladda eller slingra nerför en raka ger
 ingen laddning och ingen reparation. Is, olja och snö laddar inget, en hård
 smäll i en vägg eller en bil eller en snurr tar bort laddningen, och broms
-håller tillbaka boosten. Datorförarna laddar och får boost på samma sätt.
+håller tillbaka boosten. Datorförarna laddar och får boost på samma sätt
+(men de håller aldrig driftknappen, så de får inte den lägre nötningen).
 
 **Draft:** ligger du tätt bakom en annan bil (från några meter till ungefär
 24 m bakom, i samma riktning och i fart) dras du med: upp till 6 % högre
@@ -239,8 +244,8 @@ kontrollerar att varje lopp slutar med exakt en vinnare.
 
 De tio datorförarna har var sin personlighet som syns i hur de kör. Inom en
 svårighetsgrad skiljer det ungefär ±1,5 % i varvtid mellan dem (snittet är
-detsamma som förut; på HARD kan ingen bli snabbare än den felfria föraren,
-så där är spridningen mest åt det långsamma hållet).
+detsamma som förut; HARD ligger strax under den felfria föraren, så de
+snabbaste personligheterna kör där ungefär som den och resten lite långsammare).
 
 | Förare | Typ | Hur |
 | --- | --- | --- |
@@ -262,8 +267,8 @@ förare (på smala skärmar bara typen).
 
 Datorförarna har också **reaktionstid** som en människa: något nytt (en sladd
 de inte bett om, en bil som plötsligt dyker upp, ett mål som kommer i
-siktet, grönt ljus) hanteras först efter ca 0,25–0,35 s på EASY, 0,15–0,25 s
-på MEDIUM och 0,08–0,15 s på HARD, olika från gång till gång och per förare.
+siktet, grönt ljus) hanteras först efter ca 0,28–0,39 s på EASY, 0,15–0,25 s
+på MEDIUM och 0,10–0,17 s på HARD, olika från gång till gång och per förare.
 Att följa linjen och bromsa för en kurva de ser komma är förutseende och sker
 direkt. Bromstrycken för att drifta är olika långa. På raksträckor kör de
 rakt: inga driftstarter, inte mer styrning än däcken klarar, och en sladd
@@ -581,9 +586,11 @@ tangentbordsrobot mot den riktiga simuleringen.
 ## Medaljer
 
 Varje inbyggd bana har en BRONS-, SILVER- och GULDtid per liga (STANDARD,
-SUPERCARS, MEGACARS). Tiderna räknas fram av datorförarna: brons efter den
-LÄTTA förarens bästa ensamvarv (+2 %), silver efter MEDEL och guld en
-aning (1,5 %) snabbare än den SVÅRA förarens bästa varv. Tabellen ligger
+SUPERCARS, MEGACARS). Tiderna räknas fram av datorförarna: brons efter en
+långsam förares bästa ensamvarv (skicklighet 0,72, +2 %), silver efter MEDEL
+(0,86) och guld en aning (1,5 %) snabbare än den felfria förarens (1,0) bästa
+varv. Skickligheterna är fasta, så medaljerna flyttar sig inte när
+svårighetsgraderna (EASY 0,67, HARD 0,97) trimmas. Tabellen ligger
 incheckad i `src/shared/game/medalTimes.ts` så att spelet inte simulerar
 något vid körning. När fysiken eller banorna ändras skriver `npm run medals`
 om tabellen (deterministiskt, några sekunder); `medals.test.ts` kollar att

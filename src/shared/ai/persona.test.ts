@@ -103,12 +103,12 @@ describe('reaction time', () => {
     const [easyLo, easyHi] = range(AI_SKILL[0]);
     const [medLo, medHi] = range(AI_SKILL[1]);
     const [hardLo, hardHi, hardMean] = range(AI_SKILL[2]);
-    expect(easyLo).toBeGreaterThanOrEqual(0.24);
-    expect(easyHi).toBeLessThanOrEqual(0.36);
+    expect(easyLo).toBeGreaterThanOrEqual(0.26);
+    expect(easyHi).toBeLessThanOrEqual(0.4);
     expect(medLo).toBeGreaterThanOrEqual(0.14);
     expect(medHi).toBeLessThanOrEqual(0.26);
     expect(hardLo).toBeGreaterThanOrEqual(0.07);
-    expect(hardHi).toBeLessThanOrEqual(0.16);
+    expect(hardHi).toBeLessThanOrEqual(0.18);
     expect(hardHi - hardLo).toBeGreaterThan(0.03);
     expect(hardMean).toBeLessThan(medLo);
   });

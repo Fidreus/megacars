@@ -6,7 +6,7 @@ import { getTrack, sampleIndexAt } from '../track/builder.ts';
 import { CIGAR_CIRCUIT } from '../track/defs/cigarCircuit.ts';
 import { GREEN_VALLEY } from '../track/defs/greenValley.ts';
 import { createCar, stepCarDynamics } from './car.ts';
-import { breakDriftCharge, cornerZone, DRIFT_BOOST, driftLevel, stepDriftCharge } from './driftBoost.ts';
+import { applyDriftCharge, breakDriftCharge, cornerZone, DRIFT_BOOST, driftLevel, stepDriftCharge } from './driftBoost.ts';
 import { Ev, makeEventBuffer, pushEvent } from './events.ts';
 import { Btn, neutralInput } from './input.ts';
 import { stepWorld } from './step.ts';
@@ -99,7 +99,7 @@ describe('drift boost', () => {
     expect(cars[0].driftCharge).toBe(0);
   });
 
-  it('level 1 is clearly weaker than a turbo, level 3 about as good', () => {
+  it('level 1 is clearly weaker than a turbo, level 3 a bit better (a long clean drift pays)', () => {
     const turbo = boostGain((c) => (c.turboTicks = WEAPON.turboTicks));
     const level = (lv: number) => boostGain((c) => {
       c.driftBoostTicks = DRIFT_BOOST.ticks[lv];
@@ -108,8 +108,30 @@ describe('drift boost', () => {
     expect(level(1)).toBeGreaterThan(0);
     expect(level(1)).toBeLessThan(turbo * 0.4);
     expect(level(2)).toBeGreaterThan(level(1));
-    expect(level(3)).toBeGreaterThan(turbo * 0.75);
-    expect(level(3)).toBeLessThanOrEqual(turbo);
+    expect(level(3)).toBeGreaterThan(turbo);
+    expect(level(3)).toBeLessThan(turbo * 2);
+  });
+});
+
+describe('a long drift held with the button', () => {
+  it('scrubs less speed once it has a charge, and only while the button is held', () => {
+    const car = slidingCar();
+    const surf = makeSurfaceMix();
+    applyDriftCharge(surf, car, true);
+    expect(surf.scrub).toBe(asphalt.scrub);
+    car.driftCharge = 0.5;
+    applyDriftCharge(surf, car, false);
+    expect(surf.scrub).toBe(asphalt.scrub);
+    applyDriftCharge(surf, car, true);
+    expect(surf.scrub).toBeCloseTo(asphalt.scrub * DRIFT_BOOST.heldScrub);
+  });
+
+  it('pays more for each level: level 3 lasts longest and pushes hardest', () => {
+    for (let lv = 2; lv <= 3; lv++) {
+      expect(DRIFT_BOOST.ticks[lv]).toBeGreaterThan(DRIFT_BOOST.ticks[lv - 1]);
+      expect(DRIFT_BOOST.accel[lv]).toBeGreaterThan(DRIFT_BOOST.accel[lv - 1]);
+      expect(DRIFT_BOOST.top[lv]).toBeGreaterThan(DRIFT_BOOST.top[lv - 1]);
+    }
   });
 });
 
