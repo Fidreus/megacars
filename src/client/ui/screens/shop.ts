@@ -4,8 +4,9 @@
 
 import { DEFAULT_TUNING } from '../../../shared/config/tuning.ts';
 import {
-  AMMO_MAX, CAR_MODELS, defaultLoadout, MAX_LEVEL, priceOf, tuningFor, type Profile, type ShopItem,
+  AMMO_MAX, CAR_MODELS, defaultLoadout, MAX_LEVEL, priceOf, SPECIAL_KIND, SPECIALS, tuningFor, type Profile, type ShopItem,
 } from '../../../shared/game/shop.ts';
+import { SPECIAL_NAMES } from '../../../shared/sim/specials.ts';
 import { drawText, textWidth } from '../font.ts';
 import { Menu, type MenuEvents, type MenuItem } from '../menu.ts';
 import type { NavState } from '../../input/nav.ts';
@@ -26,6 +27,7 @@ export interface ShopContext {
 const LABELS: Record<ShopItem, string> = {
   car: 'CAR',
   engine: 'ENGINE', tyres: 'TYRES', armour: 'ARMOUR', missiles: 'MISSILES', mines: 'MINES', turbos: 'TURBO', repair: 'REPAIR',
+  homing: 'HOMING MISSILE', oil: 'OIL SLICK', shield: 'SHIELD',
 };
 
 export class ShopScreen {
@@ -34,6 +36,8 @@ export class ShopScreen {
   private message = '';
   private messageTime = 0;
   private flashMoney = 0;
+  /** Which special item the SPECIAL row offers (left/right). */
+  private special = 0;
 
   constructor(ctx: ShopContext, events: MenuEvents & { onBuy?: () => void; onDeny?: () => void }) {
     this.ctx = ctx;
@@ -55,6 +59,22 @@ export class ShopScreen {
       item('car'),
       item('engine'), item('tyres'), item('armour'),
       item('missiles'), item('mines'), item('turbos'),
+      {
+        // One row for the three special items: left/right picks, select buys into the empty slot.
+        label: () => this.specialLabel(),
+        change: (d) => (this.special = (this.special + d + SPECIALS.length) % SPECIALS.length),
+        disabled: () => !ctx.profile() || !ctx.weapons(),
+        select: () => {
+          const err = ctx.buy(SPECIALS[this.special]);
+          if (err) {
+            this.say(err);
+            events.onDeny?.();
+          } else {
+            this.flashMoney = 0.4;
+            events.onBuy?.();
+          }
+        },
+      },
       item('repair'),
       { label: () => ctx.doneLabel(), select: () => ctx.done() },
     ], events);
@@ -67,6 +87,14 @@ export class ShopScreen {
 
   handle(nav: NavState): void {
     this.menu.handle(nav);
+  }
+
+  private specialLabel(): string {
+    const p = this.ctx.profile();
+    if (p?.special) return `SPECIAL  ${SPECIAL_NAMES[p.special]}  HELD`;
+    const it = SPECIALS[this.special];
+    const price = p ? priceOf(p, it) : null;
+    return `SPECIAL < ${LABELS[it]} >${price === null ? '' : `  $${price}`}`;
   }
 
   private label(it: ShopItem): string {
@@ -84,6 +112,7 @@ export class ShopScreen {
       return `${LABELS[it]} ${pips}${price === null ? '  MAX' : cost}`;
     }
     if (it === 'repair') return price === null ? 'REPAIR  NO DAMAGE' : `REPAIR ${Math.round(p.damage * 100)}%${cost}`;
+    if (it === 'homing' || it === 'oil' || it === 'shield') return `${LABELS[it]}${p.special === SPECIAL_KIND[it] ? '  HELD' : cost}`;
     return `${LABELS[it]} ${p[it]}/${AMMO_MAX[it]}${price === null ? '  FULL' : cost}`;
   }
 

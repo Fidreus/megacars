@@ -5,6 +5,8 @@
 import { CrateItem, crateContent } from '../../../shared/sim/crates.ts';
 import { Ev, type EventBuffer } from '../../../shared/sim/events.ts';
 import { drawText, textWidth } from '../font.ts';
+import { drawSpecialIcon, SPECIAL_COLOR } from './specialHud.ts';
+import { SpecialItem } from '../../../shared/sim/specials.ts';
 
 /** How long the readout stays up, in ticks. */
 const SHOW_TICKS = 110;
@@ -73,6 +75,9 @@ const LOOK: Record<number, { color: string; icon: (ctx: CanvasRenderingContext2D
       ctx.fillRect(x + 4, y + 5, 8, 4);
     },
   },
+  [CrateItem.Homing]: { color: SPECIAL_COLOR[SpecialItem.Homing], icon: (ctx, x, y) => drawSpecialIcon(ctx, SpecialItem.Homing, x, y) },
+  [CrateItem.Oil]: { color: SPECIAL_COLOR[SpecialItem.Oil], icon: (ctx, x, y) => drawSpecialIcon(ctx, SpecialItem.Oil, x, y) },
+  [CrateItem.Shield]: { color: SPECIAL_COLOR[SpecialItem.Shield], icon: (ctx, x, y) => drawSpecialIcon(ctx, SpecialItem.Shield, x, y) },
 };
 
 /** "+2 MISSILES", "+1 TURBO", "REPAIR 30%". */
@@ -80,6 +85,8 @@ export function crateText(item: number, amount: number): string {
   const c = crateContent(item);
   if (!c) return '';
   if (item === CrateItem.Repair) return `${c.label} ${amount}%`;
+  // A special item goes into the slot: just its name.
+  if (item >= CrateItem.Homing) return c.label;
   const label = amount === 1 && c.label.endsWith('S') ? c.label.slice(0, -1) : c.label;
   return `+${amount} ${label}`;
 }

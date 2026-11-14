@@ -41,6 +41,7 @@ export function createRaceWorld(spec: RaceSpec, base: CarTuning = DEFAULT_TUNING
       car.missiles = l.missiles;
       car.mines = l.mines;
       car.turbos = l.turbos;
+      car.special = l.special ?? 0;
       car.damage = l.damage;
     }
     applyPersona(car, e, spec.entrants);

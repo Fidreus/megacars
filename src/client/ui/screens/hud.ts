@@ -10,6 +10,7 @@ import { drawText, textWidth } from '../font.ts';
 import { drawDriveMeter } from './driveHud.ts';
 import { drawElimAlerts, drawElimStatus, elimFinishText, fieldSize } from './elimHud.ts';
 import { drawCrateReadout } from './crateHud.ts';
+import { drawSpecialSlot } from './specialHud.ts';
 
 export function ordinal(n: number): string {
   const s = n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] ?? 'TH';
@@ -66,6 +67,8 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
     // Touch: the ammo is on the buttons, so only a small damage bar here.
     if (touch) drawDamageBar(ctx, x, top, car);
     else drawArsenal(ctx, x, r.h - 46, car);
+    // The special item slot beside them.
+    drawSpecialSlot(ctx, touch ? x + 76 : x + 150, touch ? top - 9 : r.h - 62, car, world.tick, !touch);
     // What a crate just gave: above the weapons panel (touch: under the speed).
     drawCrateReadout(ctx, x, touch ? top + 32 : r.h - 82, carId, world.tick);
   }

@@ -59,6 +59,11 @@ export interface CarState {
   driftBoostLevel: number;
   /** Slipstream strength 0-1 (slipstream.ts). */
   draft: number;
+  /** Special item held (SpecialItem in specials.ts, 0 = none) and ticks left of a running shield. */
+  special: number;
+  shieldTicks: number;
+  /** Computer driver: reaction to a chance for its special (ticks left, -1 = noticed, 0 = none). */
+  aiItemReact: number;
   // Control
   prevButtons: number;
   /** Ticks the brake has been held (drift tap detection). */
@@ -125,6 +130,7 @@ export function createCar(id: number, x: number, z: number, heading: number): Ca
     slip: 0, latAccel: 0, longAccel: 0, surfFront: 0, surfRear: 0,
     driftCharge: 0, driftBoostTicks: 0, driftBoostLevel: 0, draft: 0,
     outOrder: 0, outTick: 0, outLap: 0,
+    special: 0, shieldTicks: 0, aiItemReact: 0,
   };
 }
 

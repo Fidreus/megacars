@@ -10,8 +10,9 @@
 import { Surface } from '../../shared/config/surfaces.ts';
 import { Btn } from '../../shared/sim/input.ts';
 import { drawText } from '../ui/font.ts';
+import { drawSpecialIcon, SPECIAL_COLOR } from '../ui/screens/specialHud.ts';
 
-type Role = 'gas' | 'brake' | 'drift' | 'missile' | 'mine' | 'turbo' | 'reset' | 'pause' | 'left' | 'right' | 'hold';
+type Role = 'gas' | 'brake' | 'drift' | 'missile' | 'mine' | 'turbo' | 'special' | 'reset' | 'pause' | 'left' | 'right' | 'hold';
 
 /**
  * 'thumb': gas while the left (steering) thumb is on the screen, lift it to
@@ -47,6 +48,8 @@ export interface TouchAmmo {
   missiles: number;
   mines: number;
   turbos: number;
+  /** Special item held (0 = none: its button is not there). */
+  special?: number;
 }
 
 /** Touch steering feel (tunable in practice from the tuning panel). */
@@ -84,6 +87,8 @@ export class TouchControls {
   throttle = 0;
   brake = 0;
   buttons = 0;
+  /** Special item held, as last drawn (its button is only there while one is). */
+  private special = 0;
   /** The pause button was tapped (one-shot, cleared by the reader). */
   pauseTapped = false;
   private readonly touches = new Map<number, Touch>();
@@ -174,6 +179,7 @@ export class TouchControls {
     let best: Role | null = null;
     let bestD = Infinity;
     for (const b of this.layout) {
+      if (b.role === 'special' && !this.special) continue;
       const d = Math.hypot(x - b.x, y - b.y);
       // A little slack around each button: thumbs are big.
       if (d < b.r + 8 && d < bestD) {
@@ -206,6 +212,7 @@ export class TouchControls {
       else if (t.role === 'missile') buttons |= Btn.FireFront;
       else if (t.role === 'mine') buttons |= Btn.FireRear;
       else if (t.role === 'turbo') buttons |= Btn.Turbo;
+      else if (t.role === 'special') buttons |= Btn.Special;
       else if (t.role === 'reset') buttons |= Btn.Reset;
       else if (t.role === 'left') digital -= 1;
       else if (t.role === 'right') digital += 1;
@@ -321,6 +328,7 @@ export class TouchControls {
     b.push({ role: 'missile', x: right - R(36), y: bottom - R(118), r: R(24), label: 'MISSILE' });
     b.push({ role: 'mine', x: right - R(98), y: bottom - R(this.autoGas ? 96 : 150), r: R(21), label: 'MINE' });
     b.push({ role: 'turbo', x: right - R(this.autoGas ? 156 : 160), y: bottom - R(this.autoGas ? 70 : 96), r: R(20), label: 'TURBO' });
+    b.push({ role: 'special', x: right - R(36), y: bottom - R(174), r: R(23), label: '' });
     b.push({ role: 'reset', x: right - R(18), y: R(118), r: R(14), label: 'RESET' });
     b.push({ role: 'pause', x: right - R(10), y: R(16), r: R(13), label: 'II' });
     this.layout = b;
@@ -335,9 +343,24 @@ export class TouchControls {
   draw(ctx: CanvasRenderingContext2D, ammo: TouchAmmo | null, weapons: boolean): void {
     if (!this.visible) return;
     const held = new Set<Role | 'steer' | null>([...this.touches.values()].map((t) => t.role));
+    this.special = weapons ? ammo?.special ?? 0 : 0;
     for (const b of this.layout) {
       if (!weapons && (b.role === 'missile' || b.role === 'mine' || b.role === 'turbo')) continue;
       const on = held.has(b.role);
+      if (b.role === 'special') {
+        // Only there while an item is held: its icon, in its colour.
+        if (!this.special) continue;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fillStyle = on ? 'rgba(255,216,74,0.45)' : 'rgba(10,12,26,0.45)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = on ? 'rgba(255,216,74,0.95)' : SPECIAL_COLOR[this.special];
+        ctx.stroke();
+        drawSpecialIcon(ctx, this.special, Math.round(b.x - 8), Math.round(b.y - 10));
+        drawText(ctx, 'ITEM', b.x, b.y + 5, { color: '#ffffff', align: 'center', shadow: '#000' });
+        continue;
+      }
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
       ctx.fillStyle = on ? 'rgba(255,216,74,0.45)' : 'rgba(10,12,26,0.35)';

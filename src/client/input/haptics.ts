@@ -49,8 +49,8 @@ export const RULES: Record<number, Rule> = {
   // Scrapes along a wall are too small to bother with.
   [Ev.WallHit]: { rumble: (e) => (e.value < 2.5 ? null : thump(scale(e.value, 2.5, 22))) },
   [Ev.CarHit]: { felt: 'both', rumble: (e) => (e.value < 2.5 ? null : thump(scale(e.value, 2.5, 18))) },
-  // value 1: missile, 2: mine (a mine launches the car as well).
-  [Ev.Explosion]: { rumble: (e) => (e.value === 2 ? { strong: 1, weak: 0.8, ms: 300 } : e.value === 1 ? { strong: 0.9, weak: 0.6, ms: 220 } : null) },
+  // value 1: missile, 2: mine (a mine launches the car as well), 4: homing missile.
+  [Ev.Explosion]: { rumble: (e) => (e.value === 2 ? { strong: 1, weak: 0.8, ms: 300 } : e.value === 1 || e.value === 4 ? { strong: 0.9, weak: 0.6, ms: 220 } : null) },
   [Ev.Wreck]: { rumble: () => ({ strong: 1, weak: 0.9, ms: 450, pattern: [90, 40, 180] }) },
   [Ev.Land]: { rumble: (e) => (e.value < 3 ? null : landing(scale(e.value, 3, 14))) },
   // value 1: a catch-up pad rather than a turbo from the stock.
@@ -59,6 +59,10 @@ export const RULES: Record<number, Rule> = {
   [Ev.CratePickup]: { rumble: () => ({ strong: 0.1, weak: 0.45, ms: 70 }) },
   // Out of an elimination race: a long double blast.
   [Ev.Eliminated]: { rumble: () => ({ strong: 1, weak: 1, ms: 700, pattern: [220, 80, 380] }) },
+  [Ev.ShieldUp]: { rumble: () => ({ strong: 0, weak: 0.5, ms: 120 }) },
+  // A hit bouncing off the shield: a sharp, light knock instead of the blast.
+  [Ev.ShieldBlock]: { rumble: () => ({ strong: 0.3, weak: 0.7, ms: 90 }) },
+  [Ev.OilSlip]: { rumble: () => ({ strong: 0.15, weak: 0.35, ms: 160, pattern: [60, 40, 60] }) },
 };
 
 /** Where the rumble goes: the browser side, replaceable in tests. */

@@ -20,6 +20,8 @@ import { moodById } from '../render/mood.ts';
 import { rainAt, wetnessAt } from '../../shared/sim/weather.ts';
 import type { PaletteModeId } from '../render/palette.ts';
 
+import { allocShot, ShotKind } from '../../shared/sim/weapons.ts';
+
 export function installDebugApi(app: App): void {
   const api = {
     state() {
@@ -95,6 +97,29 @@ export function installDebugApi(app: App): void {
         car.x = x;
         car.z = z;
         car.vx = car.vz = car.angVel = 0;
+      },
+      /** Put a special item (1 homing, 2 oil, 3 shield) in car `id`'s slot (default: the first player's). */
+      special(item: number, id = app.session.playerCars[0]) {
+        app.spoilAchievements();
+        const car = app.world.cars[id];
+        if (car) car.special = item;
+      },
+      /** Launch a homing missile from `dist` metres behind car `id` (default: the first player), locked onto it. */
+      homingAt(id = app.session.playerCars[0], dist = 60) {
+        app.spoilAchievements();
+        const c = app.world.cars[id];
+        const owner = app.world.cars.find((o) => o.id !== id)?.id ?? id;
+        const s = allocShot(app.world.shots);
+        const fx = Math.sin(c.heading);
+        const fz = -Math.cos(c.heading);
+        Object.assign(s, { kind: ShotKind.Homing, owner, target: id, age: 30, x: c.x - fx * dist, z: c.z - fz * dist, y: c.y, heading: c.heading, vx: fx * 70, vz: fz * 70 });
+      },
+      /** Special items in play: homing missiles and slicks (kind 3 / 4), and each car's slot and shield. */
+      specials() {
+        return {
+          shots: app.world.shots.filter((s) => s.kind >= 3).map((s) => ({ kind: s.kind, owner: s.owner, target: s.target, age: s.age, x: +s.x.toFixed(1), z: +s.z.toFixed(1) })),
+          cars: app.world.cars.map((c) => ({ special: c.special, shield: c.shieldTicks })),
+        };
       },
       /** Item crates: where they stand and which are there (0) or coming back (ticks). */
       crates() {

@@ -30,6 +30,12 @@ export const Ev = {
   CratePickup: 18,
   /** A taken crate is back: `other` = crate index. */
   CrateBack: 19,
+  /** A shield went up (sim/specials.ts). */
+  ShieldUp: 20,
+  /** A shield stopped a hit: `other` = owner of the shot, `value` = what (as Explosion's value). */
+  ShieldBlock: 21,
+  /** A car ran onto an oil slick: `other` = who dropped it. */
+  OilSlip: 22,
   /** Elimination race: `car` is out; `other` = its final place, `value` = the leader's lap it went out on. */
   Eliminated: 25,
 } as const;

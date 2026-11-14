@@ -3,13 +3,14 @@
 import { buttonName, keysLabel, type Controls } from '../../input/bindings.ts';
 import { drawText } from '../font.ts';
 
-const ACTION_ROWS: [string, 'gas' | 'brake' | 'drift' | 'fireFront' | 'fireRear' | 'turbo' | 'reset', string][] = [
+const ACTION_ROWS: [string, 'gas' | 'brake' | 'drift' | 'fireFront' | 'fireRear' | 'turbo' | 'special' | 'reset', string][] = [
   ['ACCELERATE', 'gas', ''],
   ['BRAKE / REVERSE', 'brake', ''],
   ['DRIFT', 'drift', 'HOLD WHILE TURNING'],
   ['MISSILE', 'fireFront', 'FIRES FORWARD'],
   ['MINE', 'fireRear', 'DROPS BEHIND YOU'],
   ['TURBO', 'turbo', 'SHORT BOOST'],
+  ['SPECIAL ITEM', 'special', 'HOMING, OIL OR SHIELD'],
   ['RESET CAR', 'reset', 'BACK ON THE TRACK'],
 ];
 
@@ -22,6 +23,7 @@ const TIPS = [
   'PIT LANE BY THE START: A DRIVE-THROUGH MENDS 45%+, SLOW DOWN FOR MORE. NO WEAPONS.',
   'FAR BEHIND? THE ARROWS ON THE ROAD GLOW AND GIVE YOU A BOOST TO CATCH UP.',
   'WEAPONS ON: DRIVE THROUGH THE GLOWING CRATES FOR MISSILES, MINES, TURBO OR A REPAIR.',
+  'SPECIALS: ONE AT A TIME. A CRATE NEVER SWAPS YOURS - USE IT TO GET ANOTHER.',
   'CAREER: A TOP-THREE SEASON MOVES YOU UP A DIVISION. WIN DIVISION 1!',
   'MODE: ELIMINATION - EACH TIME THE LEADER ENDS A LAP, THE LAST CAR IS OUT.',
   'KEY 5 TURNS THE SOUND OFF OR ON - MENUS AND RACES EACH HAVE THEIR OWN.',

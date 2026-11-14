@@ -27,6 +27,7 @@ const I32: readonly CarKey[] = [
   'wreckTicks', 'hits', 'kills', 'wrecks', 'pitTicks', 'lastHitBy',
   'driftBoostTicks', 'driftBoostLevel',
   'outOrder', 'outTick', 'outLap',
+  'special', 'shieldTicks', 'aiItemReact',
 ];
 
 /** Every CarState key except `id` must be listed above (checked by tests). */
@@ -34,8 +35,8 @@ export const SNAPSHOT_CAR_KEYS: readonly CarKey[] = [...F64, ...I32];
 
 const HEADER = 1 + 4 + 2 + 4 + 1 + 1 + 1 + 4 + 4 + 4 + 4 + 1 + 1;
 const PER_CAR = F64.length * 8 + I32.length * 4 + 4;
-/** slot, kind, owner, age, x, z, vx, vz, heading */
-const PER_SHOT = 1 + 1 + 1 + 4 + 6 * 8;
+/** slot, kind, owner, age, x, z, y, vx, vz, heading, homing target */
+const PER_SHOT = 1 + 1 + 1 + 4 + 6 * 8 + 1;
 
 export interface SnapshotMeta {
   /** How many ticks early this client's inputs arrive (minimum over the last half second). */
@@ -93,6 +94,7 @@ export function encodeSnapshot(w: World, lastInputs: readonly CarInput[], meta: 
     v.setUint8(o, sh.owner); o += 1;
     v.setInt32(o, sh.age, true); o += 4;
     for (const x of [sh.x, sh.z, sh.y, sh.vx, sh.vz, sh.heading]) { v.setFloat64(o, x, true); o += 8; }
+    v.setInt8(o, sh.target); o += 1;
   });
   v.setUint8(o, w.crates.length); o += 1;
   for (const c of w.crates) { v.setUint16(o, c, true); o += 2; }
@@ -167,6 +169,7 @@ export function applySnapshot(data: Uint8Array, w: World, lastInputs: CarInput[]
     sh.vx = v.getFloat64(o, true); o += 8;
     sh.vz = v.getFloat64(o, true); o += 8;
     sh.heading = v.getFloat64(o, true); o += 8;
+    sh.target = v.getInt8(o); o += 1;
   }
   const crates = v.getUint8(o); o += 1;
   w.crates.length = crates;

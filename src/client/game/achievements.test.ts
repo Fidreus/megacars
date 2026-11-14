@@ -28,7 +28,7 @@ describe('achievement table', () => {
   it('has unique ids, short descriptions and about two dozen entries', () => {
     expect(ACHIEVEMENT_IDS.size).toBe(ACHIEVEMENTS.length);
     expect(ACHIEVEMENTS.length).toBeGreaterThanOrEqual(20);
-    expect(ACHIEVEMENTS.length).toBeLessThanOrEqual(27);
+    expect(ACHIEVEMENTS.length).toBeLessThanOrEqual(32);
     for (const r of ACHIEVEMENTS) {
       expect(r.desc.length, r.id).toBeLessThanOrEqual(28);
       expect(r.name.length, r.id).toBeLessThanOrEqual(17);
@@ -127,6 +127,22 @@ describe('event and tick rules', () => {
     expect(a.isUnlocked('longBomb')).toBe(false);
     a.feed({ kind: 'event', e: ev(Ev.Explosion, 1, 0, 1, 70, 0), w: world(c), me: c[0] });
     expect(a.isUnlocked('longBomb')).toBe(true);
+  });
+
+  it('homing missile hits and a hit stopped by the shield', () => {
+    const a = fresh();
+    const c = cars(2);
+    for (let k = 0; k < 3; k++) {
+      expect(a.isUnlocked('heatSeeker')).toBe(false);
+      a.feed({ kind: 'event', e: ev(Ev.Explosion, 1, 0, 4), w: world(c), me: c[0] });
+      // A plain missile hit does not count.
+      a.feed({ kind: 'event', e: ev(Ev.Explosion, 1, 0, 1), w: world(c), me: c[0] });
+    }
+    expect(a.isUnlocked('heatSeeker')).toBe(true);
+    a.feed({ kind: 'event', e: ev(Ev.ShieldBlock, 1, 0, 1), w: world(c), me: c[0] });
+    expect(a.isUnlocked('notToday')).toBe(false);
+    a.feed({ kind: 'event', e: ev(Ev.ShieldBlock, 0, 1, 2), w: world(c), me: c[0] });
+    expect(a.isUnlocked('notToday')).toBe(true);
   });
 
   it('a long jump, but not one that ends in a respawn', () => {

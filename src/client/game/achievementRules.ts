@@ -140,6 +140,16 @@ export const ACHIEVEMENTS: readonly AchievementRule[] = [
       if (Math.hypot(i.e.x - i.me.x, i.e.z - i.me.z) >= LONG_SHOT) m.set(1);
     },
   },
+  {
+    id: 'heatSeeker', name: 'HEAT SEEKER', desc: 'HIT WITH 3 HOMING MISSILES', goal: 3,
+    feed: (m, i) => {
+      if (i.kind === 'event' && i.e.kind === Ev.Explosion && i.e.value === 4 && i.e.other === i.me.id && i.e.car !== i.me.id) m.add();
+    },
+  },
+  {
+    id: 'notToday', name: 'NOT TODAY', desc: 'BLOCK A HIT WITH A SHIELD',
+    feed: (m, i) => { if (i.kind === 'event' && i.e.kind === Ev.ShieldBlock && i.e.car === i.me.id && i.e.other !== i.me.id) m.set(1); },
+  },
 
   // A few evenings.
   {

@@ -129,9 +129,10 @@ function tightAhead(track: Track, from: number, r: number): boolean {
 /**
  * `lean`: sideways shift (m) toward an item crate close to the line (sim/crates.ts crateLean).
  * `danger`: 0..1, how close the car is to going out of an elimination race (sim/elimination.ts).
+ * `avoid`: sideways shift (m) around an oil slick ahead (ai/specials.ts slickAvoid).
  */
 export function aiDrive(
-  car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, cars: readonly CarState[], tick: number, out: CarInput, lean = 0, danger = 0,
+  car: CarState, track: Track, t: CarTuning, surf: SurfaceMix, cars: readonly CarState[], tick: number, out: CarInput, lean = 0, danger = 0, avoid = 0,
 ): void {
   const line = track.line;
   const n = track.n;
@@ -250,7 +251,7 @@ export function aiDrive(
   const loose = lack * SKILL_PARAMS.wander + persona.wander;
   const stray = loose > 0 ? clamp(wander(car.id, tick) * loose, -lim / 2, lim / 2) : 0;
   // A crate close to the line: only with nobody near and no pit stop on.
-  const off = dodge + stray + (near || pitting ? 0 : lean);
+  const off = dodge + stray + (pitting ? 0 : avoid !== 0 ? avoid : near ? 0 : lean);
   const shift = clamp(line.off[j] + off, -lim, lim) - line.off[j];
   let dx = line.x[j] + track.nx[j] * shift - car.x;
   let dz = line.z[j] + track.nz[j] * shift - car.z;

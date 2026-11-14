@@ -11,6 +11,7 @@ import {
   CRATE, CRATE_AI, CRATE_CAPS, CRATE_ITEMS, CrateItem, crateLean, crateRowCount, rollCrate,
 } from './crates.ts';
 import { Ev } from './events.ts';
+import { SpecialItem } from './specials.ts';
 import { neutralInput } from './input.ts';
 import { resetProgress } from './race.ts';
 import { stepWorld } from './step.ts';
@@ -88,12 +89,15 @@ describe('crate contents', () => {
   it('never fill past the shop caps; a full car gets something else, or nothing', () => {
     const full = car({ missiles: CRATE_CAPS.missiles, place: 8 });
     for (let tick = 0; tick < 500; tick++) expect(rollCrate(1, 0, tick, full, 8)?.item).not.toBe(CrateItem.Missiles);
-    const almost = car({ missiles: CRATE_CAPS.missiles - 1, mines: CRATE_CAPS.mines, turbos: CRATE_CAPS.turbos });
+    // (A held special item fills the special slot.)
+    const almost = car({ missiles: CRATE_CAPS.missiles - 1, mines: CRATE_CAPS.mines, turbos: CRATE_CAPS.turbos, special: SpecialItem.Shield });
     const c = rollCrate(1, 0, 0, almost, 8)!;
     expect(c.item).toBe(CrateItem.Missiles);
     expect(c.give(almost)).toBe(1);
     expect(almost.missiles).toBe(CRATE_CAPS.missiles);
-    expect(rollCrate(1, 0, 0, car({ missiles: 12, mines: 8, turbos: 6, damage: 0 }), 8)).toBeNull();
+    expect(rollCrate(1, 0, 0, car({ missiles: 12, mines: 8, turbos: 6, damage: 0, special: SpecialItem.Oil }), 8)).toBeNull();
+    // Full of ammunition but with an empty special slot: a special item.
+    expect(rollCrate(1, 0, 0, car({ missiles: 12, mines: 8, turbos: 6, damage: 0 }), 8)?.label).toMatch(/HOMING|OIL|SHIELD/);
   });
 
   it('give the leader more mines and the back more turbo and repair, mildly', () => {
@@ -115,7 +119,7 @@ describe('crate contents', () => {
   });
 
   it('repair mends some damage', () => {
-    const c = car({ damage: 0.5, missiles: 12, mines: 8, turbos: 6 });
+    const c = car({ damage: 0.5, missiles: 12, mines: 8, turbos: 6, special: SpecialItem.Homing });
     const r = rollCrate(1, 0, 0, c, 8)!;
     expect(r.item).toBe(CrateItem.Repair);
     expect(r.give(c)).toBe(30);
@@ -138,6 +142,7 @@ describe('crates in a race', () => {
 
   it('a car driving through takes the crate, which comes back after the respawn time', () => {
     const { track, w, c } = onCrate(true);
+    c.special = SpecialItem.Shield;
     const before = c.missiles + c.mines + c.turbos;
     stepWorld(w, track, [neutralInput()], [DEFAULT_TUNING]);
     const ev = w.events.list.slice(0, w.events.count).filter((e) => e.kind === Ev.CratePickup);
@@ -165,7 +170,7 @@ describe('crates in a race', () => {
 
   it('a car full of everything leaves the crate standing', () => {
     const { track, w, c } = onCrate(true);
-    Object.assign(c, { missiles: 12, mines: 8, turbos: 6, damage: 0 });
+    Object.assign(c, { missiles: 12, mines: 8, turbos: 6, damage: 0, special: SpecialItem.Shield });
     stepWorld(w, track, [neutralInput()], [DEFAULT_TUNING]);
     expect(w.crates[0]).toBe(0);
   });
@@ -199,7 +204,7 @@ describe('crates in a race', () => {
     }
     expect(leaned).toBeGreaterThan(0);
     // Nothing to gain: no lean.
-    Object.assign(c, { missiles: 12, mines: 8, turbos: 6, damage: 0 });
+    Object.assign(c, { missiles: 12, mines: 8, turbos: 6, damage: 0, special: SpecialItem.Oil });
     for (const sp of track.crates) {
       Object.assign(c, { x: track.px[(sp.i - 30 + track.n) % track.n], z: track.pz[(sp.i - 30 + track.n) % track.n] });
       resetProgress(c, track);
