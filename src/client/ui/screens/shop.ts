@@ -181,6 +181,8 @@ export interface StandingsRow {
   name: string;
   color: string;
   points: number;
+  /** Races won: breaks ties on points, as everywhere in a championship. */
+  wins?: number;
   earned: number;
   /** Place in the race just run (0 = not shown). */
   racePlace: number;
@@ -211,7 +213,7 @@ export function drawStandings(
   g: CanvasRenderingContext2D, W: number, H: number, title: string, subtitle: string, rows: StandingsRow[], time: number, footer: string,
   extra = '',
 ): void {
-  const sorted = [...rows].sort((a, b) => b.points - a.points);
+  const sorted = [...rows].sort((a, b) => b.points - a.points || (b.wins ?? 0) - (a.wins ?? 0));
   const rowH = 12;
   const note = noteFor(rows, W - 20);
   const noteW = Math.max(0, ...rows.map((r) => textWidth(note(r))));

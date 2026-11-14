@@ -3197,7 +3197,8 @@ export class App {
     }
     if (this.flashTime > 0) {
       this.flashTime -= dt;
-      drawText(ctx, this.flash, W / 2, Math.round(H * 0.18), { scale: 2, color: '#ffd84a', align: 'center' });
+      // Long messages in small print rather than off the edges of the screen.
+      drawText(ctx, this.flash, W / 2, Math.round(H * 0.18), { scale: textWidth(this.flash, 2) > W - 8 ? 1 : 2, color: '#ffd84a', align: 'center' });
     }
     if (this.params.debug) {
       const c = this.online.conn;
@@ -3266,8 +3267,9 @@ export class App {
     }
     const mw = Math.round(Math.min(110, W * 0.2));
     const mh = Math.round(mw * 0.75);
-    // Room for the touch pause button in the corner.
-    const mx = split ? Math.round(W / 2 - mw / 2) : W - mw - 8 - (this.touch.enabled ? 30 : 0);
+    // Room for the touch pause button in the corner. Split screen: in the corner of
+    // the left view that its HUD leaves free (the middle is the right view's damage panel).
+    const mx = split ? Math.round(W / 2 - mw - 6) : W - mw - 8 - (this.touch.enabled ? 30 : 0);
     const my = split ? H - mh - 8 : 8 + bar;
     const rival = s instanceof RaceSession && this.cupRace ? rivalCar(s.spec.entrants) : -1;
     this.minimap.draw(ctx, s.track, w, s.colors, s.playerCars, mx, my, mw, mh, rival);
@@ -3282,8 +3284,10 @@ export class App {
       if (this.firstRace && !this.school && w.tick < w.race.startTick + 60 * 12) {
         const gas = { thumb: 'IT GASSES WHILE YOUR THUMB IS DOWN', always: 'THE CAR ACCELERATES BY ITSELF', button: 'HOLD GAS' }[this.touch.gasMode];
         const how = { point: 'PUSH YOUR LEFT THUMB WHERE YOU WANT TO GO', slide: 'DRAG YOUR LEFT THUMB TO STEER', buttons: 'STEER WITH THE ARROWS' }[this.touch.steerMode];
-        drawText(ctx, `${how} - ${gas}`, W / 2, Math.round(H * 0.62), { color: '#ffd84a', align: 'center' });
-        drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, Math.round(H * 0.62) + 11, { color: '#ffd84a', align: 'center' });
+        // Above the steering pad's own label (on a short screen it reaches up to here).
+        const hy = Math.min(Math.round(H * 0.62), H - Math.round(H * 0.24) - 54 - 26);
+        drawText(ctx, `${how} - ${gas}`, W / 2, hy, { color: '#ffd84a', align: 'center' });
+        drawText(ctx, 'HOLD DRIFT WHILE TURNING TO SLIDE', W / 2, hy + 11, { color: '#ffd84a', align: 'center' });
       }
     } else if (this.firstRace && !this.school && w.tick < w.race.startTick + 60 * 15) {
       // Above the weapons panel and the special slot when weapons are on.

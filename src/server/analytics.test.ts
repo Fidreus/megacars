@@ -128,7 +128,7 @@ describe('the log', () => {
     a.log(se, { t: 'session', sid: 'aaaaaaaa', dur: 400, races: 1 });
     a.log(us, { t: 'ws', dur: 120 });
     a.log(null, { t: 'room_race', track: 'tivoli', laps: 9, humans: 3, ai: 2, public: true });
-    await new Promise((r) => setTimeout(r, 100));
+    await a.flush();
 
     const s = summarize(readLog(join(dir, 'analytics'), 7, now), 7, now);
     expect(s.totals).toMatchObject({ visitors: 2, opens: 3, sessions: 1, races: 1, onlineRaces: 1 });
@@ -166,7 +166,7 @@ describe('the log', () => {
     const se = a.who(req({ 'cf-ipcountry': 'SE' }))!;
     a.log(se, { t: 'race', sid: 'aaaaaaaa', track: 'greenvalley', mode: 'quick', laps: 3, opponents: 7, players: 1 });
     a.log(se, { t: 'session', sid: 'aaaaaaaa', dur: 84, races: 1 });
-    await new Promise((r) => setTimeout(r, 100));
+    await a.flush();
     const s = summarize(readLog(join(dir, 'analytics'), 7, T0), 7, T0);
     expect(s.totals.visitors).toBe(1);
     expect(s.countries).toEqual([{ key: 'SE', n: 1 }]);

@@ -72,7 +72,9 @@ Ny bana? Se `.claude/skills/new-track/SKILL.md` och `npm run track`.
 
 **Ramper och hopp:** kör upp på rampen så lyfter bilen – ju fortare desto
 längre. I luften går det inte att styra; en hård landning kostar lite fart
-(och lite skada när vapnen är på).
+(och lite skada när vapnen är på). Datorförarna håller sitt körfält upp mot
+ett hopp och lyfter inte fortare än att de hinner bromsa för kurvan efter
+landningen, så de flyger inte snett in i sidoväggen.
 
 **Vapen** (kan stängas av i menyn och i onlinelobbyn): varje bil startar med
 3 missiler, 2 minor och 2 turbo, och fyller på från lådorna på banan. Missiler flyger rakt fram och snurrar runt
@@ -80,7 +82,8 @@ den de träffar, minor läggs bakom bilen, gillrar sig efter en halv sekund och
 kastar upp bilen i luften. Turbo ger 1,5 s extra kraft och högre toppfart.
 Vapnen låses upp tre sekunder efter start. Krockar och träffar ger skada;
 över 40 % skada går bilen långsammare, och vid 100 % exploderar den, brinner
-en stund och kommer tillbaka lappad (30 % skada). Datorförarna använder också
+en stund och kommer tillbaka lappad (60 % skada) och kan inte träffas på
+2,5 s, så den hinner förbi minorna som ofta ligger där den sprängdes. Datorförarna använder också
 vapen – oftare ju svårare de är.
 
 **Lådor** (bara med vapen på): på några ställen runt varvet står en rad med

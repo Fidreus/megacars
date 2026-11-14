@@ -75,7 +75,7 @@ export function drawPlayerHud(ctx: CanvasRenderingContext2D, r: HudRect, world: 
   const grace = race.startTick + 180 - world.tick;
   if (race.weapons && race.phase === RacePhase.Racing && grace > -90 && !practice) {
     const text = grace > 0 ? `WEAPONS IN ${Math.ceil(grace / 60)}` : 'WEAPONS FREE!';
-    drawText(ctx, text, r.x + r.w / 2, r.h * 0.22, { scale: 2, color: grace > 0 ? '#c8d0dc' : '#ff6b5e', align: 'center' });
+    drawText(ctx, text, r.x + r.w / 2, r.h * 0.25, { scale: 2, color: grace > 0 ? '#c8d0dc' : '#ff6b5e', align: 'center' });
   }
 
   const kmh = Math.round(Math.hypot(car.vx, car.vz) * 3.6);

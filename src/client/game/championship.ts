@@ -99,7 +99,7 @@ export function humanDrivers(c: Championship): CupDriver[] {
 
 /** The next race: fewest points start at the front, the leader at the back. */
 export function nextRaceSpec(c: Championship): RaceSpec {
-  const order = c.drivers.map((_, i) => i).sort((a, b) => c.drivers[a].profile.points - c.drivers[b].profile.points || a - b);
+  const order = c.drivers.map((_, i) => i).sort((a, b) => c.drivers[a].profile.points - c.drivers[b].profile.points || c.drivers[a].profile.wins - c.drivers[b].profile.wins || a - b);
   c.grid = order;
   const rnd = makeRng(c.seed + c.race * 101);
   const level = averageLevel(humanDrivers(c).map((d) => d.profile));
@@ -150,6 +150,7 @@ export function standingsRows(c: Championship): StandingsRow[] {
     name: d.name,
     color: d.color,
     points: d.profile.points,
+    wins: d.profile.wins,
     earned: d.profile.lastEarned,
     racePlace: d.lastPlace,
     human: d.player >= 0,

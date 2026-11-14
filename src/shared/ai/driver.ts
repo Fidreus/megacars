@@ -128,6 +128,29 @@ function tightAhead(track: Track, from: number, r: number): boolean {
 }
 
 /**
+ * Jumps: metres of run-up in which the car holds its lane, the slowest it
+ * plans to take off (it must clear a gap), and seconds in the air per m/s of
+ * take-off speed (the launch angle is fixed, so the flight grows with speed squared).
+ */
+export const AI_JUMP = { runUp: 40, minSpeed: 38, airPerSpeed: 0.023 };
+
+/**
+ * On the run-up to a jump (a broken bridge or a ramp): where the car takes
+ * off (s), else -1. A car that follows the racing line across the road there
+ * takes off crooked and, fast enough, flies into the side wall; and it cannot
+ * brake in the air for a corner after the landing.
+ */
+export function jumpTakeoff(track: Track, s: number): number {
+  const len = track.length;
+  const within = (a: number, b: number) => (s - a + 2 * len) % len <= b - a;
+  for (const b of track.bridges) {
+    if (b.gap && within(b.s - b.span - b.ramp - AI_JUMP.runUp, b.s - b.span)) return (b.s - b.span + len) % len;
+  }
+  for (const r of track.ramps) if (within(r.s0 - AI_JUMP.runUp, r.s1)) return r.s1 % len;
+  return -1;
+}
+
+/**
  * `lean`: sideways shift (m) toward an item crate close to the line (sim/crates.ts crateLean).
  * `danger`: 0..1, how close the car is to going out of an elimination race (sim/elimination.ts).
  * `avoid`: sideways shift (m) around an oil slick ahead (ai/specials.ts slickAvoid).
@@ -157,7 +180,20 @@ export function aiDrive(
   if (car.aiReverseTicks > 0) {
     car.aiReverseTicks--;
     const j = (car.trackIdx + 12) % n;
-    const err = wrapAngle(headingOf(line.x[j] - car.x, line.z[j] - car.z) - car.heading);
+    let tx = line.x[j];
+    let tz = line.z[j];
+    const pit = track.pit;
+    if (pit) {
+      // Off the road at the pit entry (nose against the island): turn toward the lane, not back toward the road.
+      pitLocal(pit, car.x, car.z, pitLoc);
+      if (pitLoc.u >= pit.a && pitLoc.u < pit.b - 15 && pitLoc.lat > pit.barrier && pitLoc.lat <= pitWallOffset(pit, pitLoc.u) + 1) {
+        const ut = pitLoc.u + 15;
+        const lat = laneOffset(pit, ut) * pit.side;
+        tx = pit.ox + pit.tx * ut + pit.nx * lat;
+        tz = pit.oz + pit.tz * ut + pit.nz * lat;
+      }
+    }
+    const err = wrapAngle(headingOf(tx - car.x, tz - car.z) - car.heading);
     out.steer = err > 0 ? -1 : 1;
     out.throttle = 0;
     out.brake = 1;
@@ -218,6 +254,17 @@ export function aiDrive(
   // Gentle bends are driven with grip (never slid), and the wetter, the more carefully.
   const aGentle = wet > 0 ? (t.aGrip * AI_PARAMS.straightGrip * roadGripScale(wet) * skill) / (wet * wet) : Infinity;
   let vAllowed = Math.min(vTraffic, plannedSpeed(track, car.trackIdx, aLat, aBrake, t.vTop * 1.5, aGentle));
+  // Before a jump: slow enough at take-off for what follows the landing.
+  const takeoff = jumpTakeoff(track, car.trackS);
+  let landIdx = -1;
+  if (takeoff >= 0) {
+    let v = vAllowed;
+    for (let it = 0; it < 3; it++) {
+      landIdx = Math.floor(((takeoff + v * v * AI_JUMP.airPerSpeed) / track.length) * n) % n;
+      v = Math.min(vAllowed, Math.max(AI_JUMP.minSpeed, plannedSpeed(track, landIdx, aLat, aBrake, t.vTop * 1.5, aGentle)));
+    }
+    vAllowed = v;
+  }
   let throttle = 1;
   let brake = 0;
   if (pitting && pit) {
@@ -252,7 +299,12 @@ export function aiDrive(
   const loose = lack * SKILL_PARAMS.wander + persona.wander;
   const stray = loose > 0 ? clamp(wander(car.id, tick) * loose, -lim / 2, lim / 2) : 0;
   // A crate close to the line: only with nobody near and no pit stop on.
-  const off = dodge + stray + (pitting ? 0 : avoid !== 0 ? avoid : near ? 0 : lean);
+  let off = dodge + stray + (pitting ? 0 : avoid !== 0 ? avoid : near ? 0 : lean);
+  if (landIdx >= 0) {
+    // Up to a jump: hold the lane, so the car flies along the road.
+    const i = car.trackIdx;
+    off = (car.x - track.px[i]) * track.nx[i] + (car.z - track.pz[i]) * track.nz[i] + dodge - line.off[j];
+  }
   const shift = clamp(line.off[j] + off, -lim, lim) - line.off[j];
   let dx = line.x[j] + track.nx[j] * shift - car.x;
   let dz = line.z[j] + track.nz[j] * shift - car.z;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { personaIndex, personaOf } from '../../shared/ai/persona.ts';
-import { humanDrivers, nextRaceSpec, type Championship } from './championship.ts';
+import { humanDrivers, leader, nextRaceSpec, standingsRows, type Championship } from './championship.ts';
 import { endSeason, loadCareer, newCareer, saveCareer } from './career.ts';
 import { duelResult, duelText, pickRival, recordDuel, rivalCar, rivalOf, setRival } from './rival.ts';
 
@@ -113,5 +113,23 @@ describe('career rival', () => {
     setRival(c.cup, outside);
     expect(rivalOf(c.cup)!.name).toBe(outside);
     expect(c.cup.drivers).toHaveLength(8);
+  });
+});
+
+describe('standings ties', () => {
+  it('the table, the leader and the grid all break a tie on points by wins', () => {
+    const c = newCareer().cup;
+    c.drivers.forEach((d) => (d.profile.points = 10));
+    const [a, b] = c.drivers.slice(-2);
+    a.profile.points = b.profile.points = 50;
+    b.profile.wins = 2;
+    a.profile.wins = 1;
+    expect(leader(c)).toBe(b);
+    const rows = standingsRows(c);
+    const sorted = [...rows].sort((x, y) => y.points - x.points || (y.wins ?? 0) - (x.wins ?? 0));
+    expect(sorted[0].name).toBe(b.name);
+    // The leader starts at the back of the grid.
+    const spec = nextRaceSpec(c);
+    expect(spec.entrants.at(-1)!.name).toBe(b.name);
   });
 });
