@@ -37,9 +37,8 @@ export function raceModeItem(s: RaceSettings, changed: () => void): MenuItem {
 
 /** What the LAPS line says in an elimination race (null in a normal one). */
 export function elimLapsLabel(mode: unknown, trackId: string): string | null {
-  if (raceModeOf(mode) !== 'elimination') return null;
-  const every = everyText(trackElimEvery(trackId));
-  return every ? `LAPS: NONE - LAST CAR OUT ${every}` : 'LAPS: NONE - LAST CAR OUT EVERY LAP';
+  // Short: the interval shows on the HUD and in the lobby summary.
+  return raceModeOf(mode) === 'elimination' && trackId !== null ? 'LAPS: - (ELIMINATION)' : null;
 }
 
 /** The room's mode (public rooms always race). */

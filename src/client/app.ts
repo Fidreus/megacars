@@ -2292,6 +2292,7 @@ export class App {
       damage: car.damage,
       live: !online,
       elimination: !!s.world.elim,
+      eliminated: car.outOrder > 0,
       start: car.id + 1,
     };
     this.ach.feed({ kind: 'race', r });
@@ -2576,7 +2577,6 @@ export class App {
     if (!this.session.playerCars.includes(car) || this.mode !== 'race') return;
     if (achOn) this.achRaceSummary(place, this.world.cars[car], false);
     this.wreckBeat(car, -1, 0);
-    this.camInit[0] = this.camInit[1] = false;
   }
 
   /** Sounds and messages for weapons, louder close to the (first) player. */
@@ -2622,7 +2622,7 @@ export class App {
       this.viewCar[0] = order[Math.floor(this.time / 9) % Math.min(3, order.length)];
     } else if (this.world.elim) {
       // Out of an elimination race: watch the leader (or the other player).
-      spectateCars(this.world, this.session.playerCars, this.viewCar, standings(this.world)[0]);
+      if (spectateCars(this.world, this.session.playerCars, this.viewCar, standings(this.world)[0])) this.camInit[0] = this.camInit[1] = false;
     }
     this.shake = Math.max(0, this.shake - dt * 2.2);
     if (this.fireworks > 0 && this.mode === 'race') {
@@ -3051,7 +3051,7 @@ export class App {
         drawText(ctx, `WEAPONS: ${keys}`, W / 2, hintY - 11, { color: '#ffd84a', align: 'center' });
       }
     }
-    drawElimNews(ctx, W, H, w, s.names, s.playerCars);
+    drawElimNews(ctx, W, H, w, s.names, s.playerCars, split);
     this.elimSkipRect = drawElimWatching(ctx, W, H, w, s.playerCars, !!this.netRace, this.touch.enabled);
     if (this.showTelemetry && s.playerCars.length) this.drawTelemetry(ctx, 8, 92);
     if (this.netRace) this.drawOnlineRaceUi(ctx, W, H);

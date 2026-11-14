@@ -33,6 +33,8 @@ export interface RaceSummary {
   /** An elimination race, and the grid slot the player started from (1 = front). */
   elimination?: boolean;
   start?: number;
+  /** Out of an elimination race (not a finish: no clean-finish achievements). */
+  eliminated?: boolean;
 }
 
 export type AchInput =
@@ -168,7 +170,7 @@ export const ACHIEVEMENTS: readonly AchievementRule[] = [
   },
   {
     id: 'untouched', name: 'UNTOUCHED', desc: 'FINISH WITH UNDER 5% DAMAGE',
-    feed: (m, i) => { if (i.kind === 'race' && i.r.cars >= 2 && i.r.laps >= 2 && i.r.damage < 0.05) m.set(1); },
+    feed: (m, i) => { if (i.kind === 'race' && i.r.cars >= 2 && i.r.laps >= 2 && i.r.damage < 0.05 && !i.r.eliminated) m.set(1); },
   },
   {
     id: 'medalSet', name: 'FULL SET', desc: 'BRONZE, SILVER AND GOLD', goal: 3,

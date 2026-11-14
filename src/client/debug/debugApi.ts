@@ -56,7 +56,11 @@ export function installDebugApi(app: App): void {
           trackS: +c.trackS.toFixed(1),
           raceDist: +c.raceDist.toFixed(1),
           ai: c.aiDriven,
+          /** Elimination: order out (0 = still in) and the leader's lap it went out on. */
+          out: c.outOrder,
+          outLap: c.outLap,
         })),
+        elim: app.world.elim ?? null,
       };
     },
     /** The track editor's state (null when it isn't open). */

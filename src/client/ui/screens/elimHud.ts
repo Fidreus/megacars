@@ -91,8 +91,8 @@ export function drawElimAlerts(ctx: CanvasRenderingContext2D, r: HudRect, world:
   }
 }
 
-/** Whole screen: "TURBO TOM IS OUT" for a few seconds after a car goes. */
-export function drawElimNews(ctx: CanvasRenderingContext2D, W: number, H: number, world: World, names: readonly string[], players: readonly number[]): void {
+/** Whole screen: "TURBO TOM IS OUT" for a few seconds after a car goes (split screen: lower, clear of both HUDs). */
+export function drawElimNews(ctx: CanvasRenderingContext2D, W: number, H: number, world: World, names: readonly string[], players: readonly number[], split = false): void {
   if (!world.elim) return;
   let last = -1;
   for (const c of world.cars) if (c.outOrder > 0 && (last < 0 || c.outOrder > world.cars[last].outOrder)) last = c.id;
@@ -101,7 +101,7 @@ export function drawElimNews(ctx: CanvasRenderingContext2D, W: number, H: number
   if (age > 60 * 3) return;
   const mine = players.includes(last);
   const who = mine && players.length === 1 ? 'YOU ARE' : `${names[last] ?? `CAR ${last + 1}`} IS`;
-  const y = Math.round(H * 0.12);
+  const y = Math.round(H * (split ? 0.6 : 0.12));
   ctx.fillStyle = 'rgba(40,0,0,0.6)';
   const text = `${who} OUT`;
   const w = textWidth(text, 2) + 16;
@@ -148,17 +148,26 @@ export function canSkip(world: World, players: readonly number[]): boolean {
   return world.tick - out >= ELIM.clearTicks / 2;
 }
 
+/** The camera stays on an eliminated car this long (the blast), then moves on. */
+const WATCH_AFTER = 100;
+
 /**
  * Cameras of eliminated players: in split screen the other player while they
- * are still in, otherwise the leader.
+ * are still in, otherwise the leader. Returns true when a camera changed car.
  */
-export function spectateCars(world: World, players: readonly number[], viewCar: number[], leader: number): void {
-  if (!world.elim) return;
+export function spectateCars(world: World, players: readonly number[], viewCar: number[], leader: number): boolean {
+  if (!world.elim) return false;
+  let moved = false;
   players.forEach((id, p) => {
-    if (world.cars[id].outOrder === 0) return;
+    const car = world.cars[id];
     const other = players.find((o) => o !== id && world.cars[o].outOrder === 0);
-    viewCar[p] = other ?? leader;
+    const want = car.outOrder === 0 || world.tick - car.outTick < WATCH_AFTER ? id : other ?? leader;
+    if (viewCar[p] !== want) {
+      viewCar[p] = want;
+      moved = true;
+    }
   });
+  return moved;
 }
 
 /** The results table's OUT column: the winner, or the lap the car went out on (null in a normal race). */
