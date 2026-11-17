@@ -63,9 +63,9 @@ const tally = (keys: Iterable<string | undefined>): Count[] => {
 };
 
 const LENGTHS: [string, number][] = [['< 10 s', 10], ['10–30 s', 30], ['30–60 s', 60], ['1–3 min', 180], ['3–10 min', 600], ['10–30 min', 1800], ['30+ min', Infinity]];
-export const DEVICE_NAMES: Record<string, string> = { m: 'Mobil', t: 'Surfplatta', d: 'Dator' };
+export const DEVICE_NAMES: Record<string, string> = { m: 'Phone', t: 'Tablet', d: 'Desktop' };
 export const SCREEN_NAMES: Record<string, string> = { s: '< 600 px', m: '600–1100 px', l: '1100–1700 px', x: '1700+ px' };
-export const MODE_NAMES: Record<string, string> = { quick: 'Snabbt lopp', practice: 'Fri träning', cup: 'Mästerskap', career: 'Karriär', elimination: 'Utslagning', daily: 'Dagens utmaning', school: 'Körskola' };
+export const MODE_NAMES: Record<string, string> = { quick: 'Single race', practice: 'Free practice', cup: 'Championship', career: 'Career', elimination: 'Elimination', daily: 'Daily challenge', school: 'Driving school' };
 
 /** The log lines of the last `days` days (today included). */
 export function readLog(dir: string, days: number, now = Date.now()): Line[] {

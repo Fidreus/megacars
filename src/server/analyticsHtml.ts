@@ -8,10 +8,10 @@ const esc = (s: string | number) =>
 
 let regions: Intl.DisplayNames | null | undefined;
 function country(code: string): string {
-  if (!/^[A-Z]{2}$/.test(code)) return '🌐 Okänt';
+  if (!/^[A-Z]{2}$/.test(code)) return '🌐 Unknown';
   regions ??= (() => {
     try {
-      return new Intl.DisplayNames(['sv'], { type: 'region' });
+      return new Intl.DisplayNames(['en'], { type: 'region' });
     } catch {
       return null;
     }
@@ -33,7 +33,7 @@ function card(label: string, value: string | number, note = ''): string {
 /** Horizontal bars, widest first, each with its share. */
 function bars(items: Count[], opts: { max?: number; label?: (k: string) => string; total?: number } = {}): string {
   const shown = items.slice(0, opts.max ?? 10);
-  if (!shown.length) return '<p class="none">Inga uppgifter än.</p>';
+  if (!shown.length) return '<p class="none">No data yet.</p>';
   const top = Math.max(...shown.map((i) => i.n));
   const total = opts.total ?? items.reduce((a, i) => a + i.n, 0);
   return `<div class="bars">${shown
@@ -74,48 +74,48 @@ export function renderHtml(s: Summary, opts: PageOptions): string {
     return `?${q.toString()}`;
   };
   const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : 0);
-  const lengthStats = `Median ${mmss(s.sessions.medianSec)}, snitt ${mmss(s.sessions.avgSec)}, 90 % stannar kortare än ${mmss(s.sessions.p90Sec)}.`;
+  const lengthStats = `Median ${mmss(s.sessions.medianSec)}, average ${mmss(s.sessions.avgSec)}, 90% stay less than ${mmss(s.sessions.p90Sec)}.`;
   const dayLabels = s.perDay.map((d) => d.day.slice(5));
   const manyDays = s.days > 60 ? 14 : s.days > 30 ? 7 : s.days > 14 ? 3 : s.days > 7 ? 2 : 1;
   const body = !t.visitors && !t.races
-    ? '<p class="none big">Ingen användning loggad under perioden.</p>'
+    ? '<p class="none big">No usage logged in this period.</p>'
     : `
     <div class="cards">
-      ${card('Besökare', t.visitors, 'räknas en gång per dag')}
-      ${card('Sidladdningar', t.opens)}
-      ${card('Lopp startade', t.races, `${t.onlineRaces} online`)}
-      ${card('Tid på sidan', mmss(s.sessions.medianSec), 'median')}
-      ${card('Startade ett lopp', `${pct(s.funnel.raced, s.funnel.opened)} %`, `${s.funnel.raced} av ${s.funnel.opened} sidladdningar`)}
-      ${card('Lopp per besökare', t.visitors ? (t.races / t.visitors).toFixed(1) : '0')}
+      ${card('Visitors', t.visitors, 'counted once per day')}
+      ${card('Page loads', t.opens)}
+      ${card('Races started', t.races, `${t.onlineRaces} online`)}
+      ${card('Time on page', mmss(s.sessions.medianSec), 'median')}
+      ${card('Started a race', `${pct(s.funnel.raced, s.funnel.opened)}%`, `${s.funnel.raced} of ${s.funnel.opened} page loads`)}
+      ${card('Races per visitor', t.visitors ? (t.races / t.visitors).toFixed(1) : '0')}
     </div>
     <div class="grid">
-      ${panel('Besökare per dag', columns(s.perDay.map((d) => d.visitors), dayLabels, { every: manyDays, titles: s.perDay.map((d) => `${d.day}: ${d.visitors} besökare, ${d.opens} sidladdningar, ${d.races} lopp`) }), true)}
-      ${panel('Lopp per dag', columns(s.perDay.map((d) => d.races), dayLabels, { every: manyDays, color: 'var(--accent2)' }), true)}
-      ${panel(`Vilken tid på dygnet (${s.tz})`, `${columns(s.hours.opens, s.hours.opens.map((_, h) => String(h)), { every: 3, titles: s.hours.opens.map((n, h) => `kl ${h}: ${n} sidladdningar, ${s.hours.races[h]} lopp`) })}<p class="sub">Sidladdningar per timme. Lopp per timme:</p>${columns(s.hours.races, s.hours.races.map((_, h) => String(h)), { every: 3, color: 'var(--accent2)' })}`, true)}
-      ${panel('Veckodag', columns(s.weekdays.opens, ['mån', 'tis', 'ons', 'tors', 'fre', 'lör', 'sön'], { titles: s.weekdays.opens.map((n, i) => `${['måndag', 'tisdag', 'onsdag', 'torsdag', 'fredag', 'lördag', 'söndag'][i]}: ${n} sidladdningar, ${s.weekdays.races[i]} lopp`) }))}
-      ${panel('Länder', bars(s.countries, { max: 12, label: country }))}
-      ${panel('Enhet', bars(s.devices))}
-      ${panel('Webbläsare', bars(s.browsers))}
-      ${panel('Operativsystem', bars(s.systems))}
-      ${panel('Skärmbredd', bars(s.screens))}
-      ${panel('Språk', bars(s.languages, { label: (k) => k.toUpperCase() }))}
-      ${panel('Kom från', s.referrers.length ? bars(s.referrers) : '<p class="none">Alla kom direkt (eller utan avsändare).</p>')}
-      ${panel('Hur länge de stannar', `<p class="sub">${esc(lengthStats)} ${s.sessions.withRace} % hann starta ett lopp.</p>${bars(s.sessions.lengths, { max: 7, total: s.sessions.count })}`)}
-      ${panel('Banor', bars(s.tracks.map((r) => ({ key: r.name, n: r.starts })), { max: 15 }), true)}
-      ${panel('Spelläge', `${bars(s.modes)}<p class="sub">I snitt ${s.racesDetail.avgLaps} varv och ${s.racesDetail.avgOpponents} motståndare. ${s.racesDetail.splitScreen} % med delad skärm.</p>`)}
+      ${panel('Visitors per day', columns(s.perDay.map((d) => d.visitors), dayLabels, { every: manyDays, titles: s.perDay.map((d) => `${d.day}: ${d.visitors} visitors, ${d.opens} page loads, ${d.races} races`) }), true)}
+      ${panel('Races per day', columns(s.perDay.map((d) => d.races), dayLabels, { every: manyDays, color: 'var(--accent2)' }), true)}
+      ${panel(`Time of day (${s.tz})`, `${columns(s.hours.opens, s.hours.opens.map((_, h) => String(h)), { every: 3, titles: s.hours.opens.map((n, h) => `${h}:00: ${n} page loads, ${s.hours.races[h]} races`) })}<p class="sub">Page loads per hour. Races per hour:</p>${columns(s.hours.races, s.hours.races.map((_, h) => String(h)), { every: 3, color: 'var(--accent2)' })}`, true)}
+      ${panel('Weekday', columns(s.weekdays.opens, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], { titles: s.weekdays.opens.map((n, i) => `${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]}: ${n} page loads, ${s.weekdays.races[i]} races`) }))}
+      ${panel('Countries', bars(s.countries, { max: 12, label: country }))}
+      ${panel('Device', bars(s.devices))}
+      ${panel('Browser', bars(s.browsers))}
+      ${panel('Operating system', bars(s.systems))}
+      ${panel('Screen width', bars(s.screens))}
+      ${panel('Language', bars(s.languages, { label: (k) => k.toUpperCase() }))}
+      ${panel('Came from', s.referrers.length ? bars(s.referrers) : '<p class="none">Everyone came directly (or without a referrer).</p>')}
+      ${panel('How long they stay', `<p class="sub">${esc(lengthStats)} ${s.sessions.withRace}% started a race.</p>${bars(s.sessions.lengths, { max: 7, total: s.sessions.count })}`)}
+      ${panel('Tracks', bars(s.tracks.map((r) => ({ key: r.name, n: r.starts })), { max: 15 }), true)}
+      ${panel('Game mode', `${bars(s.modes)}<p class="sub">On average ${s.racesDetail.avgLaps} laps and ${s.racesDetail.avgOpponents} opponents. ${s.racesDetail.splitScreen}% in split screen.</p>`)}
       ${panel('Online', s.online.connections || s.online.races.length
-        ? `<p class="sub">${s.online.connections} anslutningar. Median ${mmss(s.online.medianSec)}, snitt ${mmss(s.online.avgSec)}. ${s.online.publicShare} % av loppen i publika rum.</p>${bars(s.online.races.map((r) => ({ key: `${r.name} · ${r.humans} pers.`, n: r.races })))}`
-        : '<p class="none">Inga onlinelopp än.</p>')}
+        ? `<p class="sub">${s.online.connections} connections. Median ${mmss(s.online.medianSec)}, average ${mmss(s.online.avgSec)}. ${s.online.publicShare}% of races in public rooms.</p>${bars(s.online.races.map((r) => ({ key: `${r.name} · ${r.humans} ${r.humans === 1 ? 'player' : 'players'}`, n: r.races })))}`
+        : '<p class="none">No online races yet.</p>')}
     </div>`;
 
   return `<!doctype html>
-<html lang="sv">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<title>Megacars – statistik</title>
+<title>Megacars – statistics</title>
 <style>
   :root { color-scheme: dark; --bg:#0a0c1a; --panel:#141830; --line:#262c50; --text:#e8ecf8; --dim:#8090a8; --accent:#ffd84a; --accent2:#ff6b5e; --bar:#3f6fe0; }
   * { box-sizing: border-box; }
@@ -154,10 +154,10 @@ export function renderHtml(s: Summary, opts: PageOptions): string {
 <body>
 <main>
 <header>
-  <h1>MEGACARS · STATISTIK</h1>
-  <nav>${[1, 7, 30, 90].map((d) => `<a href="${esc(link(d))}"${d === s.days ? ' class="on"' : ''}>${d === 1 ? 'Idag' : `${d} dagar`}</a>`).join('')}</nav>
+  <h1>MEGACARS · STATISTICS</h1>
+  <nav>${[1, 7, 30, 90].map((d) => `<a href="${esc(link(d))}"${d === s.days ? ' class="on"' : ''}>${d === 1 ? 'Today' : `${d} days`}</a>`).join('')}</nav>
 </header>
-<p class="meta">${esc(s.from)} – ${esc(s.to)}. Dagar räknas i UTC, klockslag i ${esc(s.tz)} (lägg till <code>&amp;tz=Europe/London</code> för en annan tidszon). Inga IP-adresser sparas; besökare är hashar som byts varje dygn, så samma person räknas igen nästa dag. Uppdaterad ${esc((opts.generated ?? new Date()).toISOString().replace('T', ' ').slice(0, 16))} UTC.</p>
+<p class="meta">${esc(s.from)} – ${esc(s.to)}. Days are counted in UTC, times of day in ${esc(s.tz)} (add <code>&amp;tz=Europe/London</code> for another time zone). No IP addresses are stored; visitors are hashes that change every day, so the same person is counted again the next day. Updated ${esc((opts.generated ?? new Date()).toISOString().replace('T', ' ').slice(0, 16))} UTC.</p>
 ${body}
 </main>
 </body>

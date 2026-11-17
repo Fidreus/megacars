@@ -105,7 +105,7 @@ describe('reports from the page', () => {
 describe('the page', () => {
   it('shows an empty period and escapes what it prints', () => {
     const s = summarize([], 7, T0);
-    expect(renderHtml(s, { keep: '' })).toContain('Ingen användning loggad');
+    expect(renderHtml(s, { keep: '' })).toContain('No usage logged');
     const lines = [{ ts: T0, t: 'open', h: 'abc', c: 'SE', ref: '<script>x</script>' }];
     const html = renderHtml(summarize(lines, 1, T0), { keep: '' });
     expect(html).not.toContain('<script>');
@@ -133,7 +133,7 @@ describe('the log', () => {
     const s = summarize(readLog(join(dir, 'analytics'), 7, now), 7, now);
     expect(s.totals).toMatchObject({ visitors: 2, opens: 3, sessions: 1, races: 1, onlineRaces: 1 });
     expect(s.countries.map((c) => c.key).sort()).toEqual(['SE', 'US']);
-    expect(s.devices).toEqual([{ key: 'Dator', n: 1 }, { key: 'Mobil', n: 1 }]);
+    expect(s.devices).toEqual([{ key: 'Desktop', n: 1 }, { key: 'Phone', n: 1 }]);
     expect(s.browsers).toEqual([{ key: 'Safari', n: 1 }]);
     expect(s.referrers).toEqual([{ key: 'google.com', n: 1 }]);
     // 12:00 UTC on a Tuesday is 14:00 in Stockholm (summer time).
@@ -150,7 +150,7 @@ describe('the log', () => {
     const html = renderHtml(s, { keep: 'token=abc' });
     expect(html).toContain('Cigar Circuit');
     expect(html).toContain('token=abc');
-    expect(html).toContain('Sverige');
+    expect(html).toContain('Sweden');
     expect(readFileSync(join(dir, 'analytics', '2026-10-20.jsonl'), 'utf8')).not.toContain('203.0.113');
 
     writeFileSync(join(dir, 'analytics', '2026-01-01.jsonl'), '{}\n');
