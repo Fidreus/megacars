@@ -3,6 +3,12 @@
   "private": true,
   "version": "0.10.0",
   "description": "Retro top-down combat racer for the browser, inspired by the Amiga classics.",
+  "license": "MIT",
+  "author": "Fredrik Idréus",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Fidreus/megacars.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"

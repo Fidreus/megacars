@@ -1,294 +1,302 @@
 ---
 name: new-track
-description: Skapa eller ändra en bana i Megacars (create or change a race track) – banform, bredd, ytor, hopp, broar, tema, landmärken, musik, och hur man verifierar och lanserar den. Använd när någon ber om en ny bana, en ny bansträckning, en ändring av en befintlig bana (bredare, kortare, nya kurvor, ytor) eller ett nytt banteema.
+description: Create or change a race track in Megacars – track shape, width, surfaces, jumps, bridges, theme, landmarks, music, and how to verify and ship it. Use when someone asks for a new track, a new track layout, a change to an existing track (wider, shorter, new corners, surfaces) or a new track theme.
 ---
 
-# Skapa en bana i Megacars
+# Creating a track in Megacars
 
-En bana är en `TrackDef` (data) i `src/shared/track/defs/`. Byggaren
-(`src/shared/track/builder.ts`) gör vägen, räcken, ytor, startgrid,
-depå, catch-up-pilar och AI:ns ideallinje av den. Allt i `src/shared` körs
-identiskt på server och klient, så **en bana är en del av simuleringen**.
+A track is a `TrackDef` (data) in `src/shared/track/defs/`. The builder
+(`src/shared/track/builder.ts`) turns it into the road, barriers, surfaces,
+starting grid, pit, catch-up arrows and the AI's racing line. Everything in
+`src/shared` runs identically on server and client, so **a track is part of
+the simulation**.
 
-## Spelarbanor (banskaparen)
+## Player tracks (the track editor)
 
-Spelare gör egna banor i spelets banskapare (`src/client/editor/`). Banan
-kanoniseras av `canonicalDef` i `src/shared/track/custom.ts`: den avrundas,
-hålls inom `LIMITS` och får inga broar. Id:t blir `u-` plus en hash av
-innehållet.
+Players make their own tracks in the game's track editor (`src/client/editor/`).
+The track is canonicalised by `canonicalDef` in `src/shared/track/custom.ts`:
+it is rounded, kept within `LIMITS` and gets no bridges. Its id becomes `u-`
+plus a hash of its contents.
 
-- **Kod:** banan delas som en kod (`encodeTrack`/`decodeTrack`) i en länk
-  `?t=KOD`. `npm run track -- <kod eller länk>` kontrollerar en sådan bana.
-- **Kontroll:** `checkTrackDef` ger `errors`, som betyder att banan inte går
-  att köra, och `missing`, som betyder att depå eller pilar saknas.
-- **Register:** spelarbanor registreras med `registerTrack`. Allt som ska köra
-  en bana slår upp den med `trackDef(id)`/`trackName(id)`, aldrig `TRACKS[id]`.
-  `TRACKS` gäller bara spelets egna banor, till exempel topplistor.
-- **Online:** servern kontrollerar och bygger spelarbanor i
-  `src/server/trackWorker.ts` och publicerar dem via `src/server/trackStore.ts`.
-  En spelarbana blir en del av spelet genom att den läggs i `defs/` och i
-  `TRACK_LIST` enligt stegen nedan.
+- **Code:** the track is shared as a code (`encodeTrack`/`decodeTrack`) in a
+  link `?t=CODE`. `npm run track -- <code or link>` checks such a track.
+- **Checking:** `checkTrackDef` returns `errors`, meaning the track can't be
+  driven, and `missing`, meaning the pit or arrows are missing.
+- **Registry:** player tracks are registered with `registerTrack`. Anything
+  that runs a track looks it up with `trackDef(id)`/`trackName(id)`, never
+  `TRACKS[id]`. `TRACKS` covers only the game's own tracks, for example for
+  leaderboards.
+- **Online:** the server checks and builds player tracks in
+  `src/server/trackWorker.ts` and publishes them via `src/server/trackStore.ts`.
+  A player track becomes part of the game by being added to `defs/` and to
+  `TRACK_LIST` following the steps below.
 
-## Snabbt arbetsflöde
+## Quick workflow
 
-1. Skriv definitionen i `src/shared/track/defs/<namn>.ts` (se mallen nedan).
-2. Iterera med `npm run track -- src/shared/track/defs/<namn>.ts --svg <scratchpad>/<id>.svg`
-   tills den bygger utan fel, har depå och AI:n klarar den (se "Kontrollera").
-3. Registrera den i `TRACK_LIST` i `src/shared/track/defs/index.ts`.
-4. Ge den ett tema: ett befintligt (`countryside`, `desert`, `winter`, `nuclear`,
-   `brewery`, `tivoli`, `cigar`, `city`) eller ett nytt (se "Utseende").
-5. Höj `SIM_VERSION` i `src/shared/config/constants.ts` med ett.
+1. Write the definition in `src/shared/track/defs/<name>.ts` (see the template below).
+2. Iterate with `npm run track -- src/shared/track/defs/<name>.ts --svg <scratchpad>/<id>.svg`
+   until it builds without errors, has a pit and the AI can handle it (see "Verifying").
+3. Register it in `TRACK_LIST` in `src/shared/track/defs/index.ts`.
+4. Give it a theme: an existing one (`countryside`, `desert`, `winter`, `nuclear`,
+   `brewery`, `tivoli`, `cigar`, `city`) or a new one (see "Appearance").
+5. Bump `SIM_VERSION` in `src/shared/config/constants.ts` by one.
 6. `npm run typecheck`, `npx vitest run`, `npm run sim -- --seeds 4 --track <id> --weapons`,
-   `npm run build`, och titta på den i webbläsaren.
-7. Uppdatera banlistan i `README.md`, committa och pusha.
+   `npm run build`, and look at it in the browser.
+7. Update the track list in `README.md`, commit and push.
 
-## Koordinater
+## Coordinates
 
-- `x` åt höger (öster), `z` **nedåt** på skärmen (söder). Kameran står i
-  söder och tittar norrut, snett nedåt (57°).
-- Mått i meter. Bilen är cirka 4,4 × 2 m. Tänk "ungefär 1 m per pixel i en
-  översiktsbild".
-- Banan körs i den ordning `path` listar hörnen. Alla befintliga banor går
-  medurs på skärmen. Moturs fungerar också.
+- `x` points right (east), `z` points **down** the screen (south). The camera
+  stands in the south looking north, angled downwards (57°).
+- Units are metres. The car is about 4.4 × 2 m. Think "roughly 1 m per pixel
+  in an overview image".
+- The track is driven in the order `path` lists the corners. All existing
+  tracks run clockwise on screen. Counter-clockwise works too.
 
-## Mall
+## Template
 
 ```ts
 import { Surface } from '../../config/surfaces.ts';
 import type { TrackDef } from '../types.ts';
 
-// En eller två meningar om banans karaktär: vad som händer var på varvet.
+// One or two sentences on the track's character: what happens where on the lap.
 export const MY_TRACK: TrackDef = {
-  id: 'mytrack',            // unikt, små bokstäver. Används i URL (?track=), rekord, rum
-  name: 'My Track',         // visas i menyer (versaler i UI)
-  theme: 'countryside',     // nyckel i THEMES (src/client/render/theme.ts)
-  width: 17,                // vägbredd i meter, 15–20 brukar fungera
-  // cornerWiden: 2,        // extra halvbredd per sida i kurvorna (bredare kurvor = mer förlåtande)
-  runoff: 5,                // gräs/grus mellan vägkant och räcke, 3–6
+  id: 'mytrack',            // unique, lower case. Used in the URL (?track=), records, rooms
+  name: 'My Track',         // shown in menus (upper-cased in the UI)
+  theme: 'countryside',     // key in THEMES (src/client/render/theme.ts)
+  width: 17,                // road width in metres, 15–20 usually works
+  // cornerWiden: 2,        // extra half-width per side in corners (wider corners = more forgiving)
+  runoff: 5,                // grass/gravel between road edge and barrier, 3–6
   // runoffSurface: Surface.Gravel,
-  startAt: 0.45,            // startlinjen: andel längs rakan från sista hörnet till första
+  startAt: 0.45,            // the start line: fraction along the straight from the last corner to the first
   laps: 3,
-  // lapScale: 3,           // korta banor: varv körda per varv valt i menyn
-  seed: 8,                  // slumpfrö för kulissen (träd, hus); olika per bana
+  // lapScale: 3,           // short tracks: laps driven per lap chosen in the menu
+  seed: 8,                  // random seed for the scenery (trees, houses); different per track
   path: [
-    { x: 300, z: 0, r: 30 },   // hörn 0: slutet av startrakan. r = kurvradie för mittlinjen
+    { x: 300, z: 0, r: 30 },   // corner 0: end of the start straight. r = corner radius of the centre line
     { x: 300, z: 200, r: 40 },
     { x: -200, z: 200, r: 60 },
-    { x: -200, z: 0, r: 30 },  // sista hörnet: in på startrakan (mot hörn 0)
+    { x: -200, z: 0, r: 30 },  // last corner: onto the start straight (towards corner 0)
   ],
   patches: [{ surface: Surface.Gravel, x: 290, z: 190, r: 22, runoff: true }],
   // ramps: [{ x: 100, z: 200, length: 10, height: 1.4 }],
-  // bridges: [...]             // när banan korsar sig själv, se twinBridges.ts
+  // bridges: [...]             // when the track crosses itself, see twinBridges.ts
   // landmarks: [{ kind: 'carousel', x: 0, z: 100 }],
 };
 ```
 
-## Banformen: regler som byggaren kontrollerar
+## Track shape: rules the builder checks
 
-`path` är en sluten polygon. Varje hörn rundas med en cirkelbåge med radien
-`r`. Startrakan går från sista hörnet till hörn 0.
+`path` is a closed polygon. Each corner is rounded with a circular arc of
+radius `r`. The start straight runs from the last corner to corner 0.
 
-- **Minsta radie:** `r ≥ width/2 + cornerWiden + runoff + 0.5`, annars viks
-  innerräcket. Exempel: width 17 och runoff 5 ger minst 14 m. 18–25 m är
-  tvära hårnålar, 30–60 m vanliga kurvor, 100 m och mer svep.
-- **Plats för kurvorna:** en sväng med vinkeln θ tar upp `r·tan(θ/2)` av
-  rakan på varje sida (90° tar alltså `r`). Två grannhörn får inte ta
-  mer än sträckan mellan dem: felet heter `straight i->j: corners need …`.
-  Sänk radierna eller flytta isär hörnen.
-- **Högst 179° per hörn.** En U-sväng är två hörn i följd med var sin
-  90°-sväng, till exempel `{x:150,z:200}` och `{x:150,z:248}` i Green Valley.
-- **Inga överlapp:** delar av banan som inte hänger ihop längs vägen måste
-  ligga minst `2·(halvbredd + runoff) + 1` m isär, mätt mittlinje till
-  mittlinje. Med width 17 och runoff 5 blir det 28 m. Felet heter
-  `sections at s=… and s=… are only X m apart`. Mittlinjen får inte korsa
-  sig själv, utom via en `bridges`-post.
-- **Startgriden står på rakan:** 8 bilar står upp till cirka 35 m bakom
-  linjen. Ha minst 45 m raka före linjen.
-- **Ramper och broar** får inte gå över startlinjen.
+- **Minimum radius:** `r ≥ width/2 + cornerWiden + runoff + 0.5`, otherwise
+  the inner barrier folds over. Example: width 17 and runoff 5 give at least
+  14 m. 18–25 m are tight hairpins, 30–60 m ordinary corners, 100 m and more
+  sweepers.
+- **Room for the corners:** a turn through angle θ takes up `r·tan(θ/2)` of
+  the straight on each side (so 90° takes `r`). Two neighbouring corners may
+  not take more than the distance between them: the error is called
+  `straight i->j: corners need …`. Lower the radii or move the corners apart.
+- **At most 179° per corner.** A U-turn is two consecutive corners with a
+  90° turn each, for example `{x:150,z:200}` and `{x:150,z:248}` in Green Valley.
+- **No overlaps:** parts of the track that are not connected along the road
+  must be at least `2·(half-width + runoff) + 1` m apart, measured centre line
+  to centre line. With width 17 and runoff 5 that is 28 m. The error is called
+  `sections at s=… and s=… are only X m apart`. The centre line may not cross
+  itself, except via a `bridges` entry.
+- **The starting grid sits on the straight:** 8 cars stand up to about 35 m
+  behind the line. Have at least 45 m of straight before the line.
+- **Ramps and bridges** may not cross the start line.
 
-## Det som inte ger fel men gör banan sämre
+## What doesn't cause errors but makes the track worse
 
-- **Depån** (`pit.ts`) läggs bara ut om startrakan är lång nog. Raka
-  före och efter linjen, som `npm run track` visar, måste tillsammans vara
-  minst cirka 106 m (8 m marginal mot varje kurva och en fil på minst 90 m).
-  Den sida depån hamnar på behöver cirka 25 m fritt utanför räcket för
-  fil, ö och garage. Sikta på 70–90 m raka på var sida om linjen, med
-  `startAt` runt 0,4–0,55. Den längsta depån som går är 180 m.
-  `npm run track` skriver `pit: NONE` om det inte gick. **Testerna kräver
-  en depå på varje bana**, med depåboxen längre än 30 m, alltså en
-  reparationszon på minst cirka 25 m. AI:n måste också köra in och komma
-  ut reparerad (`pit.test.ts`).
-- **Catch-up-pilar** (`catchUp.ts`) hamnar på raksträckor som är minst
-  24 m långa, ligger mer än 80 m från startlinjen och ligger minst 160 m
-  från varandra. **Testerna kräver minst två** (`catchUp.test.ts`). En
-  kompakt bana på 800 m klarar det bara med pilar på motsatta sidor av
-  varvet.
-- **Rytm:** varva tvära och snabba kurvor och ge varje kurva en raka ut.
-  Vänster-höger-följder med 20–35 m raka emellan är roliga att drifta
-  igenom, se Tivoli Twists "våg". Tvära kurvor direkt efter en lång raka
-  ger krockar med vapen och tät trafik. Det är bra, men inte för ofta.
-- **Längd:** fullstora banor är 1600–2500 m (AI-varv 38–58 s, 3–4 varv).
-  En kompakt bana kring 800 m har `lapScale: 3`, AI-varv runt 18 s.
-- **Förlåtande eller svår:** bredare väg, `cornerWiden` och större
-  `runoff` gör banan lättare. Smal väg, grusrunoff och ytor på
-  ideallinjen gör den svårare. Mät effekten med väggträffar och respawns.
+- **The pit** (`pit.ts`) is only placed if the start straight is long enough.
+  The straight before and after the line, as shown by `npm run track`, must
+  together be at least about 106 m (8 m of margin to each corner and a lane of
+  at least 90 m). The side the pit ends up on needs about 25 m of free space
+  outside the barrier for the lane, island and garages. Aim for 70–90 m of
+  straight on each side of the line, with `startAt` around 0.4–0.55. The
+  longest possible pit is 180 m. `npm run track` prints `pit: NONE` if it
+  couldn't be placed. **The tests require a pit on every track**, with the pit
+  box longer than 30 m, i.e. a repair zone of at least about 25 m. The AI must
+  also drive in and come out repaired (`pit.test.ts`).
+- **Catch-up arrows** (`catchUp.ts`) end up on straights that are at least
+  24 m long, lie more than 80 m from the start line and are at least 160 m
+  from each other. **The tests require at least two** (`catchUp.test.ts`). A
+  compact 800 m track only manages this with arrows on opposite sides of the
+  lap.
+- **Rhythm:** alternate tight and fast corners and give every corner a
+  straight on the way out. Left-right sequences with 20–35 m of straight in
+  between are fun to drift through, see Tivoli Twist's "wave". Tight corners
+  right after a long straight cause crashes with weapons and dense traffic.
+  That's good, but not too often.
+- **Length:** full-size tracks are 1600–2500 m (AI lap 38–58 s, 3–4 laps).
+  A compact track of around 800 m has `lapScale: 3`, AI lap around 18 s.
+- **Forgiving or hard:** a wider road, `cornerWiden` and larger `runoff` make
+  the track easier. A narrow road, gravel runoff and surfaces on the racing
+  line make it harder. Measure the effect with wall hits and respawns.
 
-## Ytor (`patches`)
+## Surfaces (`patches`)
 
 `Surface`: `Asphalt`, `Wet`, `Gravel`, `Grass`, `Snow`, `Ice`, `Oil`,
-`ShallowWater`, `DeepWater`. Greppvärden finns i
+`ShallowWater`, `DeepWater`. Grip values are in
 `src/shared/config/surfaces.ts`.
 
-- En patch är en cirkel (`r`) som ritas som en oregelbunden fläck
-  (`patchShape.ts`). Med `hx`/`hz` blir den en rektangel, som ett vattendike.
-- `runoff: true` täcker även runoffen. Använd det för gruskurvor.
-- Lägg is, olja och vått **i eller strax efter** en kurva. Lägg dem aldrig
-  vid startgriden eller på depåns fil.
-- Is och olja är mycket hala (grepp 0,18 och 0,06). Håll dem små, r 6–10,
-  så att de går att undvika.
+- A patch is a circle (`r`) drawn as an irregular blob (`patchShape.ts`).
+  With `hx`/`hz` it becomes a rectangle, like a water ditch.
+- `runoff: true` also covers the runoff. Use it for gravel corners.
+- Put ice, oil and wet **in or just after** a corner. Never put them at the
+  starting grid or on the pit lane.
+- Ice and oil are very slippery (grip 0.18 and 0.06). Keep them small, r 6–10,
+  so they can be avoided.
 
-## Hopp och broar
+## Jumps and bridges
 
-- `ramps`: `(x, z)` är rampens krön, mitt på vägen på en raka. Rampen
-  stiger över `length` meter före krönet. Typiska värden är length 10–11
-  och height 1,4–1,7 (se `dustBowl.ts` och `meltdown.ts`). Sätt gärna
-  vatten eller grus efter krönet så att ett för kort hopp kostar något.
-- `bridges`: används när banan korsar sig själv. `upper` (0 eller 1) anger
-  vilken av de två passagerna, räknat från startlinjen, som går överst.
-  `gap: true` ger en trasig bro att hoppa över. Följ `twinBridges.ts`:
-  korsa i ungefär rät vinkel, height cirka 5,5, span 14–15 och ramp 45.
+- `ramps`: `(x, z)` is the ramp's crest, in the middle of the road on a
+  straight. The ramp rises over `length` metres before the crest. Typical
+  values are length 10–11 and height 1.4–1.7 (see `dustBowl.ts` and
+  `meltdown.ts`). Consider putting water or gravel after the crest so that a
+  jump that falls short costs something.
+- `bridges`: used when the track crosses itself. `upper` (0 or 1) says which
+  of the two passes, counted from the start line, goes on top. `gap: true`
+  gives a broken bridge to jump over. Follow `twinBridges.ts`: cross at
+  roughly a right angle, height about 5.5, span 14–15 and ramp 45.
 
-## Utseende (klienten, påverkar inte simuleringen)
+## Appearance (client side, does not affect the simulation)
 
-- **Tema:** `THEMES` i `src/client/render/theme.ts` styr markfärg, träd,
-  stenar, hus, damm och reklamskyltar (`sponsors`). Med `patchColors` kan en
-  yta ritas i en annan färg, till exempel olja som öl. Ett okänt tema
-  faller tillbaka på `countryside`.
-- **Mark:** `flowers` ger blomsterängar, `mowed` ger klippta ränder i en
-  gräsrunoff, `clouds` ger drivande molnskuggor, `sand` ger dyner och
-  vindrippel, `snow` ger drivor och glitter, `woods` samlar träden i
-  skogsdungar och `blossom` ger blommande träd.
-- **Liv (`life`, ett recept i temat, se `trackLife.ts`):**
-  - `banks`: publikslänter i kurvorna, med funktionärer.
-  - `camps`: tält- eller husbilsläger.
-  - `paddocks`: hagar med får, kor, hästar eller renar.
-  - `bales`: höbalar.
-  - `vehicles`: traktor, snöskoter, lastbil eller truck som kör fram och
-    tillbaka.
-  - `walkers`: folk som promenerar.
-  - `birds`: fåglar som cirklar.
-  - `balloon`: en luftballong.
-  - `extras`: oljepumpar, rullande buskar, vindpumpar, snögubbar,
-    skridskoåkare och arbetsplatser (`lifeExtras.ts`).
+- **Theme:** `THEMES` in `src/client/render/theme.ts` controls ground colour,
+  trees, rocks, houses, dust and advertising boards (`sponsors`). With
+  `patchColors` a surface can be drawn in a different colour, for example oil
+  as beer. An unknown theme falls back to `countryside`.
+- **Ground:** `flowers` gives flower meadows, `mowed` gives mown stripes in a
+  grass runoff, `clouds` gives drifting cloud shadows, `sand` gives dunes and
+  wind ripples, `snow` gives drifts and glitter, `woods` gathers the trees
+  into groves and `blossom` gives blossoming trees.
+- **Life (`life`, a recipe in the theme, see `trackLife.ts`):**
+  - `banks`: spectator banks in the corners, with marshals.
+  - `camps`: tent or camper-van camps.
+  - `paddocks`: paddocks with sheep, cows, horses or reindeer.
+  - `bales`: hay bales.
+  - `vehicles`: a tractor, snowmobile, lorry or forklift driving back and
+    forth.
+  - `walkers`: people out for a walk.
+  - `birds`: circling birds.
+  - `balloon`: a hot-air balloon.
+  - `extras`: oil pumps, tumbleweeds, wind pumps, snowmen, skaters and
+    work sites (`lifeExtras.ts`).
 
-  Små figurer ritas instansierat per 80 m-ruta och animeras i shadern.
-  Större saker som rör sig flyttas av `animate` och måste hållas utanför
-  `batchStatic` (`moving`). Material med `onBeforeCompile` som skiljer sig
-  mellan banor eller teman behöver en egen `customProgramCacheKey`.
-  Annars återanvänder three.js fel program.
-- **Hus:** byggnader med fönsterväggar får automatiskt mjuka
-  kontaktskuggor (`grounding.ts`). Husen längs vägen får en stensatt yta
-  med bänkar och planteringar. Höjderna längs vägen sätts per tema i
-  `town.ts`: låga hus på landet, i öknen och i snön, torn i staden.
-- **Byggnader och landmärken:** varje tema har en gren i `buildTown`
-  (`src/client/render/town.ts`). Där placeras temats byggnader med `place()`
-  och `def.landmarks` läses. Egna modeller ligger i en egen fil, som
-  `brewery.ts` och `tivoli.ts`. Landmärken som finns idag:
-  - `brewery`: `brewhouse`, `mug` och `tent`.
-  - `tivoli`: `ferriswheel`, `carousel` och `bigtop`.
-  - `city`: `tower`, `liberty`, `board` och `subway`.
-- **Landmärken tappas tyst** om de inte får plats. Två saker räcker:
-  - de står för nära vägen eller ett annat objekt,
-  - de skymmer vägen. Ett objekt med höjden h skymmer cirka 0,65·h m mark
-    **norr om sig** (lägre z).
+  Small figures are drawn instanced per 80 m cell and animated in the shader.
+  Larger moving things are moved by `animate` and must be kept out of
+  `batchStatic` (`moving`). Materials with `onBeforeCompile` that differ
+  between tracks or themes need their own `customProgramCacheKey`.
+  Otherwise three.js reuses the wrong program.
+- **Houses:** buildings with window walls automatically get soft contact
+  shadows (`grounding.ts`). Houses along the road get a paved area with
+  benches and planters. The heights along the road are set per theme in
+  `town.ts`: low houses in the countryside, the desert and the snow, towers
+  in the city.
+- **Buildings and landmarks:** each theme has a branch in `buildTown`
+  (`src/client/render/town.ts`). That is where the theme's buildings are
+  placed with `place()` and `def.landmarks` is read. Custom models live in
+  their own file, like `brewery.ts` and `tivoli.ts`. Landmarks that exist
+  today:
+  - `brewery`: `brewhouse`, `mug` and `tent`.
+  - `tivoli`: `ferriswheel`, `carousel` and `bigtop`.
+  - `city`: `tower`, `liberty`, `board` and `subway`.
+- **Landmarks are silently dropped** if they don't fit. Either of two things
+  is enough:
+  - they stand too close to the road or to another object,
+  - they hide the road. An object of height h hides about 0.65·h m of ground
+    **north of itself** (lower z).
 
-  Lägg höga saker söder om vägen eller med gott om plats norrut, gärna
-  inne i slingorna där man ser dem varje varv. Kontrollera i webbläsaren
-  att de syns.
-- **Musik:** `TRACK_SONG` i `src/client/audio/music.ts` kopplar bana till
-  låt. Utan en post där spelas låten med samma namn som banans id, och
-  finns ingen sådan spelas `greenvalley`. Lägg aldrig till musik utan känd
-  licens, och fyll i `public/music/CREDITS.md`.
+  Put tall things south of the road or with plenty of room to the north,
+  ideally inside the loops where they are seen every lap. Check in the browser
+  that they are visible.
+- **Music:** `TRACK_SONG` in `src/client/audio/music.ts` maps a track to a
+  song. Without an entry there, the song with the same name as the track's id
+  is played, and if there is no such song, `greenvalley` is played. Never add
+  music without a known licence, and fill in `public/music/CREDITS.md`.
 
-## Kontrollera
+## Verifying
 
 ```sh
-npm run track -- src/shared/track/defs/<namn>.ts --svg <scratchpad>/<id>.svg   # innan den är registrerad
-npm run track -- <id> --seeds 3 [--weapons] [--laps 3]                         # när den finns i TRACK_LIST
+npm run track -- src/shared/track/defs/<name>.ts --svg <scratchpad>/<id>.svg   # before it is registered
+npm run track -- <id> --seeds 3 [--weapons] [--laps 3]                         # once it is in TRACK_LIST
 ```
 
-Verktyget skriver ut följande:
+The tool prints the following:
 
-- längd och bredd,
-- byggfel,
-- startrakan före och efter linjen,
-- depåns sida och reparationszon,
-- catch-up-pilarnas positioner,
-- sektionerna i körordning (`S92 R38 L29 …` = raka, höger, vänster, meter),
-- AI-lopp med 8 bilar: alla i mål, bästa varv, respawns, väggträffar.
+- length and width,
+- build errors,
+- the start straight before and after the line,
+- the pit's side and repair zone,
+- the positions of the catch-up arrows,
+- the sections in driving order (`S92 R38 L29 …` = straight, right, left, metres),
+- AI races with 8 cars: all finished, best lap, respawns, wall hits.
 
-Det avslutas med kod 1 vid fel. SVG-bilden visar räcken (rött), vägkanter,
-mittlinje, ideallinje (blått), ytor (gult), pilar (cyan), grid, startlinje,
-landmärken och hörnens index.
+It exits with code 1 on errors. The SVG image shows barriers (red), road
+edges, centre line, racing line (blue), surfaces (yellow), arrows (cyan),
+grid, start line, landmarks and the corners' indices.
 
-Vill du titta på SVG-filen som bild kan du lägga den i en sida och ta en
-skärmdump med Playwright. Chromium finns på `/opt/pw-browsers/chromium`:
+If you want to view the SVG file as an image, you can put it in a page and
+take a screenshot with Playwright. Chromium is at `/opt/pw-browsers/chromium`:
 
 ```js
 await page.setContent(`<body style="margin:0">${readFileSync(svgPath, 'utf8')}</body>`);
 await page.screenshot({ path: pngPath });
 ```
 
-**Godkänt:**
+**Passing:**
 
-- inga fel och en depå,
-- minst två pilar,
-- 8/8 i mål i varje seed, också med `--weapons`,
-- respawns som är få och inte ökar mellan seeds.
+- no errors and a pit,
+- at least two arrows,
+- 8/8 finished in every seed, also with `--weapons`,
+- respawns that are few and don't increase between seeds.
 
-En respawn-loop, alltså samma bil om och om igen, betyder att AI:n
-inte klarar ett ställe. Bredda vägen där, öka radien eller ta bort ytan.
+A respawn loop, i.e. the same car over and over again, means the AI can't
+handle a spot. Widen the road there, increase the radius or remove the
+surface.
 
-**I spelet:** starta servern (`node src/server/main.ts` med `PORT=8790`)
-och öppna `http://localhost:8790/?mute=1&track=<id>&mode=practice`. Med
-Playwright går det att styra spelet via `window.__megacars`:
+**In the game:** start the server (`node src/server/main.ts` with `PORT=8790`)
+and open `http://localhost:8790/?mute=1&track=<id>&mode=practice`. With
+Playwright you can control the game via `window.__megacars`:
 
 ```js
 await page.evaluate((t) => __megacars.startRace({ track: t, opponents: 0, practice: true }), id);
-await page.evaluate(() => __megacars.autopilot(true));   // AI kör din bil
-await page.evaluate(() => __megacars.debug.zoom(2.5));   // zooma ut
-await page.evaluate(() => __megacars.debug.place(x, z)); // flytta bilen (kameran följer)
-await page.evaluate(() => __megacars.advance(600));      // stega simuleringen
+await page.evaluate(() => __megacars.autopilot(true));   // the AI drives your car
+await page.evaluate(() => __megacars.debug.zoom(2.5));   // zoom out
+await page.evaluate(() => __megacars.debug.place(x, z)); // move the car (the camera follows)
+await page.evaluate(() => __megacars.advance(600));      // step the simulation
 ```
 
-Starta Chromium med `--use-angle=swiftshader --enable-unsafe-swiftshader`.
-Granska att vägen och depån syns, att landmärkena kom med och att inget
-står på vägen.
+Launch Chromium with `--use-angle=swiftshader --enable-unsafe-swiftshader`.
+Check that the road and the pit are visible, that the landmarks made it in
+and that nothing stands on the road.
 
-## Ändra en befintlig bana
+## Changing an existing track
 
-- Ändrad geometri (path, bredd, runoff, ytor, ramper) är en
-  simuleringsändring. Höj `SIM_VERSION`, kör `npm run track -- <id>` och
-  sim-loppen igen, och jämför varvtider och väggträffar med före ändringen.
-- Rekorden ligger under banans `id`. Byter du `id` försvinner banans
-  rekord. Ändrar du formen kraftigt blir gamla rekord ojämförbara, så
-  nämn det för användaren.
-- `width`, `cornerWiden` och `runoff` påverkar allt omkring: depåns läge,
-  överlappskontrollen, minsta radien och kulissens avstånd. Kör därför hela
-  kontrollen, inte bara ett lopp.
+- Changed geometry (path, width, runoff, surfaces, ramps) is a simulation
+  change. Bump `SIM_VERSION`, run `npm run track -- <id>` and the sim races
+  again, and compare lap times and wall hits with before the change.
+- Records are stored under the track's `id`. If you change the `id`, the
+  track's records disappear. If you change the shape substantially, old
+  records become incomparable, so mention that to the user.
+- `width`, `cornerWiden` and `runoff` affect everything around them: the
+  pit's position, the overlap check, the minimum radius and the scenery's
+  distance. So run the full verification, not just one race.
 
-## Fallgropar
+## Pitfalls
 
-- `getTrack()` cachar byggda banor per `id`. Ge utkast egna id:n och
-  återanvänd aldrig ett id för en annan form i samma process.
-- Tester som går över alla banor i `TRACK_LIST`:
-  - `builder.test.ts`: banan bygger utan fel och har 8 gridplatser.
-  - `pit.test.ts`: depå finns, och AI:n kör in och reparerar.
-  - `catchUp.test.ts`: minst två pilar, mer än 80 m från startlinjen.
+- `getTrack()` caches built tracks per `id`. Give drafts their own ids and
+  never reuse an id for a different shape in the same process.
+- Tests that run over all tracks in `TRACK_LIST`:
+  - `builder.test.ts`: the track builds without errors and has 8 grid slots.
+  - `pit.test.ts`: a pit exists, and the AI drives in and repairs.
+  - `catchUp.test.ts`: at least two arrows, more than 80 m from the start line.
 
-  En ny bana måste klara alla tre.
-- Höj `SIM_VERSION` när en bana läggs till eller ändras. Annars kan en
-  gammal klient gå med i ett rum vars bana den inte känner till eller
-  bygger annorlunda.
-- `laps` och `lapScale` hör ihop med `raceLaps()`. Använd `raceLaps(track, laps)`
-  och inte `def.laps` direkt när antalet varv som faktiskt körs behövs.
+  A new track must pass all three.
+- Bump `SIM_VERSION` when a track is added or changed. Otherwise an old
+  client can join a room whose track it doesn't know or builds differently.
+- `laps` and `lapScale` go together with `raceLaps()`. Use `raceLaps(track, laps)`
+  and not `def.laps` directly when you need the number of laps actually driven.

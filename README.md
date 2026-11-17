@@ -1,888 +1,1001 @@
 # Megacars
 
-Retro top-down combat racer for the browser, inspired by the Amiga classic
-Super Cars II. 3D rendered at a low internal resolution (~360 lines) with a
-pixel-snapped camera, toon-shaded world, glossy cars, hard shadows, bloom and
-optional Amiga colour modes/CRT; arcade drift physics where full-speed corners
-are taken sideways.
+<p align="center">
+  <img src="docs/images/title.png" alt="Megacars title screen" width="800">
+</p>
 
-## Kom igång
+<p align="center">
+  <b>Retro top-down combat racing for the browser.</b><br>
+  Drift, boost, fire missiles and drop mines – alone, in split screen or online with up to eight players.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT licence"></a>
+  <img src="https://img.shields.io/badge/TypeScript-Three.js-informational.svg" alt="TypeScript + Three.js">
+  <img src="https://img.shields.io/badge/node-%3E%3D24-green.svg" alt="Node 24+">
+</p>
+
+Megacars is a top-down combat racer inspired by the Amiga classic Super Cars
+II. It is 3D rendered at a low internal resolution (~360 lines) with a
+pixel-snapped camera, a toon-shaded world, glossy cars, hard shadows, bloom
+and optional Amiga colour modes/CRT. The physics are arcade drift physics:
+full-speed corners are taken sideways.
+
+- **Nine tracks** – countryside, desert, ice, a nuclear plant, a brewery, a
+  funfair, tobacco country, Manhattan and a track that crosses itself twice,
+  with jumps and bridges – with weather and day, sunset and night.
+- **Drift boost, drafting, ramps and weapons:** missiles, mines, turbo and
+  special items in crates on the track.
+- **Single race, championship, career, elimination, time trial, daily
+  challenge and a driving school**, with medals, achievements and paint jobs.
+- **Split screen** for two players, **online rooms** for up to eight, and
+  online leaderboards with replayable ghosts.
+- **A track editor** – build your own tracks, share them as a link and
+  publish them for others.
+- **Tracker music** (MOD/XM/IT) played with libopenmpt; drop your own module
+  files into the window to add them.
+- Gamepad, keyboard and touch controls; installable as a PWA and playable
+  offline against the AI.
+
+## Screenshots
+
+| | |
+|:---:|:---:|
+| ![Dust Bowl: desert track with gravel and a grandstand](docs/images/dustbowl.png) | ![Meltdown Ridge at sunset](docs/images/meltdown.png) |
+| **Dust Bowl** – narrow desert track | **Meltdown Ridge** at sunset |
+| ![Frost Ring at night with headlights](docs/images/frost_night.png) | ![Manhattan Sprint between skyscrapers](docs/images/manhattan.png) |
+| **Frost Ring** at night | **Manhattan Sprint** |
+| ![Tivoli Twist at night with a missile hit](docs/images/tivoli.png) | ![Brewery Bash at sunset](docs/images/brewery.png) |
+| **Tivoli Twist** – missiles at the funfair | **Brewery Bash** |
+| ![Two-player split screen on the start grid](docs/images/split.png) | ![The track editor](docs/images/editor.png) |
+| Two-player **split screen** | The **track editor** |
+
+## Getting started
 
 ```bash
 npm install
-npm run dev        # Vite (http://localhost:5173) + spelserver (ws på 8787)
-npm test           # fysik-, ban- och driftbenchmarktester
+npm run dev        # Vite (http://localhost:5173) + game server (ws on 8787)
+npm test           # physics, track and drift benchmark tests
 npm run typecheck
-npm run build && npm start   # produktion: en server för spel + WebSocket på $PORT
+npm run build && npm start   # production: one server for game + WebSocket on $PORT
 ```
 
-## Spela
+## Playing
 
-Titelmenyn styrs med piltangenter/WASD + Enter, handkontroll eller mus:
-starta lopp, 1–2 spelare (delad skärm), bana, antal varv, motståndare,
-svårighetsgrad, tid på dygnet, eller fri träning. Loppet startar med fem
-röda startljus – när de släcks är det fullt ös. Efter målgång visas
-resultatlistan. Under **LEAGUE** väljer du bilklass: **STANDARD** (spelet som
-det är tunat), **SUPERCARS** (mycket snabbare, greppar och bromsar hårdare)
-eller **MEGACARS** (ännu lite snabbare igen, med egen vildare look). Varje
-klass har egna rekordtavlor per bana.
+The title menu is controlled with the arrow keys/WASD + Enter, a gamepad or
+the mouse: start a race, 1–2 players (split screen), track, number of laps,
+opponents, difficulty, time of day, or free practice. The race starts with
+five red start lights – when they go out, it's flat out. After the finish the
+results list is shown. Under **LEAGUE** you choose the car class:
+**STANDARD** (the game as tuned), **SUPERCARS** (much faster, grips and
+brakes harder) or **MEGACARS** (a bit faster again, with its own wilder
+look). Each class has its own record boards per track.
 
-Titelmenyn: SINGLE RACE, CHAMPIONSHIP, CAREER, PLAY ONLINE, DAILY CHALLENGE,
-TIME TRIAL & RECORDS, TRACK EDITOR, PAINT & ACHIEVEMENTS, OPTIONS, DRIVING
-SCHOOL och HOW TO PLAY. Den hålls så kort att den får plats på en liten
-mobil utan att rulla; på låga skärmar krymper loggan i stället. Tillbaka
-från RECORDS, ACHIEVEMENTS och PAINT SHOP leder till sidan man kom ifrån.
+The title menu: SINGLE RACE, CHAMPIONSHIP, CAREER, PLAY ONLINE, DAILY
+CHALLENGE, TIME TRIAL & RECORDS, TRACK EDITOR, PAINT & ACHIEVEMENTS, OPTIONS,
+DRIVING SCHOOL and HOW TO PLAY. It's kept short enough to fit on a small
+phone without scrolling; on short screens the logo shrinks instead. Going
+back from RECORDS, ACHIEVEMENTS and PAINT SHOP returns you to the page you
+came from.
 
-På asfalt greppar bilen tills gränsen och understyr sedan – den sladdar inte
-av sig själv. Driften startar du enklast med **driftknappen** (Z, eller LB på
-handkontrollen) medan du styr in i kurvan – håll den nere så håller bilen
-sladden. Det går också att **släppa gasen kort (under 0,3 s) och trycka
-igen** medan du styr in i kurvan – eller genom att dutta på bromsen
-(under 0,25 s) medan du styr. Längre rullning eller vanlig inbromsning startar
-ingen drift. I sladden orkar däcken mycket mer sidokraft, så rätt timing tar
-dig genom skarpa kurvor mycket fortare. Gas ökar sladdvinkeln, släpp gasen
-eller motstyr för att räta upp. Is, olja och snö sladdar av sig själva.
+On tarmac the car grips up to the limit and then understeers – it doesn't
+slide on its own. The easiest way to start a drift is the **drift button**
+(Z, or LB on the gamepad) while you steer into the corner – hold it down and
+the car holds the slide. You can also **lift off the throttle briefly (under
+0.3 s) and get back on it** while steering into the corner – or dab the brake
+(under 0.25 s) while steering. Coasting for longer or braking normally
+doesn't start a drift. In a slide the tyres can take much more lateral force,
+so good timing gets you through tight corners much faster. Throttle increases
+the slide angle; lift off or countersteer to straighten up. Ice, oil and snow
+make the car slide on their own.
 
-**Driftboost:** en sladd genom en kurva laddar en boost i tre nivåer, efter
-ungefär 0,6, 1,3 och 2,2 sekunders drift (mätaren bredvid hastigheten, gnistor
-från bakhjulen i blått, orange och lila). När bilen greppar igen får den en
-kort knuff framåt: nivå 1 är en liten puff (0,6 s), nivå 2 längre och
-starkare (1,2 s), nivå 3 (en lång hårnål på Cigar Circuit) lite bättre än en
-turbo (2 s). Så länge du håller driftknappen genom en laddad drift nöter
-däcken bara en fjärdedel så mycket fart, så en lång ren drift lönar sig mer
-än en kort: i kurvrika banor med långa kurvor vinner den som håller kvar
-driften 1–3 % av ett varv mot den som bara slänger in bilen. Det räknas bara när bilen verkligen svänger,
-i en kurva och strax efter den; att sladda eller slingra nerför en raka ger
-ingen laddning och ingen reparation. Is, olja och snö laddar inget, en hård
-smäll i en vägg eller en bil eller en snurr tar bort laddningen, och broms
-håller tillbaka boosten. Datorförarna laddar och får boost på samma sätt
-(men de håller aldrig driftknappen, så de får inte den lägre nötningen).
+**Drift boost:** sliding through a corner charges a boost in three levels,
+after roughly 0.6, 1.3 and 2.2 seconds of drift (the meter next to the speed,
+sparks from the rear wheels in blue, orange and purple). When the car grips
+again it gets a short push forward: level 1 is a small puff (0.6 s), level 2
+is longer and stronger (1.2 s), level 3 (a long hairpin on Cigar Circuit) is
+a bit better than a turbo (2 s). As long as you hold the drift button through
+a charged drift, the tyres scrub off only a quarter as much speed, so a long
+clean drift pays off more than a short one: on twisty tracks with long
+corners, holding the drift gains 1–3% of a lap over just flinging the car in.
+It only counts while the car is actually turning, in a corner and just after
+it; sliding or weaving down a straight gives no charge and no repair. Ice,
+oil and snow charge nothing; a hard hit against a wall or a car, or a spin,
+wipes the charge, and braking holds the boost back. The AI drivers charge and
+get boost the same way (but they never hold the drift button, so they don't
+get the reduced scrub).
 
-**Draft:** ligger du tätt bakom en annan bil (från några meter till ungefär
-24 m bakom, i samma riktning och i fart) dras du med: upp till 6 % högre
-toppfart och lite mer acceleration. Effekten byggs upp på 0,7 s och släpper
-på 0,3 s. DRAFT lyser bredvid hastigheten, luften strömmar förbi bilen och
-det börjar vina. Gäller inte under nedräkningen, och inte bakom vrak eller
-spöklika bilar efter en återställning.
+**Draft:** if you sit close behind another car (from a few metres to about
+24 m behind, going the same way and at speed) you get pulled along: up to 6%
+higher top speed and a little more acceleration. The effect builds up over
+0.7 s and fades over 0.3 s. DRAFT lights up next to the speed, air streams
+past the car and it starts to whine. It doesn't apply during the countdown,
+or behind wrecks or ghosted cars after a reset.
 
-Nio banor: **Green Valley** (bred landsbygdsbana), **Dust Bowl** (öken,
-smal och teknisk, grus, oljefläckar och ett hopp över en torr flodfåra),
-**Frost Ring** (vinter, snabba svep med is och packad snö), **Meltdown
-Ridge** (genom ett kärnkraftverk: kyltorn, reaktorhallar, en kylvattenläcka
-och ett hopp över kylvattenkanalen – kommer du för kort får du vada ur),
-**Twin Bridges** (korsar sig själv två gånger: en trasig bro att hoppa och
-en viadukt), **Brewery Bash** (bryggeri, öl på vägen), **Tivoli Twist**
-(kompakt tivolibana med vänster-höger-svängar, körs med tre gånger så många
-varv) och **Cigar Circuit** (kompakt bana i tobakslandet med tre hårnålar på
-rad, rena 180°-svängar för långa drifter, och aska på vägen) samt
-**Manhattan Sprint** (kompakt New York-bana genom ett höghuskvarter med två
-långa svepande högersvängar, en trång sidogata, våt asfalt och Liberty,
-subway och taxibilar i kulissen – körs med tre gånger så många varv).
+Nine tracks: **Green Valley** (wide countryside track), **Dust Bowl**
+(desert, narrow and technical, gravel, oil patches and a jump over a dry
+riverbed), **Frost Ring** (winter, fast sweepers with ice and packed snow),
+**Meltdown Ridge** (through a nuclear power plant: cooling towers, reactor
+halls, a coolant leak and a jump over the cooling-water canal – come up short
+and you'll have to wade out), **Twin Bridges** (crosses itself twice: a
+broken bridge to jump and a viaduct), **Brewery Bash** (brewery, beer on the
+road), **Tivoli Twist** (compact funfair track with left-right flicks, raced
+with three times as many laps), **Cigar Circuit** (compact track in tobacco
+country with three hairpins in a row, pure 180° turns for long drifts, and
+ash on the road) and **Manhattan Sprint** (compact New York track through a
+block of high-rises with two long sweeping right-handers, a narrow side
+street, wet tarmac, and Lady Liberty, the subway and taxis in the backdrop –
+raced with three times as many laps).
 
-Ny bana? Se `.claude/skills/new-track/SKILL.md` och `npm run track`.
+New track? See `.claude/skills/new-track/SKILL.md` and `npm run track`.
 
-**Ramper och hopp:** kör upp på rampen så lyfter bilen – ju fortare desto
-längre. I luften går det inte att styra; en hård landning kostar lite fart
-(och lite skada när vapnen är på). Datorförarna håller sitt körfält upp mot
-ett hopp och lyfter inte fortare än att de hinner bromsa för kurvan efter
-landningen, så de flyger inte snett in i sidoväggen.
+**Ramps and jumps:** drive up the ramp and the car takes off – the faster,
+the further. You can't steer in the air; a hard landing costs a little speed
+(and a little damage when weapons are on). The AI drivers hold their lane up
+to a jump and don't take off faster than they can brake for the corner after
+the landing, so they don't fly crooked into the side wall.
 
-**Vapen** (kan stängas av i menyn och i onlinelobbyn): varje bil startar med
-3 missiler, 2 minor och 2 turbo, och fyller på från lådorna på banan. Missiler flyger rakt fram och snurrar runt
-den de träffar, minor läggs bakom bilen, gillrar sig efter en halv sekund och
-kastar upp bilen i luften. Turbo ger 1,5 s extra kraft och högre toppfart.
-Vapnen låses upp tre sekunder efter start. Krockar och träffar ger skada;
-över 40 % skada går bilen långsammare, och vid 100 % exploderar den, brinner
-en stund och kommer tillbaka lappad (60 % skada) och kan inte träffas på
-2,5 s, så den hinner förbi minorna som ofta ligger där den sprängdes. Datorförarna använder också
-vapen – oftare ju svårare de är.
+**Weapons** (can be turned off in the menu and in the online lobby): every
+car starts with 3 missiles, 2 mines and 2 turbos, and restocks from the
+crates on the track. Missiles fly straight ahead and spin round whoever they
+hit; mines are dropped behind the car, arm after half a second and throw the
+car into the air. Turbo gives 1.5 s of extra power and a higher top speed.
+Weapons unlock three seconds after the start. Collisions and hits cause
+damage; above 40% damage the car slows down, and at 100% it explodes, burns
+for a while and comes back patched up (60% damage) and can't be hit for
+2.5 s, so it has time to get past the mines that often lie where it blew up.
+The AI drivers use weapons too – more often the harder they are.
 
-**Lådor** (bara med vapen på): på några ställen runt varvet står en rad med
-två eller tre glödande lådor tvärs över vägen, så du får välja spår. Kör
-igenom en så får du något: 2 missiler, 2 minor, 1 turbo eller en lagning
-(30 % skada). Lådan kommer tillbaka efter 6 sekunder. Vad den ger avgörs av
-banan (fröet, lådan och tick), lite viktat efter placering: de som ligger
-sist får oftare turbo, missiler och lagning, ledaren oftare minor. Taket är
-detsamma som i butiken (12 missiler, 8 minor, 6 turbo); är du full på något
-får du något annat, och är du full på allt står lådan kvar åt nästa. HUD:en
-visar vad du fick ("+2 MISSILES") ovanför vapenpanelen. Banbyggaren lägger
-ut lådorna själv utifrån banans form – 3–5 rader på en vanlig bana, färre
-på de korta – aldrig i depån, på startrutorna, på ramper, broar eller
-landningen efter ett hopp, på pilarna eller i inbromsningen före en snäv
-kurva. Datorförarna styr gärna över en meter eller två för en låda nära
-sin linje, men aldrig tvärs över vägen. `npm run track` och banskaparens
-statusrad visar raderna. Nya sorters innehåll läggs till som en rad i
-`CRATE_ITEMS` i `src/shared/sim/crates.ts`.
+**Crates** (only with weapons on): in a few places around the lap, a row of
+two or three glowing crates stands across the road, so you have to pick a
+line. Drive through one and you get something: 2 missiles, 2 mines, 1 turbo
+or a repair (30% damage). The crate comes back after 6 seconds. What it gives
+is decided by the track (the seed, the crate and the tick), weighted a little
+by position: cars at the back more often get turbo, missiles and repair, the
+leader more often mines. The cap is the same as in the shop (12 missiles,
+8 mines, 6 turbos); if you're full on something you get something else, and
+if you're full on everything the crate stays for the next car. The HUD shows
+what you got ("+2 MISSILES") above the weapon panel. The track builder places
+the crates itself based on the track's shape – 3–5 rows on a normal track,
+fewer on the short ones – never in the pit lane, on the starting grid, on
+ramps, bridges or the landing after a jump, on the arrows or in the braking
+zone before a tight corner. The AI drivers will happily steer a metre or two
+off their line for a nearby crate, but never across the road. `npm run track`
+and the track editor's status bar show the rows. New kinds of contents are
+added as a row in `CRATE_ITEMS` in `src/shared/sim/crates.ts`.
 
-**Specialvapen** (bara med vapen på): utöver ammunitionen har bilen en
-**specialplats** som rymmer ett föremål i taget, och det används med en egen
-knapp (SPECIAL ITEM, se tabellen nedan). Det finns tre:
+**Special weapons** (only with weapons on): on top of the ammo, the car has a
+**special slot** that holds one item at a time, used with its own button
+(SPECIAL ITEM, see the table below). There are three:
 
-- **HOMING MISSILE** låser när den avfyras på närmaste bil framför, inom
-  110 m och ungefär ±30° från nosen, och svänger efter den med begränsad
-  svängfart (1,9 rad/s). En skarp kurva eller en sladd kan skaka av den (är
-  målet mer än ~57° från missilens nos släpper låset), den smäller i väggar
-  och följer aldrig en bil upp eller ner till en annan nivå på en bro. Utan
-  mål flyger den rakt. Skada och snurr som en vanlig missil. Den som är låst
-  får en varning: **MISSILE LOCK!** och en pil mot missilen på skärmen, och
-  pip som går fortare ju närmare den kommer.
-- **OIL SLICK** släpps bakom bilen och ligger kvar i 20 sekunder (den bleknar
-  mot slutet). Den gör vägen under sig till olja genom samma ytsystem som de
-  målade oljefläckarna, så däcken, datorförarnas greppplanering och
-  driftreglerna behandlar den likadant – en sladd på olja laddar ingen
-  driftboost. Den som släppte den kan köra på den själv efter drygt en sekund.
-  Datorförarna styr runt en fläck på sin linje när det kostar lite (högst
-  6 m åt sidan och plats på vägen).
-- **SHIELD** är en bubbla runt bilen i 5 sekunder (den blinkar sista
-  sekunden). Missiler och minor studsar av utan skada och utan snurr, och
-  krockar med väggar och bilar gör bara 35 % av skadan.
+- **HOMING MISSILE** locks on, when fired, to the nearest car ahead within
+  110 m and roughly ±30° of the nose, and turns after it at a limited turn
+  rate (1.9 rad/s). A sharp corner or a slide can shake it off (the lock
+  breaks if the target is more than ~57° from the missile's nose); it hits
+  walls and never follows a car up or down to another level on a bridge.
+  With no target it flies straight. Damage and spin are the same as a normal
+  missile. The car it's locked on to gets a warning: **MISSILE LOCK!** and an
+  on-screen arrow pointing at the missile, plus beeps that speed up as it
+  gets closer.
+- **OIL SLICK** is dropped behind the car and stays for 20 seconds (it fades
+  towards the end). It turns the road beneath it into oil through the same
+  surface system as the painted oil patches, so the tyres, the AI drivers'
+  grip planning and the drift rules all treat it the same way – a slide on
+  oil charges no drift boost. The car that dropped it can be caught by it
+  too after just over a second. The AI drivers steer around a slick on their
+  line when it's cheap to do so (at most 6 m to the side, and with room on
+  the road).
+- **SHIELD** is a bubble around the car for 5 seconds (it flashes in the last
+  second). Missiles and mines bounce off with no damage and no spin, and
+  collisions with walls and cars do only 35% of the damage.
 
-Specialföremål kommer ur lådorna, mer sällan än ammunition: målsökande
-missiler oftare längre bak i fältet, olja och sköld oftare längre fram. En
-låda byter aldrig ut det du har – med något i specialplatsen ger lådorna
-bara ammunition, så använd det för att kunna få ett nytt. I butiken kan du
-köpa ett före loppet (raden SPECIAL, vänster/höger väljer: homing $300, oil
-$220, shield $260) om platsen är tom; det som är kvar följer med till nästa
-lopp. Start- och depåreglerna är som för de andra vapnen. Datorförarna
-använder dem med sin reaktionstid och sin personlighet: målsökande missil
-mot en bil 14–75 m framför, olja när någon ligger tätt bakom (VIXEN älskar
-det) och sköld när en missil är på väg eller en beväpnad bil sitter bakom.
-HUD:en visar specialplatsen bredvid ammunitionen (och sköldens sekunder
-kvar); på pekskärm finns en ITEM-knapp med föremålets ikon bara när du har
-något. Varje föremål har eget ljud och egen vibration. Allt (föremålet i
-platsen, missiler i luften, fläckar på vägen och sköldar) är världsläge och
-följer med i serverns bilder, så online hamnar det exakt där servern säger,
-även om en annan människas sköld eller lås kan synas några tick sent.
-## Väder
+Special items come out of the crates, less often than ammo: homing missiles
+more often further back in the field, oil and shield more often further
+forward. A crate never replaces what you have – with something in the special
+slot, crates give only ammo, so use it if you want a new one. In the shop you
+can buy one before the race (the SPECIAL row, left/right to choose: homing
+$300, oil $220, shield $260) if the slot is empty; whatever is left over
+carries on to the next race. Start and pit rules are the same as for the
+other weapons. The AI drivers use them with their own reaction time and
+personality: a homing missile at a car 14–75 m ahead, oil when someone is
+right behind (VIXEN loves it) and the shield when a missile is incoming or an
+armed car is sitting behind. The HUD shows the special slot next to the ammo
+(and the shield's remaining seconds); on touch screens an ITEM button with
+the item's icon appears only when you have something. Each item has its own
+sound and its own vibration. All of it (the item in the slot, missiles in the
+air, slicks on the road and shields) is world state and is included in the
+server's snapshots, so online it ends up exactly where the server says, even
+though another human's shield or lock may show up a few ticks late.
 
-Ett lopp har ett väder: **DRY**, **RAIN** eller **CHANGING**. I regn blir
-vägen våt: asfalt och kantstenar får ungefär samma grepp som de våta
-fläckarna på Manhattan Sprint (80 % grepp, 85 % i sladd), bromssträckan blir
-ungefär en fjärdedel längre, och styr du med fullt utslag ber ratten om mer
-än däcken orkar, så bakvagnen kommer tidigare. Grus och gräs blir bara lite
-halare; snö, is, olja och vatten är som förut. Accelerationen är som i torrt
-(en bil som sätts tillbaka före en trasig bro ska klara hoppet). Ett regnlopp
-är 2–8 % långsammare för datorförarna.
+## Weather
 
-**CHANGING**: vädret ändras under loppet, utspritt över den väntade
-racetiden (banans längd, varv och klass), så det händer även i ett lopp på
-tre varv. Antingen torr start och regn som kommer och stannar, en skur som
-kommer och går, eller våt start som torkar upp. Vägen blir våt på 14–30 s
-och torkar på 24–55 s; regnet syns några sekunder innan vägen hunnit bli
-hal. Hur vått det är räknas fram ur tick och racets seed varje tick (inget
-skickas och inget sparas i världen), så servern, klienterna och
-rekordkontrollen får exakt samma väg. Datorförarnas fartplanering räknar
-med det våta greppet, och med vätan tre sekunder framåt, så en skur inte
-kör hela fältet i väggen.
+A race has a weather setting: **DRY**, **RAIN** or **CHANGING**. In rain the
+road gets wet: tarmac and kerbs get roughly the same grip as the wet patches
+on Manhattan Sprint (80% grip, 85% in a slide), braking distances get about a
+quarter longer, and if you steer at full lock the wheel asks for more than
+the tyres can give, so the rear steps out sooner. Gravel and grass get only a
+little more slippery; snow, ice, oil and water are unchanged. Acceleration is
+the same as in the dry (a car that's reset before a broken bridge must still
+make the jump). A rain race is 2–8% slower for the AI drivers.
 
-Det syns och hörs: regn (eller snö på Frost Ring) faller över skärmen,
-mindre ju lägre GRAPHICS, mörkare och gråare ljus i alla tre tider på
-dygnet, vatten som sprutar bakom bilarna, vattenpölar och mörk asfalt
-(slask på vinterbanan), regnljud, och ibland blixt och åska. Under
-minikartan står vädret (RAIN SOON blinkar innan det kommer) och när regnet
-kommer eller slutar står det en stund mitt på skärmen.
+**CHANGING**: the weather changes during the race, spread over the expected
+race time (track length, laps and class), so it happens even in a three-lap
+race. It's either a dry start with rain that arrives and stays, a shower that
+comes and goes, or a wet start that dries out. The road gets wet in 14–30 s
+and dries in 24–55 s; the rain is visible a few seconds before the road has
+turned slippery. How wet it is gets computed from the tick and the race seed
+every tick (nothing is sent and nothing is stored in the world), so the
+server, the clients and the record check all get exactly the same road. The
+AI drivers' speed planning accounts for the wet grip, and for the wetness
+three seconds ahead, so a shower doesn't send the whole field into the wall.
 
-Var det väljs: **WEATHER** i SINGLE RACE (DRY / RAIN / CHANGING / RANDOM,
-sparas med de andra inställningarna); i onlinelobbyn under **RACE
-SETTINGS** (värden väljer; publika rum lottar vädret varje lopp). I
-mästerskap och karriär bestämmer säsongens seed vädret per lopp – oftast
-torrt, ungefär vart fjärde lopp vått eller växlande – och det står på
-skärmen före loppet. Tidskörning och fri träning är alltid torra.
-**Varvrekord gäller bara i torrt**: ett vått lopp kommer inte in på
-topplistorna och ersätter inte ditt personbästa eller ditt spöke.
+You can see and hear it: rain (or snow on Frost Ring) falls across the
+screen, less of it the lower GRAPHICS is set; darker, greyer light at all
+three times of day; water spraying up behind the cars; puddles and dark
+tarmac (slush on the winter track); rain sounds; and occasionally lightning
+and thunder. The weather is shown under the minimap (RAIN SOON flashes before
+it arrives), and when the rain starts or stops, a message stays in the middle
+of the screen for a while.
 
-`npm run sim -- --weather rain|changing` och
-`npm run soak -- --weather rain|changing` kör med väder.
+Where it's set: **WEATHER** in SINGLE RACE (DRY / RAIN / CHANGING / RANDOM,
+saved with the other settings); in the online lobby under **RACE SETTINGS**
+(the host chooses; public rooms pick the weather at random for each race). In
+championship and career mode, the season's seed decides the weather for each
+race – mostly dry, with roughly one race in four wet or changing – and it's
+shown on screen before the race. Time trial and free practice are always dry.
+**Lap records only count in the dry**: a wet race doesn't go on the
+leaderboards and doesn't replace your personal best or your ghost.
 
-## Utslagning (ELIMINATION)
+`npm run sim -- --weather rain|changing` and
+`npm run soak -- --weather rain|changing` run with weather.
 
-**MODE: ELIMINATION** i SINGLE RACE (sparas med de andra inställningarna)
-och i onlinelobbyns **RACE SETTINGS** (värden väljer, och det står i
-lobbyns sammanfattning). Varje gång ledaren går över mållinjen är bilen
-som ligger sist ute – den med kortast körd sträcka, även om den är vrakad
-eller bärgas just då; vid exakt lika går den som startade längre bak. Sista
-bilen kvar vinner, och placeringarna följer ordningen de åkte ut i (först
-ute blir sist). Antal varv gäller inte (LAPS visar det). På de korta
-banorna (Tivoli Twist, Manhattan Sprint: var tredje varv, Cigar Circuit:
-vartannat) är det inte varje varv: intervallet räknas av banans längd
-(ungefär en utslagning per 2,1 km av ledarens sträcka, högst var tredje
-varv), så ett lopp tar ungefär lika lång tid som på en fullstor bana
-(3,5–7 min med åtta bilar beroende på klass). Det gäller även egna banor.
+## Elimination
 
-Bilen som åker ut exploderar, brinner två sekunder och plockas sedan bort
-från vägen (ingen bärgning, ingen spökbil). Ett lopp tar alltid slut: kommer
-ingen runt i tid (alla fast, vrakade eller stillastående) åker den sista ut
-ändå när en bil i 15 m/s hade hunnit köra intervallet, och när alla
-människor är ute åker datorbilarna ut en i taget var sjätte sekund. Tre
-sekunder efter sista utslagningen är loppet slut. Lådor, draft, depå,
-vapen och boostpilarna är som vanligt – pilarna hjälper den som ligger
-långt efter ledaren, vilket i utslagning just är den som är i fara, så de
-håller striden i botten vid liv. Datorförarna som ligger sist eller näst
-sist depåar först vid mer skada (en depå sist är slutet) och använder
-turbo, missiler och minor oftare (även TURBO TOM, vars "slutet av loppet"
-då har kommit).
+**MODE: ELIMINATION** in SINGLE RACE (saved with the other settings) and in
+the online lobby's **RACE SETTINGS** (the host chooses, and it's shown in the
+lobby summary). Every time the leader crosses the finish line, the car in
+last place is out – the one that has covered the least distance, even if
+it's wrecked or being recovered at that moment; on an exact tie, the car that
+started further back goes. The last car left wins, and the finishing order
+follows the order the cars were knocked out in (first out finishes last). The
+lap count doesn't apply (LAPS says so). On the short tracks (Tivoli Twist and
+Manhattan Sprint: every third lap; Cigar Circuit: every second lap) it isn't
+every lap: the interval is calculated from the track length (roughly one
+elimination per 2.1 km of the leader's distance, at most every third lap), so
+a race takes about as long as on a full-size track (3.5–7 min with eight
+cars, depending on class). This applies to custom tracks too.
 
-HUD:en visar hur många som är kvar och när nästa åker ut ("5 LEFT – OUT
-THIS LAP"). Ligger du sist blinkar **LAST PLACE!** med tiden till bilen
-före, och ett pip som går fortare och högre ju närmare mållinjen ledaren
-är. När någon åker ut står det ("TURBO TOM IS OUT"), det smäller och hörs.
-Åker du ut: **ELIMINATED** med placering och varv, kort slow motion och
-vibration, och kameran följer ledaren (i delad skärm den andra spelaren så
-länge den är kvar). Offline tar ENTER (eller RESULTS NOW på pekskärm) dig
-direkt till resultatet – resten av loppet räknas fram på en gång, samma
-resultat som om du tittat. Online tittar du klart. Resultatlistan visar
-vilket varv var och en åkte ut, pallen de tre sista kvar.
+The car that's knocked out explodes, burns for two seconds and is then
+removed from the road (no recovery, no ghost car). A race always ends: if no
+one gets round in time (everyone stuck, wrecked or stationary), the last car
+goes out anyway once a car doing 15 m/s would have covered the interval, and
+when all the humans are out, the AI cars go out one at a time every six
+seconds. The race ends three seconds after the last elimination. Crates,
+draft, pit stops, weapons and the boost arrows work as usual – the arrows
+help whoever is far behind the leader, which in elimination is exactly the
+car in danger, so they keep the fight at the back alive. AI drivers in last
+or second-to-last place wait for more damage before pitting (a pit stop in
+last place is the end) and use turbo, missiles and mines more often
+(including TURBO TOM, whose "end of the race" has now arrived).
 
-Mästerskap, karriär och publika rum kör vanliga lopp. Varv i utslagning
-räknas inte till topplistor, personbästa eller medaljer. Två prestationer:
-LAST CAR STANDING (vinn en utslagning) och SURVIVOR (bland de två sista
-från sista startplats, minst sex bilar). `npm run sim -- --elimination
-[--track all] [--league all] [--weapons]` kör utslagningslopp och
-kontrollerar att varje lopp slutar med exakt en vinnare.
+The HUD shows how many cars are left and when the next one goes out ("5 LEFT
+– OUT THIS LAP"). If you're last, **LAST PLACE!** flashes with the gap to the
+car ahead, along with a beep that gets faster and higher the closer the
+leader is to the finish line. When someone is knocked out it's announced on
+screen ("TURBO TOM IS OUT") with a bang. If you're knocked out: **ELIMINATED**
+with your place and lap, a brief slow-motion and vibration, and the camera
+follows the leader (in split screen, the other player for as long as they're
+still in). Offline, ENTER (or RESULTS NOW on touch screens) takes you
+straight to the results – the rest of the race is computed at once, with the
+same result as if you'd watched it. Online you watch to the end. The results
+list shows which lap each car went out on; the podium is the last three cars
+left.
 
-## Datorförarna
+Championship, career and public rooms run normal races. Laps in elimination
+don't count towards leaderboards, personal bests or medals. Two achievements:
+LAST CAR STANDING (win an elimination race) and SURVIVOR (finish in the last
+two after starting from the back of the grid, with at least six cars).
+`npm run sim -- --elimination [--track all] [--league all] [--weapons]` runs
+elimination races and checks that every race ends with exactly one winner.
 
-De tio datorförarna har var sin personlighet som syns i hur de kör. Inom en
-svårighetsgrad skiljer det ungefär ±1,5 % i varvtid mellan dem (snittet är
-detsamma som förut; HARD ligger strax under den felfria föraren, så de
-snabbaste personligheterna kör där ungefär som den och resten lite långsammare).
+## AI drivers
 
-| Förare | Typ | Hur |
+Each of the ten AI drivers has a personality that shows in how they drive.
+Within a difficulty level their lap times differ by about ±1.5% (the average
+is the same as before; HARD sits just below the flawless driver, so the
+fastest personalities drive roughly like it there and the rest a bit slower).
+
+| Driver | Type | How |
 | --- | --- | --- |
-| BLITZ | HOTHEAD | bromsar sent, skjuter gärna, viker inte undan, kör på trots skada |
-| NITRO NINA | TURBO ADDICT | en extra turbo, bränner dem direkt på kortare raksträckor |
-| TURBO TOM | TURBO HOARDER | en extra turbo, sparar alla till slutet av loppet |
-| VIXEN | MINE LAYER | lägger minor när någon ligger tätt bakom |
-| DIESEL DAN | ROADBLOCK | seg i starten, glider över mot den som försöker gå om |
-| ROXY | CLEAN RACER | greppkörare som bara driftar de snäva kurvorna, skjuter sällan, depåar tidigt |
-| MAX POWER | GUNSLINGER | massor av missiler |
-| ACE | THE PRO | snabbast, exakt, kall i huvudet |
-| SPARKY | NERVOUS ROOKIE | bromsar tidigt, viker undan, depåar vid första skrapan, reagerar långsamt |
-| LUCKY LOU | WILD CARD | slarvig linje och olika fart från varv till varv |
+| BLITZ | HOTHEAD | brakes late, shoots a lot, never gives way, keeps going when damaged |
+| NITRO NINA | TURBO ADDICT | one extra turbo, burns them right away on shorter straights |
+| TURBO TOM | TURBO HOARDER | one extra turbo, saves them all for the end of the race |
+| VIXEN | MINE LAYER | drops mines when someone is right behind her |
+| DIESEL DAN | ROADBLOCK | slow off the line, drifts across to block anyone trying to pass |
+| ROXY | CLEAN RACER | grip driver who only drifts the tight corners, rarely shoots, pits early |
+| MAX POWER | GUNSLINGER | lots of missiles |
+| ACE | THE PRO | fastest, precise, cool-headed |
+| SPARKY | NERVOUS ROOKIE | brakes early, gives way, pits at the first scratch, reacts slowly |
+| LUCKY LOU | WILD CARD | sloppy line and varying pace from lap to lap |
 
-Personligheten väljs av förarens namn i loppets spec, så servern och alla
-klienter kör dem lika. En människa som tappar anslutningen och tas över av
-datorn får ingen personlighet. Mästerskapstabellen visar en rad om varje
-förare (på smala skärmar bara typen).
+The personality is picked from the driver's name in the race spec, so the
+server and every client drive them the same way. A human player who
+disconnects and is taken over by the AI gets no personality. The
+championship standings show a line about each driver (only the type on
+narrow screens).
 
-Datorförarna har också **reaktionstid** som en människa: något nytt (en sladd
-de inte bett om, en bil som plötsligt dyker upp, ett mål som kommer i
-siktet, grönt ljus) hanteras först efter ca 0,28–0,39 s på EASY, 0,15–0,25 s
-på MEDIUM och 0,10–0,17 s på HARD, olika från gång till gång och per förare.
-Att följa linjen och bromsa för en kurva de ser komma är förutseende och sker
-direkt. Bromstrycken för att drifta är olika långa. På raksträckor kör de
-rakt: inga driftstarter, inte mer styrning än däcken klarar, och en sladd
-efter en smäll rätas upp i stället för att hållas. Andelen tid de glider på
-raksträckor av egen vilja gick från 6,5 % (8,6 % med skada) till 1,1 %
-(1,9 %); `node scripts/personaLaps.ts` mäter varvtiderna per personlighet.
+The AI drivers also have a human-like **reaction time**: anything new (a
+slide they didn't ask for, a car that suddenly appears, a target coming into
+view, the green light) is only acted on after about 0.28–0.39 s on EASY,
+0.15–0.25 s on MEDIUM and 0.10–0.17 s on HARD, varying each time and per
+driver. Following the racing line and braking for a corner they can see
+coming is anticipation and happens immediately. The brake taps they use to
+start a drift vary in length. On straights they drive straight: no drift
+starts, no more steering than the tires can handle, and a slide after a hit
+is straightened out instead of held. The share of time they slide on
+straights by choice dropped from 6.5% (8.6% when damaged) to 1.1% (1.9%);
+`node scripts/personaLaps.ts` measures lap times per personality.
 
-## Karriär
+## Career
 
-**CAREER** i titelmenyn: börja i **Division 3** och kör säsonger – ett
-mästerskap över alla banor mot sju datorförare. Slutar du topp 3 flyttas du
-upp en division; motståndarna blir skickligare (EASY → NORMAL → HARD) och
-bättre utrustade. Vinn **Division 1** för att bli **MEGACARS CHAMPION**, och
-försvara sedan titeln. Varje säsong ger en bonus efter slutplacering (mer i
-högre divisioner). Pengar, uppgraderingar, bil, ammunition och skada följer
-med mellan säsongerna, och karriären sparas efter varje lopp (CONTINUE).
+**CAREER** in the title menu: start in **Division 3** and race seasons – a
+championship over every track against seven AI drivers. Finish in the top 3
+and you move up a division; your opponents get more skilled (EASY → NORMAL →
+HARD) and better equipped. Win **Division 1** to become **MEGACARS
+CHAMPION**, and then defend the title. Each season pays a bonus based on your
+final position (more in higher divisions). Money, upgrades, car, ammo and
+damage carry over between seasons, and the career is saved after every race
+(CONTINUE).
 
-**Rival:** varje säsong får du en datorförare som **RIVAL**. Första
-säsongen, och i en ny division, är det en av de snabbaste i fältet (en ny
-varje gång du flyttas upp); stannar du kvar i divisionen blir det den som
-slutade närmast före dig (eller tvåan, om du vann). Rivalen har en röd
-skylt över bilen och en röd ruta på minikartan, och siktar på dig med
-missiler och minor lite oftare än på andra. Tabellen och karriärsidan visar
-hur många lopp var och en slutat före och poängskillnaden. Har du fler poäng
-än rivalen när säsongen är slut får du en rivalbonus utöver säsongsbonusen
-($1000 i division 3, $1500 i 2, $2000 i 1), och säsongsavslutet säger vem
-som vann duellen. Äldre sparade karriärer får en rival när de laddas.
+**Rival:** each season one AI driver is your **RIVAL**. In your first season,
+and in a new division, it is one of the fastest drivers in the field (a new
+one each time you move up); if you stay in the same division, it is the
+driver who finished just ahead of you (or second place, if you won). The
+rival has a red name tag above the car and a red square on the minimap, and
+targets you with missiles and mines a bit more often than others. The
+standings and the career page show how many races each of you finished ahead
+and the points difference. If you have more points than your rival when the
+season ends, you get a rival bonus on top of the season bonus ($1000 in
+division 3, $1500 in 2, $2000 in 1), and the season summary says who won the
+duel. Older saved careers get a rival when they load.
 
-**Bilar:** INTERCEPTOR (startbil), **VIPER** ($4000: +7 % acceleration,
-+4 % toppfart, +5 % grepp) och **BRUTE** ($9000: +15 % acceleration, +8 %
-toppfart, +8 % grepp, −15 % skada). Köps i butiken i alla lägen (även
-online); uppgraderingarna följer med till den nya bilen. Varje modell har
-sin egen kaross.
+**Cars:** INTERCEPTOR (starting car), **VIPER** ($4000: +7% acceleration,
++4% top speed, +5% grip) and **BRUTE** ($9000: +15% acceleration, +8% top
+speed, +8% grip, −15% damage). Bought in the shop in every mode (including
+online); your upgrades carry over to the new car. Each model has its own
+body.
 
-## Mästerskap och butik
+## Championship and shop
 
-**CHAMPIONSHIP** i titelmenyn kör ett lopp på varje bana (med inställningarna
-från huvudmenyn: spelare, motståndare, svårighetsgrad, varv, vapen). Poäng
-10-8-6-5-4-3-2-1; den med minst poäng startar längst fram, ledaren längst
-bak. Varje lopp ger prispengar efter placering ($1200 för en seger ner till
-$200) plus $40 per missil-/minträff och $150 per bil du skjutit sönder.
-Mästerskapet sparas efter varje lopp och kan fortsättas senare (CONTINUE).
+**CHAMPIONSHIP** in the title menu runs one race on every track (with the
+settings from the main menu: players, opponents, difficulty, laps, weapons).
+Points are 10-8-6-5-4-3-2-1; whoever has the fewest points starts at the
+front, the leader at the back. Each race pays prize money by position ($1200
+for a win down to $200) plus $40 per missile/mine hit and $150 per car you
+destroy. The championship is saved after every race and can be continued
+later (CONTINUE).
 
-Före varje lopp öppnas **butiken** (vid delad skärm handlar P1 och sedan P2):
+Before each race the **shop** opens (in split screen, P1 shops first, then
+P2):
 
-| Vara | Effekt | Pris |
+| Item | Effect | Price |
 |---|---|---|
-| Ny bil | Viper / Brute (se Karriär) | $4000 / $9000 |
-| Motor nivå 1–3 | +8 % acceleration, +4 % toppfart per nivå | $1500 / $2800 / $4500 |
-| Däck nivå 1–3 | +7 % grepp, +5 % sladdgrepp per nivå | $1000 / $2000 / $3200 |
-| Pansar nivå 1–3 | −18 % skada per nivå | $1200 / $2400 / $3800 |
-| Missil / mina / turbo | +1 (max 12 / 8 / 6) | $60 / $50 / $90 |
-| Special: homing / oil / shield | ett i specialplatsen (om den är tom) | $300 / $220 / $260 |
-| Reparation | så mycket pengarna räcker till | $8 per % skada |
+| New car | Viper / Brute (see Career) | $4000 / $9000 |
+| Engine level 1–3 | +8% acceleration, +4% top speed per level | $1500 / $2800 / $4500 |
+| Tires level 1–3 | +7% grip, +5% slide grip per level | $1000 / $2000 / $3200 |
+| Armor level 1–3 | −18% damage per level | $1200 / $2400 / $3800 |
+| Missile / mine / turbo | +1 (max 12 / 8 / 6) | $60 / $50 / $90 |
+| Special: homing / oil / shield | one in the special slot (if it is empty) | $300 / $220 / $260 |
+| Repair | as much as your money covers | $8 per % damage |
 
-Oanvänd ammunition och skada följer med till nästa lopp. Du börjar med $1000.
-Datorförarna uppgraderar i samma takt som spelarna (lite mer på HARD, lite
-mindre på EASY).
+Unused ammo and damage carry over to the next race. You start with $1000.
+The AI drivers upgrade at the same rate as the players (a bit more on HARD, a
+bit less on EASY).
 
-Online har varje rum en **säsong**: poängen syns i lobbyn, och med
-UPGRADES: ON (standard) tjänar alla pengar och handlar i lobbyns **SHOP**
-mellan loppen. Servern håller pengar och uppgraderingar och godkänner varje
-köp. Värden kan starta en **NEW SEASON**.
+Online, each room has a **season**: the points are shown in the lobby, and
+with UPGRADES: ON (the default) everyone earns money and shops in the lobby's
+**SHOP** between races. The server holds the money and upgrades and approves
+every purchase. The host can start a **NEW SEASON**.
 
-| En spelare | Funktion |
+| Single player | Action |
 |---|---|
-| ↑ / W | Gas (släpp + tryck igen medan du styr = drift) |
-| ↓ / S | Broms / back |
-| ← → / A D | Styr |
-| Z / B | Drift (håll för att behålla sladden) |
-| Space / K | Missil framåt |
-| X / J | Mina bakåt |
+| ↑ / W | Throttle (release and press again while steering = drift) |
+| ↓ / S | Brake / reverse |
+| ← → / A D | Steer |
+| Z / B | Drift (hold to keep sliding) |
+| Space / K | Missile forward |
+| X / J | Mine backward |
 | C / L | Turbo |
-| I / V | Specialföremål (målsökande missil, olja, sköld) |
-| R | Sätt tillbaka bilen på banan (P2 i delad skärm: Enter) |
-| Esc / P | Paus |
+| I / V | Special item (homing missile, oil, shield) |
+| R | Put the car back on the track (P2 in split screen: Enter) |
+| Esc / P | Pause |
 
-Delad skärm: **P1** WASD, drift Q, missil/mina/turbo/special G/F/H/V, **P2**
-piltangenter, drift L, missil/mina/turbo/special . , - K (eller numeriska
-0/1/2/4). Handkontroller: vänster spak styr, RT/A gas, LT/B broms, LB drift,
-X/RB missil, Y/↓ mina, ↑/L3 turbo, R3 special, Select återställ bil, Start paus;
-handkontroll 1 = P1, handkontroll 2 = P2.
+Split screen: **P1** WASD, drift Q, missile/mine/turbo/special G/F/H/V, **P2**
+arrow keys, drift L, missile/mine/turbo/special . , - K (or numpad 0/1/2/4).
+Gamepads: left stick steers, RT/A throttle, LT/B brake, LB drift, X/RB
+missile, Y/↓ mine, ↑/L3 turbo, R3 special, Select resets the car, Start
+pauses; gamepad 1 = P1, gamepad 2 = P2.
 
-Alla tangenter och knappar kan bytas under **OPTIONS → CONTROLS** (en
-spelare, delad skärm vänster/höger och handkontroll, två platser per
-funktion). **HOW TO PLAY** i titelmenyn visar de nuvarande knapparna. Har du
-sparat egna knappar får nya funktioner (som SPECIAL ITEM) sin standardknapp,
-utom om du redan använder den knappen till något annat.
+Every key and button can be rebound under **OPTIONS → CONTROLS** (single
+player, split screen left/right and gamepad, two slots per action). **HOW TO
+PLAY** in the title menu shows the current bindings. If you have saved custom
+bindings, new actions (such as SPECIAL ITEM) get their default key, unless
+you already use that key for something else.
 
-## Mobil och surfplatta
+## Mobile and tablet
 
-Spelet fungerar på telefon i liggande läge (i stående visas "vänd
-telefonen", och racet pausas). Vänster tumme styr genom att dra i sidled
-där den landar (analogt, med en bred neutral mitt och mjuk kurva), eller med
-två pilknappar (OPTIONS → TOUCH STEERING). Höger tumme har DRIFT (störst),
-BRAKE, MISSILE, MINE och TURBO (ammunitionen syns på knapparna), en ITEM-knapp
-ovanför MISSILE med specialföremålets ikon (bara när du har ett), RESET och
-paus uppe till höger.
-**TOUCH GAS** (OPTIONS): standard är att bilen gasar medan vänster tumme
-ligger på skärmen – lyft tummen för att släppa gasen; i en oönskad sladd
-lättar gasen automatiskt (halkskydd, ej på snö/is). Andra lägen: alltid gas,
-eller en egen gasknapp. Med automatisk gas är höger tumme fri för vapen;
-broms/back avbryter gasen. Menyerna styrs genom att trycka, långa
-menyer scrollar med pilarna, och en BACK-knapp finns uppe till vänster.
-Namn och rumskod öppnar telefonens tangentbord. Gränssnittet ritas med
-större pixlar på pekskärmar så att texten går att läsa och träffa. Första
-tryck går till helskärm (Android); installerat som app (Lägg till på
-hemskärmen) körs det i helskärm även på iPhone. Telefoner startar på
-grafiknivå MEDIUM i AUTO.
+The game works on phones in landscape (in portrait it shows "rotate your
+phone" and the race pauses). The left thumb steers by dragging sideways from
+where it lands (analog, with a wide neutral center and a soft curve), or with
+two arrow buttons (OPTIONS → TOUCH STEERING). The right thumb has DRIFT (the
+largest), BRAKE, MISSILE, MINE and TURBO (ammo counts show on the buttons),
+an ITEM button above MISSILE with the special item's icon (only when you have
+one), and RESET and pause in the top right.
+**TOUCH GAS** (OPTIONS): by default the car accelerates while your left thumb
+is on the screen – lift your thumb to let off the throttle; in an unwanted
+slide the throttle eases off automatically (traction control, not on
+snow/ice). Other modes: always on the throttle, or a separate gas button.
+With automatic throttle your right thumb is free for weapons; brake/reverse
+cancels the throttle. Menus are controlled by tapping, long menus scroll with
+the arrows, and there is a BACK button in the top left. The name and room
+code fields open the phone's keyboard. The interface is drawn with larger
+pixels on touch screens so the text is easy to read and tap. The first tap
+goes fullscreen (Android); installed as an app (Add to Home Screen) it runs
+fullscreen on iPhone too. Phones start at graphics level MEDIUM in AUTO.
 
-## Publika rum
+## Public rooms
 
-**PLAY ONLINE → QUICK MATCH** går med i det publika rum som har flest
-spelare och väntar, annars ett som kör (man tittar och är med i nästa race),
-och finns inget öppnas ett nytt publikt rum där man väntar på andra.
-**PUBLIC ROOMS** listar öppna rum (uppdateras var tredje sekund) och man går
-med genom att välja ett. Publika rum kör en turnering på tre slumpade banor
-ur spelet och slumpar nya när den är slut. Rum kan vara **PUBLIC** (syns i listan) eller
-**PRIVATE** (bara med koden); värden kan växla i lobbyn. Publika rum väntar
-inte på värden: när minst två är inne och alla har tryckt READY startar
-racet efter fem sekunders nedräkning.
+**PLAY ONLINE → QUICK MATCH** joins the public room with the most players
+waiting, otherwise one that is racing (you spectate and join the next race),
+and if there is none, it opens a new public room where you wait for others.
+**PUBLIC ROOMS** lists open rooms (refreshed every three seconds) and you
+join by picking one. Public rooms run a tournament on three random tracks
+from the game and pick new ones when it ends. Rooms can be **PUBLIC** (shown
+in the list) or **PRIVATE** (code only); the host can switch in the lobby.
+Public rooms don't wait for the host: once at least two players are in and
+everyone has pressed READY, the race starts after a five-second countdown.
 
-## Banskaparen
+## Track editor
 
-**TRACK EDITOR** i titelmenyn öppnar **MY TRACKS**: dina egna banor, sparade
-i webbläsaren. **NEW TRACK** börjar från en rektangel, **NEW FROM A GAME
-TRACK** från en kopia av en av spelets banor (utom de med broar).
+**TRACK EDITOR** in the title menu opens **MY TRACKS**: your own tracks,
+saved in the browser. **NEW TRACK** starts from a rectangle, **NEW FROM A
+GAME TRACK** from a copy of one of the game's tracks (except those with
+bridges).
 
-Banskaparen visar banan uppifrån och fungerar med mus, pekskärm och tangenter:
+The track editor shows the track from above and works with mouse, touch and
+keyboard:
 
-- **ROAD (1):** dra i hörnen för att forma vägen och i hörnets ratt för att
-  ändra radien. Tryck på vägen mellan två hörn för att lägga till ett hörn,
-  och dra startlinjen längs sista rakan.
-- **SURFACE (2):** måla ytor som grus, is, olja, blött, snö, vatten och gräs.
-- **RAMP (3):** lägg ut hopp, högst fyra.
-- **LANDMARK (4):** placera temats landmärken.
-- **SETTINGS:** namn, tema, bredd, bredare kurvor, runoff och dess yta, varv
-  och kortbanefaktor.
+- **ROAD (1):** drag the corners to shape the road and the corner's handle to
+  change its radius. Tap the road between two corners to add a corner, and
+  drag the start line along the final straight.
+- **SURFACE (2):** paint surfaces such as gravel, ice, oil, wet, snow, water
+  and grass.
+- **RAMP (3):** place jumps, up to four.
+- **LANDMARK (4):** place the theme's landmarks.
+- **SETTINGS:** name, theme, width, wider corners, runoff and its surface,
+  laps and short-track factor.
 
-Kortkommandon:
+Shortcuts:
 
-| Tangent | Funktion |
+| Key | Action |
 |---|---|
-| Ctrl+Z / Ctrl+Y | ångra / gör om |
-| Delete | ta bort det markerade |
-| G | fäst mot rutnätet |
-| F | passa in hela banan |
-| +/- och hjulet | zooma |
-| piltangenter eller WASD | panorera |
+| Ctrl+Z / Ctrl+Y | undo / redo |
+| Delete | delete the selection |
+| G | snap to grid |
+| F | fit the whole track |
+| +/- and the wheel | zoom |
+| arrow keys or WASD | pan |
 
-Varje ändring kontrolleras direkt. Problem markeras på kartan, och
-statusraden visar längd, depå, antal pilar och lådrader.
+Every change is checked immediately. Problems are marked on the map, and the
+status bar shows the length, pit, number of arrows and rows of crates.
 
-- **AI TEST** kör åtta datorbilar i två korta lopp i en egen tråd.
-- **TEST DRIVE** kör fri träning på banan. Paus → **BACK TO THE EDITOR**
-  går tillbaka till banskaparen.
-- **SHARE** kopierar en länk (`?t=KOD`). Den som öppnar länken får banan i
-  sina My Tracks.
-- **PUBLISH** lägger ut banan i den gemensamma listan.
+- **AI TEST** runs eight AI cars in two short races in a separate thread.
+- **TEST DRIVE** runs free practice on the track. Pause → **BACK TO THE
+  EDITOR** returns to the track editor.
+- **SHARE** copies a link (`?t=CODE`). Whoever opens the link gets the track
+  in their My Tracks.
+- **PUBLISH** posts the track to the shared list.
 
-Egna banor finns med i banvalet under Single Race. Personbästa på dem sparas
-bara lokalt, eftersom topplistorna gäller spelets egna banor. Koden är en
-kompakt sifferlista i base64url, och banans id (`u-…`) är en hash av
-innehållet. Samma bana har alltså samma id överallt. `npm run track -- <kod
-eller länk>` kontrollerar en delad bana från terminalen.
+Your own tracks appear in the track selection under Single Race. Personal
+bests on them are only saved locally, since the leaderboards cover the
+game's own tracks. The code is a compact list of numbers in base64url, and
+the track's id (`u-…`) is a hash of its contents. So the same track has the
+same id everywhere. `npm run track -- <code
+or link>` checks a shared track from the terminal.
 
-**PUBLISHED TRACKS** (i My Tracks) listar publicerade banor sorterade på
-flest gillningar, nyast eller mest körda. Du kan köra en bana, gilla den,
-spara den till My Tracks eller öppna en kopia i banskaparen.
+**PUBLISHED TRACKS** (in My Tracks) lists published tracks sorted by most
+likes, newest or most played. You can race a track, like it, save it to My
+Tracks or open a copy in the track editor.
 
-Servern kontrollerar varje bana i en worker-tråd innan den listas. Banan måste
-bygga, ha depå och pilar, och alla datorbilar måste gå i mål. Det finns tre
-gränser:
+The server checks every track in a worker thread before listing it. The
+track must build, have a pit and arrows, and every AI car must finish. There
+are three limits:
 
-- varje adress kan publicera högst fem banor i timmen;
-- listan rymmer högst 2000 banor;
-- varje adress kan gilla en bana en gång.
+- each address can publish at most five tracks per hour;
+- the list holds at most 2000 tracks;
+- each address can like a track once.
 
-Banorna sparas i `$DATA_DIR/tracks.json`. API:
+Tracks are stored in `$DATA_DIR/tracks.json`. API:
 
-| Anrop | Funktion |
+| Request | Action |
 |---|---|
-| `GET /api/tracks?sort=new\|top\|played&page=0` | listar banor |
-| `POST /api/tracks` med `{code, author}` | publicerar en bana |
-| `POST /api/tracks/<id>/like` | gillar en bana |
-| `POST /api/tracks/<id>/play` | räknar en körning |
-| `DELETE /api/tracks/<id>` med `Authorization: Bearer <TRACKS_TOKEN>` | tar bort en bana |
+| `GET /api/tracks?sort=new\|top\|played&page=0` | lists tracks |
+| `POST /api/tracks` with `{code, author}` | publishes a track |
+| `POST /api/tracks/<id>/like` | likes a track |
+| `POST /api/tracks/<id>/play` | counts a play |
+| `DELETE /api/tracks/<id>` with `Authorization: Bearer <TRACKS_TOKEN>` | deletes a track |
 
-`TRACKS_TOKEN` faller tillbaka på `STATS_TOKEN`.
+`TRACKS_TOKEN` falls back to `STATS_TOKEN`.
 
-## Rekord och topplistor
+## Records and leaderboards
 
-**RECORDS** (under **TIME TRIAL & RECORDS** i titelmenyn) visar per bana ditt bästa varv och dina bästa
-racetider (sparas i webbläsaren) och världens topp 10 bästa varv. Slår du
-ditt rekord i ett snabbrace, i träning eller i en tidskörning med serienbil skickas racet till
-servern: din inmatning tick för tick (komprimerad, typiskt 30–50 kB) och
-racets uppsättning. Eftersom simuleringen är deterministisk spelar servern
-upp racet igen i en egen tråd (≈1 s för 3 minuter med 8 bilar) och mäter
-varven själv – en påhittad tid kan alltså inte komma in. Det kräver att
-webbläsaren och servern räknar ut exakt samma lopp, bit för bit. JavaScript
-lovar bara det för `+ - * /`, `Math.sqrt` och avrundningarna; `Math.sin`,
-`Math.atan2`, `Math.exp`, `Math.hypot`, `**` med flera ger olika sista
-siffror i Node, Chrome, Safari och Firefox, och loppet förstorar skillnaden
-tills varven inte stämmer. Därför räknar simuleringen med egna funktioner
-(`DMath` i `src/shared/math/dmath.ts`, fdlibm byggd av exakta operationer),
-och ett test stoppar inbyggda `Math.sin` och liknande i `src/shared`.
-`node scripts/detCheck.ts` kör långa lopp i Node och i Playwrights
-webbläsare och kräver samma resultat. Topplistan sparas i
-`$DATA_DIR/records/v<SIM_VERSION>/records.json` (standard `./data`); i
-produktion bör `DATA_DIR` peka på en beständig volym.
+**RECORDS** (under **TIME TRIAL & RECORDS** in the title menu) shows, per
+track, your best lap and best race times (saved in the browser) and the
+world's top 10 laps. If you beat your record in a quick race, in practice or
+in a stock-car time trial, the race is sent to the server: your input tick by
+tick (compressed, typically 30–50 kB) and the race setup. Since the
+simulation is deterministic, the server replays the race in a separate
+thread (≈1 s for 3 minutes with 8 cars) and measures the laps itself – so a
+made-up time can't get in. That requires the browser and the server to
+compute exactly the same race, bit for bit. JavaScript only guarantees that
+for `+ - * /`, `Math.sqrt` and the rounding functions; `Math.sin`,
+`Math.atan2`, `Math.exp`, `Math.hypot`, `**` and others give different last
+digits in Node, Chrome, Safari and Firefox, and the race amplifies the
+difference until the laps no longer match. That is why the simulation uses
+its own functions (`DMath` in `src/shared/math/dmath.ts`, fdlibm built from
+exact operations), and a test blocks the built-in `Math.sin` and similar in
+`src/shared`. `node scripts/detCheck.ts` runs long races in Node and in
+Playwright's browsers and requires identical results. The leaderboard is
+stored in `$DATA_DIR/records/v<SIM_VERSION>/records.json` (default `./data`);
+in production `DATA_DIR` should point to a persistent volume.
 
-Topplistorna hör till en simuleringsversion (`SIM_VERSION`): när fysiken
-ändras börjar listorna om i en ny mapp, och gamla tider ligger kvar orörda
-på disk men visas inte. Tiderna från före version 25 ligger kvar i
-`$DATA_DIR/records.json`. En lista som inte går att läsa flyttas undan
-(`records.json.bad-<tid>`) i stället för att skrivas över.
+The leaderboards belong to a simulation version (`SIM_VERSION`): when the
+physics changes, the lists start over in a new folder, and old times stay
+untouched on disk but are not shown. Times from before version 25 remain in
+`$DATA_DIR/records.json`. A list that can't be read is moved aside
+(`records.json.bad-<time>`) instead of being overwritten.
 
-För varje plats på en lista sparar servern det kontrollerade racet (racets
-uppsättning och inmatningen) som en egen fil bredvid listan,
-`records/v<version>/replays/<id>.json` (30–50 kB, packas till ~10 kB), så att
-andra kan köra mot det som spöke. Filen tas bort när platsen faller ur
-listan. `GET /api/records/replay/<id>` hämtar det (id står på platsen i
-`GET /api/records`); ett id:s race ändras aldrig, så svaret får cachas för
-evigt. Högst 30 hämtningar per minut och adress. Dina egna rekord
-i webbläsaren sparas också per version (`megacars.records.v1.sim<version>`);
-de gamla finns kvar i localStorage men visas inte.
+For each entry on a list, the server stores the verified race (the race
+setup and the input) as a separate file next to the list,
+`records/v<version>/replays/<id>.json` (30–50 kB, compresses to ~10 kB), so
+that others can race against it as a ghost. The file is deleted when the
+entry drops off the list. `GET /api/records/replay/<id>` fetches it (the id
+is on the entry in `GET /api/records`); the race for a given id never
+changes, so the response can be cached forever. At most 30 fetches per
+minute per address. Your own records in the browser are also saved per
+version (`megacars.records.v1.sim<version>`); the old ones remain in
+localStorage but are not shown.
 
-## Tidskörning (TIME TRIAL)
+## Time trial
 
-**TIME TRIAL** (**TIME TRIAL & RECORDS** i titelmenyn, markören står på START): ensam på banan, inga vapen, serienbil (inte
-den egna tuningen) och hur många varv som helst – fri träning med ett
-spöke att jaga. Välj bana, klass och spöke: **OFF**, **MY BEST** (ditt
-bästa varv på banan i den klassen), **WORLD RECORD** (etta på världslistan)
-eller båda. På egna banor finns ingen världslista, där finns bara MY BEST.
-Valet sparas.
+**TIME TRIAL** (**TIME TRIAL & RECORDS** in the title menu, which opens with
+the cursor on START): alone on the track, no weapons, a stock car (not your
+own tuning) and as many laps as you like. It is free practice with a ghost to
+chase. Pick a track, a class and a ghost: **OFF**, **MY BEST** (your best lap
+on that track in that class), **WORLD RECORD** (number one on the world
+leaderboard) or both. Custom tracks have no world leaderboard, so they only
+offer MY BEST. Your choice is saved.
 
-Spöket är en genomskinlig bil utan kollisioner och ljud (MY BEST cyan,
-världsrekordet gult) som börjar sitt varv varje gång du börjar ett, så du
-kör alltid samma varv från linjen. Det bleknar när det ligger ovanpå din
-bil. Överst i mitten står skillnaden mot spöket på samma ställe på banan
-(uppdateras tio gånger i sekunden, grön före, röd efter; med två spöken
-jämförs mot det snabbare), och efter varje varv en kort rad med
-skillnaden för hela varvet. Ett nytt personbästa blir ditt spöke direkt.
+The ghost is a see-through car with no collisions and no sound (MY BEST is
+cyan, the world record yellow). It starts its lap every time you start one,
+so you always drive the same lap from the line. It fades when it sits on top
+of your car. At the top centre you see the gap to the ghost at the same point
+on the track (updated ten times a second, green when ahead, red when behind;
+with two ghosts it compares against the faster one), and after each lap a
+short line shows the gap for the whole lap. A new personal best becomes your
+ghost right away.
 
-MY BEST sparas i webbläsarens IndexedDB (position, höjd, riktning och
-körd sträcka varje tick, ~20 byte per tick, ~70 kB för en minut), per
-simuleringsversion som rekorden; spöket sparas från varje nytt personbästa
-varv, även i snabbrace och träning. Världsrekordets race hämtas från
-servern, spelas upp igen i en Web Worker (en hel session kan ta några
-sekunder) och det snabbaste varvet plockas ut; det måste ha exakt samma tid
-som på listan, annars visas det inte. Det sparas, ett per bana och klass.
-I **RECORDS** väljer ↑↓ (eller ett tryck) en plats på världslistan och
-ENTER (eller ett tryck till) startar en tidskörning mot just den.
+MY BEST is stored in the browser's IndexedDB (position, height, heading and
+distance driven every tick, ~20 bytes per tick, ~70 kB for a minute), per
+simulation version like the records. The ghost is saved from every new
+personal-best lap, including in single race and practice. The world record's
+race is fetched from the server and replayed in a Web Worker (a whole session
+can take a few seconds), and the fastest lap is picked out; it must have
+exactly the same time as on the leaderboard, otherwise it isn't shown. It is
+saved, one per track and class. In **RECORDS**, ↑↓ (or a tap) picks a place
+on the world leaderboard and ENTER (or another tap) starts a time trial
+against that exact entry.
 
-## Körskola (DRIVING SCHOOL)
+## Driving school
 
-**DRIVING SCHOOL** i titelmenyn, bredvid HOW TO PLAY: fem korta lektioner
-(ungefär en minut var) ensam på en egen övningsbana, där spelet säger vad du
-ska göra med just dina knappar, ser vad bilen gör och säger direkt när du
-klarade det. Den som aldrig spelat förut (inget sparat i webbläsaren) får en
-fråga första gången titelmenyn visas: **START THE DRIVING SCHOOL** eller **NO
-THANKS**. Frågan ställs aldrig om, vad man än svarar.
+**DRIVING SCHOOL** in the title menu, next to HOW TO PLAY: five short lessons
+(about a minute each), alone on a dedicated practice track. The game tells you
+what to do using your own controls, watches what the car does and tells you
+straight away when you've got it. A brand-new player (nothing saved in the
+browser) is asked the first time the title menu appears: **START THE DRIVING
+SCHOOL** or **NO THANKS**. The question is never asked again, whatever the
+answer.
 
-1. **THE BASICS**: gasa, bromsa och styr runt tre stycken av banan utan att
-   köra in i väggen (första kurvan, hårnålen, en vänsterkurva).
-2. **THE DRIFT BUTTON**: håll driftknappen medan du styr in i kurvan; tre
-   drifter på minst en sekund utan att nudda en vägg ("2 OF 3").
-3. **DRIFT WITHOUT THE BUTTON**: släpp gasen kort och trampa igen, eller dutta på
-   bromsen, medan du styr; tre drifter som började utan knappen.
-4. **THE DRIFT BOOST**: håll sladden tills mätaren når nivå 2, räta upp och få
-   boosten; sedan nivå 3 i den långa svepande kurvan.
-5. **PUT IT TOGETHER**: ett helt varv med minst tre boostar på under 0:55.
+1. **THE BASICS**: accelerate, brake and steer around three sections of the
+   track without hitting the wall (the first corner, the hairpin, a left-hander).
+2. **THE DRIFT BUTTON**: hold the drift button while steering into the corner;
+   three drifts of at least one second without touching a wall ("2 OF 3").
+3. **DRIFT WITHOUT THE BUTTON**: lift off the throttle briefly and floor it
+   again, or dab the brake, while steering; three drifts started without the
+   button.
+4. **THE DRIFT BOOST**: hold the slide until the meter reaches level 2,
+   straighten up and get the boost; then level 3 in the long sweeping corner.
+5. **PUT IT TOGETHER**: a full lap with at least three boosts in under 0:55.
 
-Övningsbanan är `src/shared/track/defs/school.ts` (`SCHOOL`): en medelkurva, en
-hårnål, en vänsterkurva och en lång 180°-sväng, 1,5 km. Den ligger inte i
-`TRACK_LIST`, så den finns inte i banvalet, mästerskapet, rekorden, medaljerna
-eller den dagliga rotationen; skolan registrerar den själv med
-`registerTrack`. Inga motståndare, inga vapen, serienbil.
+The practice track is `src/shared/track/defs/school.ts` (`SCHOOL`): a medium
+corner, a hairpin, a left-hander and a long 180° turn, 1.5 km. It isn't in
+`TRACK_LIST`, so it doesn't appear in track select, the championship, the
+records, the medals or the daily rotation; the school registers it itself with
+`registerTrack`. No opponents, no weapons, stock car.
 
-Hur det fungerar:
+How it works:
 
-- Texten står i ett band högst upp (aldrig över bilen) och nämner dina egna
-  knappar: tangenterna som de är bundna just nu (OPTIONS > CONTROLS), knapparna
-  på handkontrollen, eller på mobilen "THE DRIFT BUTTON" med en pulserande ring
-  runt rätt knapp. Med automatisk gas på mobilen står det i första lektionen
-  att bilen gasar själv (eller att tummen ska vara nere, eller att man håller
-  gasknappen, efter vad som är valt). På mobilen tar lektion 3 bromsknappen,
-  eftersom gasen inte går att släppa med tummen.
-- Varje försök börjar med bilen rullande på rätt ställe, så ingen kör runt i
-  onödan. Går det fel (vägg, för sakta in i kurvan, släppte för tidigt, snurrade)
-  står orsaken med några ord ("HIT THE WALL", "TOO SLOW INTO THE CORNER", "LET GO
-  TOO EARLY") och bilen ställs tillbaka efter drygt en sekund. RESET-knappen
-  börjar om försöket utan att det räknas som fel.
-- Efter tre misslyckanden i rad kommer en ledtråd ("HINT: ...") och efter fem
-  pekar bandet ut pausmenyn. I pausmenyn finns alltid **SKIP TO THE NEXT
-  LESSON**, **RESTART LESSON** och **LESSON LIST**. Överhoppade lektioner är
-  markerade SKIPPED i listan och räknas inte som klara.
-- När en lektion är klar visas **LESSON COMPLETE** med NEXT LESSON, REPEAT THIS
-  LESSON, LESSON LIST. Klara lektioner sparas i webbläsaren
-  (`megacars.school.v1`, tillsammans med att frågan har ställts). Klarar man
-  alla fem låses prestationen **LICENSED TO DRIFT** och lackeringen **L-PLATE**
-  upp.
-- Skolan räknas inte för varvrekord, medaljer, spöken eller andra
-  prestationer, och använder aldrig den egna tuningen. I användningsloggen är
-  det spelläget `school` (Körskola). Ingen delad skärm och inget online.
+- The text sits in a band at the top (never over the car) and names your own
+  controls: the keys as they are currently bound (OPTIONS > CONTROLS), the
+  gamepad buttons, or on mobile "THE DRIFT BUTTON" with a pulsing ring around
+  the right button. With auto-accelerate on mobile, the first lesson says that
+  the car accelerates by itself (or that your thumb should be down, or that
+  you hold the throttle button, depending on the setting). On mobile, lesson 3
+  uses the brake button, since you can't lift off the throttle with your
+  thumb.
+- Every attempt starts with the car already rolling in the right spot, so
+  nobody has to drive around for nothing. When it goes wrong (wall, too slow
+  into the corner, let go too early, spun out), the reason is shown in a few
+  words ("HIT THE WALL", "TOO SLOW INTO THE CORNER", "LET GO TOO EARLY") and
+  the car is put back after just over a second. The RESET button restarts the
+  attempt without counting it as a failure.
+- After three failures in a row a hint appears ("HINT: ..."), and after five
+  the band points you to the pause menu. The pause menu always has **SKIP TO
+  THE NEXT LESSON**, **RESTART LESSON** and **LESSON LIST**. Skipped lessons
+  are marked SKIPPED in the list and don't count as completed.
+- When a lesson is done, **LESSON COMPLETE** appears with NEXT LESSON, REPEAT
+  THIS LESSON, LESSON LIST. Completed lessons are saved in the browser
+  (`megacars.school.v1`, along with the fact that the question has been
+  asked). Completing all five unlocks the achievement **LICENSED TO DRIFT**
+  and the paint job **L-PLATE**.
+- The school doesn't count towards lap records, medals, ghosts or other
+  achievements, and never uses your own tuning. In the usage log its game mode
+  is `school` (Driving school). No split screen and no online.
 
-Koden ligger i `src/client/game/school/`: `lessons.ts` (lektionerna som data
-och domarna som rena funktioner av en `Frame` per tick: vad bilen och
-knapparna gör, väggsmällar, driftnivåer, boostar), `prompts.ts` (texterna ur
-dina knappar), `progress.ts` (det sparade), `schoolRun.ts` (var i lektionen du
-är, omstarter, ritning) och `frames.ts`. Enhetstesterna (`*.test.ts` bredvid)
-matar domarna med påhittade bilar och spelar lektionerna med en
-tangentbordsrobot mot den riktiga simuleringen.
+The code lives in `src/client/game/school/`: `lessons.ts` (the lessons as data
+and the judges as pure functions of a `Frame` per tick: what the car and the
+controls are doing, wall hits, drift levels, boosts), `prompts.ts` (the text
+built from your controls), `progress.ts` (what gets saved), `schoolRun.ts`
+(where you are in the lesson, restarts, drawing) and `frames.ts`. The unit
+tests (`*.test.ts` alongside) feed the judges made-up cars and play the
+lessons with a keyboard robot against the real simulation.
 
-## Medaljer
+## Medals
 
-Varje inbyggd bana har en BRONS-, SILVER- och GULDtid per liga (STANDARD,
-SUPERCARS, MEGACARS). Tiderna räknas fram av datorförarna: brons efter en
-långsam förares bästa ensamvarv (skicklighet 0,72, +2 %), silver efter MEDEL
-(0,86) och guld en aning (1,5 %) snabbare än den felfria förarens (1,0) bästa
-varv. Skickligheterna är fasta, så medaljerna flyttar sig inte när
-svårighetsgraderna (EASY 0,67, HARD 0,97) trimmas. Tabellen ligger
-incheckad i `src/shared/game/medalTimes.ts` så att spelet inte simulerar
-något vid körning. När fysiken eller banorna ändras skriver `npm run medals`
-om tabellen (deterministiskt, några sekunder); `medals.test.ts` kollar att
-varje bana och liga finns med och att brons > silver > guld.
+Every built-in track has a BRONZE, SILVER and GOLD time per league (STANDARD,
+SUPERCARS, MEGACARS). The times are worked out by the AI drivers: bronze from
+a slow driver's best solo lap (skill 0.72, +2 %), silver from MEDIUM (0.86)
+and gold slightly (1.5 %) faster than the flawless driver's (1.0) best lap.
+The skill levels are fixed, so the medals don't move when the difficulty
+levels (EASY 0.67, HARD 0.97) are tuned. The table is checked in at
+`src/shared/game/medalTimes.ts` so the game doesn't simulate anything at
+runtime. When the physics or the tracks change, `npm run medals` rewrites the
+table (deterministically, in a few seconds); `medals.test.ts` checks that
+every track and league is present and that bronze > silver > gold.
 
-En medalj vinns med ett personbästa-varv under tiden, under samma villkor som
-personliga rekord (snabbrace och träning med en person, ingen felsökningshjälp;
-spelarbanor har inga medaljer). Medaljerna sparas för sig i webbläsaren
-(`megacars.medals.v1`, per bana och liga) och försvinner aldrig. De syns på
-RECORDS-skärmen (de tre måltiderna, vunna medaljer tända), på bankortet i
-SINGLE RACE och som en kort banderoll ("GOLD MEDAL!") när en vinns.
+You win a medal with a personal-best lap under the time, under the same
+conditions as personal records (single race and practice with one player, no
+debug help; player-made tracks have no medals). Medals are stored separately
+in the browser (`megacars.medals.v1`, per track and league) and are never
+lost. They appear on the RECORDS screen (the three target times, with won
+medals lit up), on the track card in SINGLE RACE and as a short banner
+("GOLD MEDAL!") when one is won.
 
-## Prestationer
+## Achievements
 
-**ACHIEVEMENTS** (under **PAINT & ACHIEVEMENTS** i titelmenyn) listar 30 prestationer, från sådant man gör de
-första tio minuterna (köra klart ett race, vinna, vraka en bil, hoppa 40 m,
-hålla en drift i 4 s, åka i mörker, stoppa en träff med skölden, tre träffar
-med målsökande missiler) via några kvällar (tio pallplatser,
-vinna från sista plats, vinna utan att skjuta, avsluta med under 5 %
-skada, brons-silver-guld, befordran i karriären, publicera en bana, vinna
-online) till veckor (vinna på varje bana, 25 vinster, 50 vrak, MEGACARS
-CHAMPION, försvara titeln, guld på varje bana i en liga och i alla). Låsta
-är dämpade, räknande har framsteg ("7/10") och överst står summan. När en
-låses upp glider en liten banderoll in högst upp i mitten (aldrig över
-vägen); flera på en gång visas efter varandra. Läget sparas i webbläsaren
+**ACHIEVEMENTS** (under **PAINT & ACHIEVEMENTS** in the title menu) lists 30
+achievements, from things you do in your first ten minutes (finish a race,
+win, wreck a car, jump 40 m, hold a drift for 4 s, drive in the dark, stop a
+hit with the shield, three hits with homing missiles) through ones that take
+a few evenings (ten podiums, win from last place, win without firing, finish
+with under 5 % damage, bronze-silver-gold, get promoted in the career, publish
+a track, win online) to ones that take weeks (win on every track, 25 wins,
+50 wrecks, MEGACARS CHAMPION, defend the title, gold on every track in one
+league and in all of them). Locked ones are dimmed, counting ones show
+progress ("7/10") and the total is shown at the top. When one unlocks, a small
+banner slides in at the top centre (never over the road); several at once are
+shown one after another. Progress is saved in the browser
 (`megacars.achievements.v1`).
 
-Reglerna är en tabell i `src/client/game/achievementRules.ts`: varje post har
-id, namn, en rad text, ev. mål och en `feed`-funktion som får det klienten ser
-(simuleringshändelser och bilens tillstånd varje tick, en sammanfattning när
-racet är slut, en vunnen medalj, ett avslutat säsongsår, en publicerad bana)
-och flyttar sin egen mätare. En ny prestation för en ny funktion är en post i
-tabellen (och vid behov en ny ingångstyp). Räknas bara för en person vid
-skärmen offline (online ses bara slutresultatet, delad skärm räknar inte), och
-aldrig med felsökningsverktyg (`?debug`, `__megacars.drive/autopilot/reset/
-setTuning`, flyttad bil, ändrad fysik i träning). Enhetstester finns i
-`achievements.test.ts`.
+The rules are a table in `src/client/game/achievementRules.ts`: each entry has
+an id, a name, a line of text, an optional target and a `feed` function that
+receives what the client sees (simulation events and the car's state every
+tick, a summary when the race is over, a medal won, a season year finished, a
+published track) and advances its own counter. A new achievement for a new
+feature is one entry in the table (plus a new input type if needed). They only
+count for a single player at the screen offline (online only the final result
+is seen; split screen doesn't count), and never with debug tools (`?debug`,
+`__megacars.drive/autopilot/reset/setTuning`, a moved car, changed physics in
+practice). Unit tests are in `achievements.test.ts`.
 
-## Lackeringar
+## Paint jobs
 
-Medaljer och prestationer låser upp lackeringar till spelarens bil. En
-lackering är en kroppsfärg plus ett djärvt mönster i en andra färg (slätt,
-racingrand, dubbla ränder, tvåfärgad huv och tak, halvor, band, rutigt – de
-ligger på bilens översida så att de syns även när bilen är några pixlar
-stor) och fungerar på alla tre karosser och i alla ligor. 15 stycken: fyra
-gratis (STOCK, ICE WHITE, SUNSHINE, BRITISH GREEN), resten kopplade till en
-prestation (t.ex. TANGERINE: köra klart ett race, HAZARD: vraka tre bilar i
-ett race, CHAMPION: MEGACARS CHAMPION) eller till antal medaljer (3 av
-någon färg, 5 silver eller bättre, 3 guld). De snyggaste är svårast: MIDAS
-kräver guld på varje bana i alla tre ligor.
+Medals and achievements unlock paint jobs for the player's car. A paint job is
+a body colour plus a bold pattern in a second colour (plain, racing stripe,
+twin stripes, two-tone bonnet and roof, halves, band, chequered; they sit on
+the top of the car so they show even when the car is only a few pixels big)
+and works on all three bodies and in every league. There are 15: four free
+(STOCK, ICE WHITE, SUNSHINE, BRITISH GREEN), the rest tied to an achievement
+(e.g. TANGERINE: finish a race, HAZARD: wreck three cars in one race,
+CHAMPION: MEGACARS CHAMPION) or to a number of medals (3 of any colour, 5
+silver or better, 3 gold). The best-looking ones are the hardest: MIDAS
+requires gold on every track in all three leagues.
 
-**PAINT SHOP** (under **PAINT & ACHIEVEMENTS** i titelmenyn) visar de tre bilarna på en scen över startrakan i
-vald lackering (liganhörande utseende), med en ruta per lackering; låsta
-visar vad som krävs. Vänster/höger bläddrar, ENTER väljer (sparas som
-`megacars.paint.v1`). Valet gäller bil 1 i alla offlineslägen (snabbrace,
-mästerskap, karriär, träning, delad skärm för spelare 1) och syns i
-minikartan, resultattabellen och på pallen; STOCK ger kortets egen färg
-som förut. Datorbilar som skulle bli nästan lika färgade som spelarens byter
-färg i det racet. Själva racespecen (och därmed rekordkontrollen) ändras
-inte. Online ger servern färgerna som förut.
+**PAINT SHOP** (under **PAINT & ACHIEVEMENTS** in the title menu) shows the
+three cars on a stage above the start straight in the selected paint job
+(each in its league's look), with one tile per paint job; locked ones show
+what is required. Left/right browses, ENTER selects (saved as
+`megacars.paint.v1`). The choice applies to car 1 in all offline modes (single
+race, championship, career, practice, split screen for player 1) and shows up
+on the minimap, the results table and the podium; STOCK gives the card's own
+colour as before. AI cars that would end up almost the same colour as the
+player's switch colour for that race. The race spec itself (and therefore the
+record check) doesn't change. Online, the server assigns the colours as
+before.
 
-## Dagens utmaning (DAILY CHALLENGE)
+## Daily challenge
 
-Varje dag (UTC) har en utmaning: en bana, en klass och en tid på dygnet,
-samma för alla. Reglerna är tidskörningens: ensam, serienbil, inga vapen,
-torrt, och bästa enskilda varv räknas. Dagens lista börjar tom varje
-morgon, så vem som helst kan komma in på den.
+Every day (UTC) has a challenge: a track, a class and a time of day, the same
+for everyone. The rules are the time trial's: alone, stock car, no weapons,
+dry, and the best single lap counts. The day's leaderboard starts empty every
+morning, so anyone can get on it.
 
-Valet är en ren funktion av datumet (`dailyChallenge` i
-`src/shared/game/daily.ts`), så servern och en klient utan nät kommer fram
-till samma sak. Spelets egna banor (`TRACK_LIST`) går i en blandad cykel:
-alla banor en gång innan någon kommer igen, aldrig samma två dagar i rad,
-och när en bana kommer tillbaka är det i en annan klass och vid en annan
-tid på dygnet. Läggs en bana till blandas kommande dagar om, men inget går
-sönder; en dag som redan har en lista behåller sin bana (den sparas med
-listan).
+The pick is a pure function of the date (`dailyChallenge` in
+`src/shared/game/daily.ts`), so the server and an offline client arrive at
+the same result. The game's own tracks (`TRACK_LIST`) go round in a shuffled
+cycle: every track once before any repeats, never the same one two days in a
+row, and when a track comes back it is in a different class and at a
+different time of day. Adding a track reshuffles the days ahead, but nothing
+breaks; a day that already has a leaderboard keeps its track (it is stored
+with the leaderboard).
 
-**DAILY CHALLENGE** i titelmenyn visar dagens bana, klass och tid på
-dygnet, hur länge det är kvar till nästa, din bästa tid i dag och din
-plats, toppen av dagens lista och gårdagens topp tre. Där skriver du också
-namnet som står på listan. START kör en tidskörning med dagens spöken:
-dagens ledare (gul) och ditt eget bästa varv i dag (cyan). Under körningen
-står DAILY CHALLENGE i HUD:en och uppe till höger platsen som ditt bästa
-varv skulle ta. Varje nytt dagsbästa skickas direkt (hela racet hittills,
-som för rekorden); avslutar du kommer du tillbaka till sidan med listan.
+**DAILY CHALLENGE** in the title menu shows today's track, class and time of
+day, how long until the next one, your best time today and your place, the
+top of today's leaderboard and yesterday's top three. This is also where you
+enter the name shown on the leaderboard. START runs a time trial with today's
+ghosts: today's leader (yellow) and your own best lap today (cyan). While you
+drive, the HUD shows DAILY CHALLENGE and, top right, the place your best lap
+would take. Every new best of the day is submitted straight away (the whole
+race so far, as for records); when you finish you return to the page with the
+leaderboard.
 
-**Streak:** hur många dagar i rad du har kört ett varv i utmaningen,
-sparat i webbläsaren (`megacars.daily.v1`, ditt bästa varv per dag). Den
-står stort på sidan och i titelmenyn: ■ när dagens varv är kört, □ och
-DRIVE TODAY! när det saknas. Utan nät visas dagens utmaning ändå (räknad
-lokalt) och kan köras och räknas i din streak; sidan säger att listan inte
-går att nå.
+**Streak:** how many days in a row you have driven a lap in the challenge,
+saved in the browser (`megacars.daily.v1`, your best lap per day). It is shown
+large on the page and in the title menu: ■ when today's lap is done, □ and
+DRIVE TODAY! when it isn't. Offline, today's challenge is still shown
+(computed locally) and can be driven and counted towards your streak; the
+page says the leaderboard can't be reached.
 
-Servern bestämmer vilken dag det är. Ett varv får bara skickas till
-serverns dag i dag, plus tio minuter efter midnatt för ett varv som
-pågick då. Racet kontrolleras på samma sätt som rekorden (spelas upp
-igen, servern mäter själv) och måste vara på dagens bana och klass, ensam
-och utan vapen. Samma kontroll lägger varvet på världslistan också om det
-räcker dit. Listan har bästa varv per namn, topp 50. Racen sparas för
-topp 10 (för spökena), och när dagen är över tas alla utom vinnarens
-bort. Listor sparas i 30 dagar, en fil per dag i
-`$DATA_DIR/daily/v<SIM_VERSION>/<dag>.json` med racen i `replays/`,
-skrivna atomiskt som rekorden; en fil som inte går att läsa flyttas undan
-(`.bad-<tid>`).
+The server decides what day it is. A lap may only be submitted to the
+server's current day, plus ten minutes after midnight for a lap that was in
+progress at the time. The race is verified the same way as records (replayed,
+with the server timing it itself) and must be on today's track and class,
+alone and without weapons. The same check also puts the lap on the world
+leaderboard if it is good enough. The leaderboard keeps the best lap per name,
+top 50. Races are stored for the top 10 (for the ghosts), and when the day is
+over all but the winner's are deleted. Leaderboards are kept for 30 days, one
+file per day in `$DATA_DIR/daily/v<SIM_VERSION>/<day>.json` with the races in
+`replays/`, written atomically like the records; a file that can't be read is
+moved aside (`.bad-<time>`).
 
-- `GET /api/daily`: dagens utmaning, lista, serverns klocka, när dagen
-  slutar och gårdagens topp tre (cachas 10 s).
-- `GET /api/daily/<ÅÅÅÅ-MM-DD>`: en sparad dags lista (en avslutad dag
-  cachas en timme).
-- `POST /api/daily`: `{v, name, day, spec, replay}`; högst 6 per minut och
-  adress, som rekorden. Svarar med plats i dag och på världslistan.
-- Dagens race hämtas som rekordens med `GET /api/records/replay/<id>`.
+- `GET /api/daily`: today's challenge, leaderboard, the server's clock, when
+  the day ends and yesterday's top three (cached for 10 s).
+- `GET /api/daily/<YYYY-MM-DD>`: a stored day's leaderboard (a finished day
+  is cached for an hour).
+- `POST /api/daily`: `{v, name, day, spec, replay}`; at most 6 per minute per
+  address, like the records. Responds with the place today and on the world
+  leaderboard.
+- The day's races are fetched like the records', with
+  `GET /api/records/replay/<id>`.
 
-För att testa dagsbyten kan servern i utveckling (`MEGACARS_DEV=1`) få sin
-klocka förskjuten med `DAILY_CLOCK_SHIFT=<ms>`; `DailyStore` tar en klocka
-i testerna.
+To test day changes, the server in development (`MEGACARS_DEV=1`) can have
+its clock shifted with `DAILY_CLOCK_SHIFT=<ms>`; `DailyStore` takes a clock in
+the tests.
 
-## Grafik och prestanda
+## Graphics and performance
 
-**OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM eller LOW. AUTO börjar på HIGH och
-går ner ett steg om spelet ligger under ~45 fps i några sekunder under ett
-race (skuggkartan halveras, sedan stängs skuggor av; färre partiklar).
-Valet sparas. Statiska föremål slås ihop till några få stora meshar per
-område, och bilarnas delar per material, för färre draw calls.
+**OPTIONS → GRAPHICS**: AUTO, HIGH, MEDIUM or LOW. AUTO starts at HIGH and
+drops one step if the game stays below ~45 fps for a few seconds during a
+race (the shadow map is halved, then shadows are turned off; fewer
+particles). Your choice is saved. Static objects are merged into a few large
+meshes per area, and car parts are merged per material, to cut draw calls.
 
-Servern komprimerar (brotli/gzip) och skickar ETag, så återbesök laddar
-nästan ingenting. Spelet kan installeras som app (PWA) och startar offline
-för spel mot datorn.
+The server compresses responses (brotli/gzip) and sends ETags, so repeat
+visits load almost nothing. The game can be installed as an app (PWA) and
+starts offline for races against the computer.
 
-## Spelkänsla
+## Game feel
 
-**Vibration:** handkontroller (dual-rumble, där webbläsaren och kontrollen
-stöder det) och Android-mobiler (`navigator.vibrate`; iPhone saknar det och
-får ingenting) ger korta pulser för vägg- och bilkrockar, träffar av missil
-och mina, att bli totalad, hårda landningar, turbo som startar, lådor du
-plockar, sköld som går upp, träffar som studsar på skölden, oljefläckar du
-kör på samt startljusen och GO. Styrkan följer hur hårt det small. I delad skärm känner
-varje kontroll bara sin egen bil (kontroll 1 = spelare 1, kontroll 2 =
-spelare 2). Nya händelser får en vibration med en rad i `RULES` i
-`src/client/input/haptics.ts`. Av/på under **OPTIONS → GAME FEEL → VIBRATION**
-(på som standard, sparas med övriga inställningar).
+**Vibration:** gamepads (dual-rumble, where the browser and controller
+support it) and Android phones (`navigator.vibrate`; iPhones lack it and get
+nothing) give short pulses for wall and car collisions, missile and mine
+hits, getting wrecked, hard landings, turbo kicking in, picking up crates,
+the shield going up, hits bouncing off the shield, driving over oil slicks,
+and the start lights and GO. The strength follows how hard the impact was.
+In split screen each gamepad only feels its own car (gamepad 1 = player 1,
+gamepad 2 = player 2). To give a new event a vibration, add a line to `RULES`
+in `src/client/input/haptics.ts`. Toggle it under
+**OPTIONS → GAME FEEL → VIBRATION** (on by default, saved with the other
+settings).
 
-**Slow motion:** när din bil blir totalad, eller du totalar en bil i bild,
-går spelet på ungefär en tredjedels fart i ca 0,8 s (verklig tid) och
-mjukas tillbaka, kameran zoomar in lite och motorljuden går ner i tonhöjd.
-Högst en gång var fjärde sekund. Bara klientens tid in i den fasta
-simuleringssteget skalas – simuleringen är orörd och varje tick körs och spelas
-in exakt en gång, så lap-rekord kan fortfarande kontrolleras. Online styr
-servern klockan, och i delad skärm delar två spelare på den: där blir det bara
-kamerarörelsen. Av/på under **OPTIONS → GAME FEEL → SLOW MOTION ON WRECKS**.
+**Slow motion:** when your car gets wrecked, or you wreck a car on screen,
+the game runs at roughly a third of normal speed for about 0.8 s (real time)
+and then eases back, the camera zooms in a little and the engine sounds drop
+in pitch. It happens at most once every four seconds. Only the client's time
+fed into the fixed simulation step is scaled – the simulation itself is
+untouched and every tick runs and is recorded exactly once, so lap records
+can still be verified. Online the server controls the clock, and in split
+screen two players share it, so there you only get the camera movement.
+Toggle it under **OPTIONS → GAME FEEL → SLOW MOTION ON WRECKS**.
 
-**Prispall:** när ett lopp är slut, före resultatlistan, visas en kort prispall
-över startrakan: de tre främsta bilarna på första, andra och tredje steget med
-förarnamn och konfetti (byggd av renderarens egna delar: bilmodellerna, partiklarna
-och pixelkameran). Enter, ett tryck eller en handkontrollsknapp (A/B/Start) hoppar
-över den; annars går den vidare av sig själv efter ca fyra sekunder. Den visas
-efter vanliga lopp, mästerskaps- och karriärlopp och onlinelopp (varje klient
-ritar den från slutställningen), i delad skärm över hela skärmen, men inte vid
-fri träning. Är det färre än tre bilar visas lika många steg som bilar. Står du
-själv på pallen blir det en stor banderoll ("YOU WIN!", "SECOND PLACE!"...) och
-mer konfetti; slutar du längre ner visas vem som vann och din placering.
+**Podium:** when a race ends, before the results list, a short podium scene
+is shown over the start straight: the top three cars on the first, second
+and third steps with driver names and confetti (built from the renderer's
+own parts: the car models, the particles and the pixel camera). Enter, a tap
+or a gamepad button (A/B/Start) skips it; otherwise it moves on by itself
+after about four seconds. It appears after regular races, championship and
+career races, and online races (each client draws it from the final
+standings), full-screen in split screen, but not in free practice. With
+fewer than three cars, there are as many steps as cars. If you are on the
+podium yourself you get a big banner ("YOU WIN!", "SECOND PLACE!"...) and
+more confetti; if you finish lower down, it shows who won and your position.
 
-## Musik
+## Music
 
-Trackermusik (MOD/XM) spelas med libopenmpt i en Web Worker; en liten AudioWorklet spelar upp det renderade ljudet, så ljudtråden aldrig blockeras.
-Varje bana har sin låt, menyerna och resultaten sina; låtarna tonas mellan
-skärmarna. **OPTIONS** i titelmenyn: musik TRACKS / SHUFFLE / OFF,
-musik- och ljudvolym, nästa låt (även **N**), tid på dygnet och credits.
-Dra egna .mod/.xm/.s3m/.it-filer till spelfönstret så hamnar de i
-shuffle-listan – de sparas bara i din webbläsare och laddas aldrig upp.
+Tracker music (MOD/XM) is played with libopenmpt in a Web Worker; a small
+AudioWorklet plays back the rendered audio, so the audio thread is never
+blocked. Each track has its own song, and the menus and results have theirs;
+songs crossfade between screens. **OPTIONS** in the title menu: music
+TRACKS / SHUFFLE / OFF, music and sound volume, next song (also **N**), time
+of day and credits. Drag your own .mod/.xm/.s3m/.it files onto the game
+window and they are added to the shuffle list – they are only stored in your
+browser and are never uploaded.
 
-Alla medföljande låtar kommer från The Mod Archive och har licenser som
-tillåter att de följer med spelet (10 public domain, *Imagine* av Andreas
-Viklund under CC BY 4.0). Se `public/music/CREDITS.md`.
+All bundled songs come from The Mod Archive. Most are public domain or
+CC BY 4.0; a few are CC BY-NC-SA 4.0 (non-commercial only). See
+`public/music/CREDITS.md` and [Licence](#licence).
 
-## Spela online
+## Playing online
 
-Välj **PLAY ONLINE** i titelmenyn, skriv ditt namn och välj **CREATE ROOM**.
-Du får en rumskod på fyra bokstäver och en inbjudningslänk
-(`https://…/?room=KODE`) – **COPY INVITE LINK** kopierar den. Kompisar skriver
-in koden under **JOIN ROOM** eller öppnar länken. Upp till åtta personer per
-rum. Värden väljer banor under **TRACKS** och varv, antal datorbilar och
-svårighetsgrad under **RACE SETTINGS**. De andra markerar sig som redo, och
-värden startar. Efter målgång är alla tillbaka i lobbyn för nästa lopp. Den som
-kommer in mitt i ett lopp tittar på tills nästa.
+Choose **PLAY ONLINE** in the title menu, enter your name and choose
+**CREATE ROOM**. You get a four-letter room code and an invite link
+(`https://…/?room=CODE`) – **COPY INVITE LINK** copies it. Friends enter the
+code under **JOIN ROOM** or open the link. Up to eight people per room. The
+host picks tracks under **TRACKS**, and laps, number of AI cars and
+difficulty under **RACE SETTINGS**. The others mark themselves as ready, and
+the host starts the race. After the finish everyone is back in the lobby for
+the next race. Anyone who joins mid-race spectates until the next one.
 
-**TRACKS** är en turnering och kan innehålla upp till 12 banor i valfri
-ordning: slumpade banor, alla spelets banor, eller en blandning av spelets
-banor och dina egna. Med en enda bana körs den om och om igen och poängen
-samlas på hela säsongen.
+**TRACKS** is a tournament and can hold up to 12 tracks in any order: random
+tracks, all of the game's tracks, or a mix of the game's tracks and your own.
+With a single track, it is raced over and over and points add up across the
+whole season.
 
-- Rummet kör banorna i tur och ordning. Mellan loppen visar lobbyn ställningen
-  sorterad på poäng, vilket lopp som är nästa och vilka banor som kommer
-  sedan.
-- Efter sista loppet visas vinnaren. Nästa START börjar en ny turnering, och
-  **NEW TOURNAMENT** nollställer den när som helst.
-- Värdens egna banor skickas som delningskod till servern. Servern
-  kontrollerar och bygger dem i en worker-tråd och skickar dem till alla i
-  rummet innan de används.
+- The room runs the tracks in order. Between races the lobby shows the
+  standings sorted by points, which race is next and which tracks come
+  after it.
+- After the last race the winner is shown. The next START begins a new
+  tournament, and **NEW TOURNAMENT** resets it at any time.
+- The host's own tracks are sent to the server as share codes. The server
+  validates and builds them in a worker thread and sends them to everyone in
+  the room before they are used.
 
-Servern räknar loppet (60 tick/s) och skickar läget 20 gånger i sekunden.
-Din egen bil svarar direkt: klienten kör simuleringen några tick före servern
-med dina knapptryck och spolar om från varje serverbild, så du hamnar exakt där
-servern säger utan att känna fördröjningen. Datorbilarna förutsägs exakt
-(samma deterministiska kod på båda sidor); andra människors bilar gissas utifrån
-deras senaste kända inmatning och glider mjukt till rätta. Tappar du
-anslutningen kör datorn din bil tills du är tillbaka (samma flik återansluter
-automatiskt inom en minut).
+The server simulates the race (60 ticks/s) and sends the state 20 times a
+second. Your own car responds immediately: the client runs the simulation a
+few ticks ahead of the server with your inputs and rewinds from each server
+snapshot, so you end up exactly where the server says without feeling the
+latency. AI cars are predicted exactly (the same deterministic code on both
+sides); other people's cars are extrapolated from their last known input and
+glide smoothly into place. If you lose the connection, the computer drives
+your car until you are back (the same tab reconnects automatically within a
+minute).
 
-`npm run soak -- --url ws://localhost:8787/ws --clients 3` kör huvudlösa botar
-över riktiga WebSockets mot en körande server och rapporterar synkhälsa.
+`npm run soak -- --url ws://localhost:8787/ws --clients 3` runs headless bots
+over real WebSockets against a running server and reports sync health.
 
-| Överallt | Funktion |
+| Anywhere | Function |
 |---|---|
-| M | Tid på dygnet: dag / solnedgång / natt |
-| 3 | CRT: av / scanlines / full |
-| 4 | Färger: full (standard) / 12-bit Amiga / 32 färger |
-| 1 / 2 / 0 | Debugvy / telemetri / trimningspanel |
+| M | Time of day: day / sunset / night |
+| 3 | CRT: off / scanlines / full |
+| 4 | Colours: full (default) / 12-bit Amiga / 32 colours |
+| 1 / 2 / 0 | Debug view / telemetry / tuning panel |
 
-URL-parametrar: `?mode=quick` (direkt till lopp), `?mode=practice`, `?p2=1`,
-`?laps=N`, `?ai=N` (motståndare), `?difficulty=0..2`,
+URL parameters: `?mode=quick` (straight into a race), `?mode=practice`,
+`?p2=1`, `?laps=N`, `?ai=N` (opponents), `?difficulty=0..2`,
 `?mood=day|sunset|night`, `?debug=1`, `?scale=N`, `?scanlines=1`, `?mute=1`,
-`?room=KODE` (gå direkt med i ett onlinerum), `?t=KOD` (en delad bana läggs i
-My Tracks).
+`?room=CODE` (join an online room directly), `?t=CODE` (adds a shared track
+to My Tracks).
 
-`npm run sim -- --seeds 20 --laps 3 [--track dustbowl] [--weapons]` kör headless AI-lopp och kontrollerar
-att alla bilar går i mål.
+`npm run sim -- --seeds 20 --laps 3 [--track dustbowl] [--weapons]` runs
+headless AI races and checks that every car finishes.
 
-Felsökning i konsolen: `__megacars.state()`, `.startRace({ players: 2 })`,
+Debugging in the console: `__megacars.state()`, `.startRace({ players: 2 })`,
 `.advance(ticks)`, `.pause()`, `.autopilot()`, `.debug.crawlTest()`,
-`.debug.bench()`, `.debug.look({ mood, palette, crt })`, `.debug.snap(namn)`,
-`.online()` (anslutning, rum, förutsägelsens lead/takt), `.timeTrial()`
-(spöken, avstånd), `.worldGhost(bana, klass, plats)` (hämtar och spelar upp
-en plats på världslistan, jämför varvtiden), `.keepLapAsMyGhost()`.
+`.debug.bench()`, `.debug.look({ mood, palette, crt })`, `.debug.snap(name)`,
+`.online()` (connection, room, prediction lead/rate), `.timeTrial()`
+(ghosts, gaps), `.worldGhost(track, class, place)` (fetches and plays back a
+place on the world leaderboard, compares the lap time), `.keepLapAsMyGhost()`.
 
-## Användningslogg
+## Usage log
 
-Servern för en enkel logg över användningen, utan personuppgifter. Det
-sparas aldrig någon IP-adress, bara en hash av den (med hemligt salt och
-dagens datum, så samma person kan inte följas från en dag till nästa) och
-landet. Webbläsare med Do Not Track eller Global Privacy Control loggas inte.
-Inga cookies, ingen lagring i webbläsaren.
+The server keeps a simple usage log with no personal data. No IP address is
+ever stored, only a hash of it (with a secret salt and the current date, so
+the same person cannot be followed from one day to the next) and the
+country. Browsers with Do Not Track or Global Privacy Control are not
+logged. No cookies, no browser storage.
 
-Det loggas, en JSON-rad per händelse i `DATA_DIR/analytics/ÅÅÅÅ-MM-DD.jsonl`:
+What gets logged, one JSON line per event in
+`DATA_DIR/analytics/YYYY-MM-DD.jsonl`:
 
-- `open`: sidan öppnades (hash, land, enhetstyp, webbläsare, system,
-  skärmbredd i grova steg, språk och vilken sajt man kom från, bara
-  domännamnet). Skickas av sidan själv, för servern ser inte sidladdningar när appen körs från cachen. Botar räknas inte.
-- `race`: ett lopp startades på enheten (bana, läge, varv, motståndare,
-  spelare). Det gäller träning, snabbt lopp, mästerskap, karriär och
-  dagens utmaning (läge `daily`) och körskolan (läget `school`, alltid med
-  Green Valley som bana).
-- `session`: hur länge sidan varit framme, och hur många lopp. Webbläsaren
-  skickar den när fliken göms.
-- `ws`: en onlineanslutning och hur länge den varade.
-- `room_race`: ett lopp startade i ett rum (bana, varv, personer, AI).
+- `open`: the page was opened (hash, country, device type, browser, OS,
+  screen width in coarse steps, language and the referring site, domain name
+  only). Sent by the page itself, because the server doesn't see page loads
+  when the app runs from the cache. Bots are not counted.
+- `race`: a race was started on the device (track, mode, laps, opponents,
+  players). This covers practice, quick race, championship, career, the
+  daily challenge (mode `daily`) and the driving school (mode `school`,
+  always with Green Valley as the track).
+- `session`: how long the page was open, and how many races. The browser
+  sends it when the tab is hidden.
+- `ws`: an online connection and how long it lasted.
+- `room_race`: a race started in a room (track, laps, people, AI).
 
-Landet kommer från CDN-headern om det finns en (`CF-IPCountry` m.fl.),
-annars slås det upp i en inbyggd databas (`geoip-country`). This product
-includes GeoLite2 data created by MaxMind, available from
+The country comes from the CDN header if there is one (`CF-IPCountry` etc.),
+otherwise it is looked up in a built-in database (`geoip-country`). This
+product includes GeoLite2 data created by MaxMind, available from
 https://www.maxmind.com.
 
-Läs sammanfattningen på en statistiksida: sätt `STATS_TOKEN` och öppna
-`/api/stats?token=<token>` i en webbläsare. Du får besökare per dag, tid på
-dygnet och veckodag, länder, enheter (mobil, surfplatta, dator),
-webbläsare, system, skärmbredd, språk, var de kom ifrån, hur länge de
-stannar, banor och spellägen samt onlinelopp. Parametrar: `days=1..365`,
-`tz=Europe/Stockholm` (för klockslag) och `format=html|text|json`. En
-webbläsare får html, andra klienter json. Skicka helst token som
-`Authorization: Bearer <token>` när du inte använder en webbläsare, så
-hamnar den inte i adressen. Utan `STATS_TOKEN` finns sidan inte. Samma
-sammanfattning som text: `npm run stats -- --days 30` där loggen ligger.
+Read the summary on a stats page: set `STATS_TOKEN` and open
+`/api/stats?token=<token>` in a browser. You get visitors per day, time of
+day and weekday, countries, devices (mobile, tablet, desktop), browsers,
+OS, screen width, language, where visitors came from, how long they stay,
+tracks and game modes, and online races. Parameters: `days=1..365`,
+`tz=Europe/Stockholm` (for times of day) and `format=html|text|json`. A
+browser gets html, other clients get json. When you are not using a browser,
+preferably send the token as `Authorization: Bearer <token>` so it doesn't
+end up in the URL. Without `STATS_TOKEN` the page doesn't exist. The same
+summary as text: `npm run stats -- --days 30` where the log is stored.
 
-Inställningar (miljövariabler på servern):
+Settings (environment variables on the server):
 
-| Variabel | Standard | Betydelse |
+| Variable | Default | Meaning |
 | --- | --- | --- |
-| `ANALYTICS` | på | `0` stänger av loggen helt. `npm run dev` loggar inte om inte `ANALYTICS=1`. |
-| `ANALYTICS_RETENTION_DAYS` | 90 | Dagar som sparas. Äldre filer raderas. |
-| `ANALYTICS_SALT` | slumpas | Saltet för hashen. Annars skapas `DATA_DIR/analytics/salt`. |
-| `STATS_TOKEN` | – | Slår på `/api/stats`. |
-| `TRACKS_TOKEN` | `STATS_TOKEN` | Tar bort publicerade banor (`DELETE /api/tracks/<id>`). |
+| `ANALYTICS` | on | `0` turns the log off completely. `npm run dev` doesn't log unless `ANALYTICS=1`. |
+| `ANALYTICS_RETENTION_DAYS` | 90 | Days to keep. Older files are deleted. |
+| `ANALYTICS_SALT` | random | The salt for the hash. Otherwise `DATA_DIR/analytics/salt` is created. |
+| `STATS_TOKEN` | – | Enables `/api/stats`. |
+| `TRACKS_TOKEN` | `STATS_TOKEN` | Deletes published tracks (`DELETE /api/tracks/<id>`). |
 
-`DATA_DIR` ska peka på en persistent volym, annars försvinner loggen vid
-omstart.
+`DATA_DIR` should point to a persistent volume, otherwise the log is lost on
+restart.
 
-## Struktur
+## Structure
 
-- `src/shared` – simulering som körs identiskt på server och klient (fysik,
-  banor, AI, protokoll). Ingen DOM, ingen Node.
-- `src/client` – rendering (Three.js), ljud, inmatning, UI.
-- `src/server` – Node-server: statiska filer + WebSocket (`/ws`), rum och
-  lopp (`gameServer.ts`, `room.ts`).
-- `src/shared/net` – protokoll, binära ögonblicksbilder, klientförutsägelse
-  (`predictor.ts`) och klientens loppklocka (`netRace.ts`).
+- `src/shared` – simulation that runs identically on server and client
+  (physics, tracks, AI, protocol). No DOM, no Node.
+- `src/client` – rendering (Three.js), audio, input, UI.
+- `src/server` – Node server: static files + WebSocket (`/ws`), rooms and
+  races (`gameServer.ts`, `room.ts`).
+- `src/shared/net` – protocol, binary snapshots, client-side prediction
+  (`predictor.ts`) and the client's race clock (`netRace.ts`).
+
+## Licence
+
+The Megacars source code is released under the [MIT licence](LICENSE).
+You may use, copy, modify, merge, publish, distribute, sublicense and sell
+it, for any purpose, as long as the copyright notice and licence text
+("Copyright (c) 2026 Fredrik Idréus") are kept in all copies or substantial
+portions. A credit line in your game, app or README is appreciated, for
+example: *Based on Megacars by Fredrik Idréus*.
+
+Third-party material in this repository keeps its own licence:
+
+- **Music** in `public/music/` – public domain, CC BY 4.0 or
+  CC BY-NC-SA 4.0 per track, see `public/music/CREDITS.md`. The
+  CC BY-NC-SA tracks may **not** be used commercially; remove or replace
+  them if you ship a commercial game.
+- **libopenmpt** in `public/vendor/libopenmpt/` – BSD licence, see
+  `public/vendor/libopenmpt/LICENSE`.
+- **npm dependencies** – their own licences.
+- **GeoLite2 data** (via `geoip-country`) – created by MaxMind, available from
+  https://www.maxmind.com.
