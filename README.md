@@ -525,7 +525,8 @@ Tracks are stored in `$DATA_DIR/tracks.json`. API:
 | `POST /api/tracks/<id>/play` | counts a play |
 | `DELETE /api/tracks/<id>` with `Authorization: Bearer <TRACKS_TOKEN>` | deletes a track |
 
-`TRACKS_TOKEN` falls back to `STATS_TOKEN`.
+`TRACKS_TOKEN` falls back to `STATS_TOKEN`; see
+[The stats page and `STATS_TOKEN`](#the-stats-page-and-stats_token).
 
 ## Records and leaderboards
 
@@ -945,16 +946,67 @@ otherwise it is looked up in a built-in database (`geoip-country`). This
 product includes GeoLite2 data created by MaxMind, available from
 https://www.maxmind.com.
 
-Read the summary on a stats page: set `STATS_TOKEN` and open
-`/api/stats?token=<token>` in a browser. You get visitors per day, time of
-day and weekday, countries, devices (mobile, tablet, desktop), browsers,
-OS, screen width, language, where visitors came from, how long they stay,
-tracks and game modes, and online races. Parameters: `days=1..365`,
-`tz=Europe/Stockholm` (for times of day) and `format=html|text|json`. A
-browser gets html, other clients get json. When you are not using a browser,
-preferably send the token as `Authorization: Bearer <token>` so it doesn't
-end up in the URL. Without `STATS_TOKEN` the page doesn't exist. The same
-summary as text: `npm run stats -- --days 30` where the log is stored.
+### The stats page and `STATS_TOKEN`
+
+The log can be read as a summary on a private web page, `/api/stats`. The page
+is protected by a password of your own choosing, `STATS_TOKEN`.
+
+**What it is.** `STATS_TOKEN` is an environment variable on the server, not a
+setting in the game. It is not stored in the code, the repository or
+`DATA_DIR`, so it only exists where you run the server: in your shell, or in
+your host's variable settings (on Railway: the service → **Variables**).
+
+**What it does.**
+
+- Without `STATS_TOKEN` the stats page is switched off: `/api/stats` answers
+  404, as if it didn't exist. Usage is still logged.
+- With it, anyone who knows the token can read the summary. No personal data
+  is shown (see above), but it is your traffic.
+- It is also the key for **deleting published tracks**
+  (`DELETE /api/tracks/<id>`), unless you set a separate `TRACKS_TOKEN`. Give
+  it only to people you trust with that too.
+
+**Set it up.** Pick a long random value, for example:
+
+```bash
+openssl rand -hex 24
+```
+
+Then start the server with it (`STATS_TOKEN=<token> npm start`), or add it as
+a variable at your host. Changing a variable on Railway restarts the service.
+
+**Read it.** Open this in a browser and bookmark it:
+
+```
+https://<your-site>/api/stats?token=<token>
+```
+
+The links on the page (Today, 7, 30 and 90 days) keep the token. You get
+visitors per day, time of day and weekday, countries, devices (phone, tablet,
+desktop), browsers, OS, screen width, language, where visitors came from, how
+long they stay, tracks and game modes, and online races. Parameters:
+`days=1..365`, `tz=Europe/Stockholm` (the time zone for times of day) and
+`format=html|text|json`. A browser gets HTML, other clients get JSON.
+
+From a script, send the token in a header instead, so it doesn't end up in a
+URL:
+
+```bash
+curl -H "Authorization: Bearer <token>" "https://<your-site>/api/stats?format=text&days=30"
+```
+
+**Good to know.**
+
+- A token in the address bar ends up in your browser history. The page is
+  sent with `no-store`, `noindex` and `no-referrer`, so it isn't cached,
+  indexed or leaked to other sites through links.
+- Forgot it? The game can't show it. Look it up in your host's variables, or
+  set a new value.
+- Changing the token only makes old links stop working. The log, the records
+  and the published tracks are not affected.
+- `npm run stats -- --days 30` prints the same summary as text straight from
+  the log files on the machine where they are stored (`DATA_DIR`, default
+  `./data`). It needs no token.
 
 Settings (environment variables on the server):
 
@@ -963,8 +1015,8 @@ Settings (environment variables on the server):
 | `ANALYTICS` | on | `0` turns the log off completely. `npm run dev` doesn't log unless `ANALYTICS=1`. |
 | `ANALYTICS_RETENTION_DAYS` | 90 | Days to keep. Older files are deleted. |
 | `ANALYTICS_SALT` | random | The salt for the hash. Otherwise `DATA_DIR/analytics/salt` is created. |
-| `STATS_TOKEN` | – | Enables `/api/stats`. |
-| `TRACKS_TOKEN` | `STATS_TOKEN` | Deletes published tracks (`DELETE /api/tracks/<id>`). |
+| `STATS_TOKEN` | – | Password for the stats page `/api/stats`; without it the page is off. Also deletes published tracks if `TRACKS_TOKEN` isn't set. |
+| `TRACKS_TOKEN` | `STATS_TOKEN` | Password for deleting published tracks (`DELETE /api/tracks/<id>`). |
 
 `DATA_DIR` should point to a persistent volume, otherwise the log is lost on
 restart.
